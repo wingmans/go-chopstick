@@ -1,0 +1,6 @@
+.DS_Store
+fetch-ecb
+bin/
+data/
+*.test
+coverage.out
