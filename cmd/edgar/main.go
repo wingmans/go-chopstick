@@ -21,6 +21,7 @@ type appConfig struct {
 	sinceYear     int
 	userAgent     string
 	refreshLatest bool
+	stitch        bool
 }
 
 func main() {
@@ -79,6 +80,7 @@ func run(ctx context.Context, args []string) error {
 		SinceYear:     cfg.sinceYear,
 		UserAgent:     cfg.userAgent,
 		RefreshLatest: cfg.refreshLatest,
+		Stitch:        cfg.stitch,
 		BaseURL:       "",
 	})
 	if err != nil {
@@ -94,6 +96,7 @@ func parseConfig(args []string) (appConfig, error) {
 		sinceYear:     0,
 		userAgent:     "",
 		refreshLatest: false,
+		stitch:        false,
 	}
 	flags := flag.NewFlagSet("edgar", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
@@ -104,7 +107,8 @@ func parseConfig(args []string) (appConfig, error) {
 		fmt.Fprintf(os.Stdout, "  -d, --directory        directory for downloaded index files (default %q)\n", cfg.directory)
 		fmt.Fprintf(os.Stdout, "  -y, --from-year        first year to download (default %d)\n", cfg.sinceYear)
 		fmt.Fprintln(os.Stdout, "  -ua, --user-agent      SEC User-Agent, including a contact email address")
-		fmt.Fprintln(os.Stdout, "  -s, --refresh-latest   refresh the latest quarter and reuse older files")
+		fmt.Fprintln(os.Stdout, "  -r, --refresh-latest   refresh the latest quarter and reuse older files")
+		fmt.Fprintln(os.Stdout, "  -s, --stitch           concatenate quarterly TSV files into master.tsv")
 	}
 	flags.StringVar(&cfg.directory, "d", "./data", "directory for downloaded index files")
 	flags.StringVar(&cfg.directory, "directory", "./data", "directory for downloaded index files")
@@ -114,6 +118,7 @@ func parseConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.userAgent, "user-agent", "", "SEC User-Agent, including a contact email address")
 	flags.BoolVar(&cfg.refreshLatest, "s", false, "refresh the latest quarter and reuse older files")
 	flags.BoolVar(&cfg.refreshLatest, "refresh-latest", false, "refresh the latest quarter and reuse older files")
+	flags.BoolVar(&cfg.stitch, "stitch", false, "concatenate quarterly TSV files into master.tsv")
 
 	if err := flags.Parse(args); err != nil {
 		return appConfig{}, err

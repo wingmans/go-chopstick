@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ type Config struct {
 	SinceYear     int
 	UserAgent     string
 	RefreshLatest bool
+	Stitch        bool
 	BaseURL       string
 }
 
@@ -127,6 +129,60 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 				return err
 			}
 		}
+	}
+
+	if cfg.Stitch {
+		if err := Stitch(cfg.Directory); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Stitch concatenates all quarterly TSV files in directory into master.tsv.
+func Stitch(directory string) error {
+	paths, err := filepath.Glob(filepath.Join(directory, "*-QTR*.tsv"))
+	if err != nil {
+		return fmt.Errorf("find quarterly indexes: %w", err)
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("no quarterly TSV files found in %s", directory)
+	}
+
+	sort.Strings(paths)
+	destination := filepath.Join(directory, "master.tsv")
+	temporary, err := os.CreateTemp(directory, ".master-*.part")
+	if err != nil {
+		return fmt.Errorf("create stitched index: %w", err)
+	}
+	temporaryName := temporary.Name()
+	defer func() { _ = os.Remove(temporaryName) }()
+
+	for _, path := range paths {
+		file, err := os.Open(path)
+		if err != nil {
+			_ = temporary.Close()
+			return fmt.Errorf("open quarterly index %s: %w", path, err)
+		}
+
+		_, copyErr := io.Copy(temporary, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			_ = temporary.Close()
+			return fmt.Errorf("stitch quarterly index %s: %w", path, copyErr)
+		}
+		if closeErr != nil {
+			_ = temporary.Close()
+			return fmt.Errorf("close quarterly index %s: %w", path, closeErr)
+		}
+	}
+
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close stitched index: %w", err)
+	}
+	if err := os.Rename(temporaryName, destination); err != nil {
+		return fmt.Errorf("store stitched index %s: %w", destination, err)
 	}
 
 	return nil

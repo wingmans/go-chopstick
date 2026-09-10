@@ -46,7 +46,7 @@ The SEC EDGAR filing-index downloader is available as a separate command:
 go run ./cmd/edgar -from-year 2025 -user-agent "My Company contact@example.com"
 ```
 
-It writes one `YYYY-QTRn.tsv` file per quarter to `./data` by default. Use `-refresh-latest` to download the newest quarter again while reusing older files. Each row includes the original filing path and its `-index.html` path.
+It writes one `YYYY-QTRn.tsv` file per quarter to `./data` by default. Use `-refresh-latest` to download the newest quarter again while reusing older files. Use `-stitch` to concatenate the quarterly files into `master.tsv`. Each row includes the original filing path and its `-index.html` path.
 
 The `-end` flag is optional. When omitted, it defaults to the current date.
 
