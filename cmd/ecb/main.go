@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/config"
 	"wingman.com/fetch-ecb/internal/ecb"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
@@ -32,19 +31,19 @@ func main() {
 }
 
 type App struct {
-	Config config.Config
+	Config ecb.Config
 	Client *http.Client
 	Stdout io.Writer
 }
 
-func NewApp(cfg config.Config, stdout io.Writer) *App {
+func NewApp(cfg ecb.Config, stdout io.Writer) *App {
 	return &App{
 		Config: cfg,
 		Client: &http.Client{
 			Transport:     nil,
 			CheckRedirect: nil,
 			Jar:           nil,
-			Timeout:       config.RequestTimeout,
+			Timeout:       ecb.RequestTimeout,
 		},
 		Stdout: stdout,
 	}
@@ -67,9 +66,9 @@ func run(ctx context.Context) error {
 	return NewApp(cfg, os.Stdout).Run(ctx)
 }
 
-func parseConfig(args []string, now time.Time) (config.Config, error) {
+func parseConfig(args []string, now time.Time) (ecb.Config, error) {
 	startPeriod, endPeriod := defaultPeriods(now)
-	cfg := config.Config{
+	cfg := ecb.Config{
 		Currency:      envOrDefault("ECB_CURRENCY", "USD"),
 		CurrencyDenom: envOrDefault("ECB_CURRENCY_DENOM", "EUR"),
 		StartPeriod:   envOrDefault("ECB_START_PERIOD", startPeriod),
@@ -98,7 +97,7 @@ func parseConfig(args []string, now time.Time) (config.Config, error) {
 	flags.StringVar(&cfg.Output, "output", cfg.Output, "Output format: text, json, csv")
 
 	if err := flags.Parse(args); err != nil {
-		return config.Config{}, err
+		return ecb.Config{}, err
 	}
 
 	cfg.Currency = strings.ToUpper(strings.TrimSpace(cfg.Currency))
@@ -108,7 +107,7 @@ func parseConfig(args []string, now time.Time) (config.Config, error) {
 	cfg.Output = strings.ToLower(strings.TrimSpace(cfg.Output))
 
 	if err := cfg.Validate(); err != nil {
-		return config.Config{}, err
+		return ecb.Config{}, err
 	}
 
 	return cfg, nil

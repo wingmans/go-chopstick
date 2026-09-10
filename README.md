@@ -40,13 +40,29 @@ Use `-h` or `--help` to print the command syntax and available options.
 
 The exchange-rate series key is built from the two currency inputs as `D.<currency>.<currency-denom>.SP00.A`. The default is daily (`D`) USD/EUR data.
 
-The SEC EDGAR filing-index downloader is available as a separate command:
+The SEC EDGAR downloader is available as a separate command with independent
+subcommands:
 
 ```bash
-go run ./cmd/edgar -from-year 2025 -user-agent "My Company contact@example.com"
+go run ./cmd/edgar download-index --from-year 2025
 ```
 
-It writes one `YYYY-QTRn.tsv` file per quarter to `./data` by default. Use `-refresh-latest` to download the newest quarter again while reusing older files. Use `-stitch` to concatenate the quarterly files into `master.tsv`. Each row includes the original filing path and its `-index.html` path.
+`download-index` writes one `YYYY-QTRn.tsv` file per quarter to `./data` by
+default and stitches them into `master.tsv`. Use `--refresh-latest` to
+download the newest quarter again while reusing older files. Stitching is
+enabled by default and can be disabled with `--stitch=false`.
+
+After an index has been downloaded, filing files can be downloaded separately:
+
+```bash
+go run ./cmd/edgar download-filings --form-type 10-K
+```
+
+This reads `./data/master.tsv` and stores SEC-relative filing and HTML index
+paths under `./data/archives`. Existing files are skipped. Use `--form-type`
+more than once to select multiple form types, or use `--cik` to restrict the
+download to one filer. The default SEC user-agent is `wingman paul@wingmen.io`;
+both subcommands accept `--user-agent` to override it.
 
 The `-end` flag is optional. When omitted, it defaults to the current date.
 

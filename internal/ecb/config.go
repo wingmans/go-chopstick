@@ -1,5 +1,4 @@
-// Package config defines and validates application configuration.
-package config
+package ecb
 
 import (
 	"errors"

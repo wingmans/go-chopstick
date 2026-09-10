@@ -146,16 +146,20 @@ func Stitch(directory string) error {
 	if err != nil {
 		return fmt.Errorf("find quarterly indexes: %w", err)
 	}
+
 	if len(paths) == 0 {
 		return fmt.Errorf("no quarterly TSV files found in %s", directory)
 	}
 
 	sort.Strings(paths)
+
 	destination := filepath.Join(directory, "master.tsv")
+
 	temporary, err := os.CreateTemp(directory, ".master-*.part")
 	if err != nil {
 		return fmt.Errorf("create stitched index: %w", err)
 	}
+
 	temporaryName := temporary.Name()
 	defer func() { _ = os.Remove(temporaryName) }()
 
@@ -163,17 +167,22 @@ func Stitch(directory string) error {
 		file, err := os.Open(path)
 		if err != nil {
 			_ = temporary.Close()
+
 			return fmt.Errorf("open quarterly index %s: %w", path, err)
 		}
 
 		_, copyErr := io.Copy(temporary, file)
+
 		closeErr := file.Close()
 		if copyErr != nil {
 			_ = temporary.Close()
+
 			return fmt.Errorf("stitch quarterly index %s: %w", path, copyErr)
 		}
+
 		if closeErr != nil {
 			_ = temporary.Close()
+
 			return fmt.Errorf("close quarterly index %s: %w", path, closeErr)
 		}
 	}
@@ -181,6 +190,7 @@ func Stitch(directory string) error {
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close stitched index: %w", err)
 	}
+
 	if err := os.Rename(temporaryName, destination); err != nil {
 		return fmt.Errorf("store stitched index %s: %w", destination, err)
 	}

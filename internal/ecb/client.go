@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 
-	"wingman.com/fetch-ecb/internal/config"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
@@ -27,7 +26,7 @@ func (e *upstreamError) Error() string {
 	return fmt.Sprintf("unexpected HTTP status %s: %s", e.Status, e.Message)
 }
 
-func buildRequestURL(cfg config.Config) string {
+func buildRequestURL(cfg Config) string {
 	query := url.Values{}
 	if cfg.StartPeriod != "" {
 		query.Set("startPeriod", cfg.StartPeriod)
@@ -40,7 +39,7 @@ func buildRequestURL(cfg config.Config) string {
 	requestURL := fmt.Sprintf(
 		"%s/service/data/%s/%s",
 		defaultBaseURL,
-		url.PathEscape(config.Dataset),
+		url.PathEscape(Dataset),
 		url.PathEscape(fmt.Sprintf(defaultSeriesPattern, cfg.Currency, cfg.CurrencyDenom)),
 	)
 
@@ -95,22 +94,22 @@ func fetchGenericData(ctx context.Context, client *http.Client, requestURL strin
 }
 
 // FetchAndWrite fetches ECB data and writes it in the configured format.
-func FetchAndWrite(ctx context.Context, client *http.Client, cfg config.Config, stdout io.Writer) error {
+func FetchAndWrite(ctx context.Context, client *http.Client, cfg Config, stdout io.Writer) error {
 	parsed, err := fetchGenericData(ctx, client, buildRequestURL(cfg))
 	if err != nil {
 		return classifyFetchError(ctx, cfg, err)
 	}
 
-	if err := parsed.writeOutput(stdout, config.Dataset, cfg.Output); err != nil {
+	if err := parsed.writeOutput(stdout, Dataset, cfg.Output); err != nil {
 		return xerr.Wrap(xerr.Internal, "OUTPUT_FAILED", "failed to write output", err)
 	}
 
 	return nil
 }
 
-func classifyFetchError(ctx context.Context, cfg config.Config, err error) error {
+func classifyFetchError(ctx context.Context, cfg Config, err error) error {
 	details := map[string]any{
-		"dataset":        config.Dataset,
+		"dataset":        Dataset,
 		"currency":       cfg.Currency,
 		"currency_denom": cfg.CurrencyDenom,
 	}

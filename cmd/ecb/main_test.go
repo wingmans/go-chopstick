@@ -10,6 +10,7 @@ func TestParseConfigUsesFlagsAndCurrentEndDate(t *testing.T) {
 	t.Setenv("ECB_CURRENCY_DENOM", "eur")
 
 	now := time.Date(2026, time.March, 12, 15, 30, 0, 0, time.FixedZone("CET", 3600))
+
 	cfg, err := parseConfig([]string{
 		"-currency", "gbp",
 		"-currency-denom", "usd",
