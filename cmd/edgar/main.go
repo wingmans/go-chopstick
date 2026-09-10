@@ -100,7 +100,11 @@ func parseConfig(args []string) (appConfig, error) {
 	flags.Usage = func() {
 		fmt.Fprintln(os.Stdout, "Usage: edgar [options]")
 		fmt.Fprintln(os.Stdout)
-		flags.PrintDefaults()
+		fmt.Fprintln(os.Stdout, "Options:")
+		fmt.Fprintf(os.Stdout, "  -d, --directory        directory for downloaded index files (default %q)\n", cfg.directory)
+		fmt.Fprintf(os.Stdout, "  -y, --from-year        first year to download (default %d)\n", cfg.sinceYear)
+		fmt.Fprintln(os.Stdout, "  -ua, --user-agent      SEC User-Agent, including a contact email address")
+		fmt.Fprintln(os.Stdout, "  -s, --refresh-latest   refresh the latest quarter and reuse older files")
 	}
 	flags.StringVar(&cfg.directory, "d", "./data", "directory for downloaded index files")
 	flags.StringVar(&cfg.directory, "directory", "./data", "directory for downloaded index files")

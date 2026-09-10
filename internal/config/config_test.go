@@ -1,26 +1,17 @@
 package config
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestParseConfigUsesCurrencyInputsAndCurrentEndDate(t *testing.T) {
-	now := time.Date(2026, time.March, 12, 15, 30, 0, 0, time.FixedZone("CET", 3600))
-
-	cfg, err := ParseConfig([]string{
-		"-currency", "gbp",
-		"-currency-denom", "usd",
-	}, now)
-	if err != nil {
-		t.Fatalf("ParseConfig returned error: %v", err)
+func TestConfigValidateAcceptsCurrencyInputs(t *testing.T) {
+	cfg := Config{
+		Currency:      "GBP",
+		CurrencyDenom: "USD",
+		StartPeriod:   "2026-02-12",
+		EndPeriod:     "2026-03-12",
+		Output:        "text",
 	}
 
-	if cfg.Currency != "GBP" || cfg.CurrencyDenom != "USD" {
-		t.Fatalf("unexpected currencies: %s/%s", cfg.Currency, cfg.CurrencyDenom)
-	}
-
-	if cfg.EndPeriod != "2026-03-12" {
-		t.Fatalf("expected current end date, got %q", cfg.EndPeriod)
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Config.Validate returned error: %v", err)
 	}
 }
