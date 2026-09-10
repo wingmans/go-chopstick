@@ -1,6 +1,7 @@
 package edgar
 
 import (
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
@@ -42,7 +43,7 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 		IndexPath:  "edgar/data/1/filing-index.html",
 	}
 
-	filingPath, err := localArchivePath(directory, record.FilingPath)
+	filingPath, err := localFilingPath(directory, record.FilingPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +56,7 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	indexPath, err := localArchivePath(directory, record.IndexPath)
+	indexPath, err := localFilingPath(directory, record.IndexPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +80,58 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 
 	if _, err := os.Stat(indexPath); err != nil {
 		t.Fatalf("expected existing index file, stat error: %v", err)
+	}
+}
+
+func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
+	directory := t.TempDir()
+	record := EdgarIndex{
+		CIK:        "1",
+		FormType:   "10-K",
+		FilingPath: "edgar/data/1/filing.txt",
+	}
+
+	filingPath, err := localFilingPath(directory, record.FilingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(filingPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Create(filingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := gzip.NewWriter(file)
+	if _, err := writer.Write([]byte("readable filing")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &http.Client{Transport: roundTripper(func(*http.Request) (*http.Response, error) {
+		t.Fatal("unexpected network request for existing compressed file")
+		return nil, nil
+	})}
+
+	if err := DownloadFiling(context.Background(), client, FilingDownloadConfig{
+		Directory: directory,
+		UserAgent: "Example contact@example.test",
+	}, record); err != nil {
+		t.Fatalf("DownloadFiling returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(filingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "readable filing" {
+		t.Fatalf("unexpected normalized content %q", data)
 	}
 }
 
@@ -117,7 +170,7 @@ func TestDownloadFilingWritesBothReferencedFiles(t *testing.T) {
 	}
 
 	for _, relativePath := range []string{record.FilingPath, record.IndexPath} {
-		path, err := localArchivePath(directory, relativePath)
+		path, err := localFilingPath(directory, relativePath)
 		if err != nil {
 			t.Fatal(err)
 		}

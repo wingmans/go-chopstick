@@ -147,10 +147,12 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	cfg := appConfig{
 		command: "download-index",
 		index: edgar.Config{
-			Directory: "./data",
-			SinceYear: edgar.EarliestYear,
-			UserAgent: defaultUserAgent,
-			Stitch:    true,
+			Directory:    "./data/indexes/quarterly",
+			ZipDirectory: "./data/raw/index-zips",
+			MasterPath:   "./data/indexes/master.tsv",
+			SinceYear:    edgar.EarliestYear,
+			UserAgent:    defaultUserAgent,
+			Stitch:       true,
 		},
 	}
 
@@ -166,6 +168,8 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	}
 	flags.StringVar(&cfg.index.Directory, "d", cfg.index.Directory, "directory for downloaded index files")
 	flags.StringVar(&cfg.index.Directory, "directory", cfg.index.Directory, "directory for downloaded index files")
+	flags.StringVar(&cfg.index.ZipDirectory, "zip-directory", cfg.index.ZipDirectory, "directory for downloaded SEC index ZIP files")
+	flags.StringVar(&cfg.index.MasterPath, "master", cfg.index.MasterPath, "path for the stitched master TSV")
 	flags.IntVar(&cfg.index.SinceYear, "y", cfg.index.SinceYear, "first year to download")
 	flags.IntVar(&cfg.index.SinceYear, "from-year", cfg.index.SinceYear, "first year to download")
 	flags.StringVar(&cfg.index.UserAgent, "ua", cfg.index.UserAgent, "SEC User-Agent, including a contact email address")
@@ -196,9 +200,9 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	cfg := appConfig{
 		command: "download-filings",
 	}
-	cfg.filings.masterPath = "./data/master.tsv"
+	cfg.filings.masterPath = "./data/indexes/master.tsv"
 	cfg.filings.config = edgar.FilingDownloadConfig{
-		Directory: "./data/archives",
+		Directory: "./data/filings",
 		UserAgent: defaultUserAgent,
 	}
 

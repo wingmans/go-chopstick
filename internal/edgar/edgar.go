@@ -29,6 +29,8 @@ const (
 // Config contains the inputs used to download the quarterly indexes.
 type Config struct {
 	Directory     string
+	ZipDirectory  string
+	MasterPath    string
 	SinceYear     int
 	UserAgent     string
 	RefreshLatest bool
@@ -103,14 +105,25 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 		return err
 	}
 
-	if err := os.MkdirAll(cfg.Directory, 0o750); err != nil {
-		return fmt.Errorf("create destination directory: %w", err)
+	zipDirectory := cfg.ZipDirectory
+	if zipDirectory == "" {
+		zipDirectory = cfg.Directory
+	}
+	masterPath := cfg.MasterPath
+	if masterPath == "" {
+		masterPath = filepath.Join(cfg.Directory, "master.tsv")
+	}
+
+	for _, directory := range []string{cfg.Directory, zipDirectory, filepath.Dir(masterPath)} {
+		if err := os.MkdirAll(directory, 0o750); err != nil {
+			return fmt.Errorf("create destination directory %s: %w", directory, err)
+		}
 	}
 
 	for i, archive := range archives {
 		started := time.Now()
 
-		downloaded, err := downloadArchive(ctx, client, cfg.Directory, archive, cfg.UserAgent, cfg.RefreshLatest && i == 0)
+		downloaded, err := downloadArchive(ctx, client, cfg.Directory, zipDirectory, archive, cfg.UserAgent, cfg.RefreshLatest && i == 0)
 		if err != nil {
 			return err
 		}
@@ -132,7 +145,7 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 	}
 
 	if cfg.Stitch {
-		if err := Stitch(cfg.Directory); err != nil {
+		if err := StitchTo(cfg.Directory, masterPath); err != nil {
 			return err
 		}
 	}
@@ -142,6 +155,11 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 
 // Stitch concatenates all quarterly TSV files in directory into master.tsv.
 func Stitch(directory string) error {
+	return StitchTo(directory, filepath.Join(directory, "master.tsv"))
+}
+
+// StitchTo concatenates all quarterly TSV files in directory into destination.
+func StitchTo(directory, destination string) error {
 	paths, err := filepath.Glob(filepath.Join(directory, "*-QTR*.tsv"))
 	if err != nil {
 		return fmt.Errorf("find quarterly indexes: %w", err)
@@ -153,9 +171,11 @@ func Stitch(directory string) error {
 
 	sort.Strings(paths)
 
-	destination := filepath.Join(directory, "master.tsv")
+	if err := os.MkdirAll(filepath.Dir(destination), 0o750); err != nil {
+		return fmt.Errorf("create master index directory: %w", err)
+	}
 
-	temporary, err := os.CreateTemp(directory, ".master-*.part")
+	temporary, err := os.CreateTemp(filepath.Dir(destination), ".master-*.part")
 	if err != nil {
 		return fmt.Errorf("create stitched index: %w", err)
 	}
@@ -198,7 +218,7 @@ func Stitch(directory string) error {
 	return nil
 }
 
-func downloadArchive(ctx context.Context, client *http.Client, directory string, archive Archive, userAgent string, force bool) (bool, error) {
+func downloadArchive(ctx context.Context, client *http.Client, directory, zipDirectory string, archive Archive, userAgent string, force bool) (bool, error) {
 	indexPath := filepath.Join(directory, archive.FileName)
 	if !force {
 		if _, err := os.Stat(indexPath); err == nil {
@@ -208,7 +228,7 @@ func downloadArchive(ctx context.Context, client *http.Client, directory string,
 		}
 	}
 
-	zipPath := filepath.Join(directory, strings.TrimSuffix(archive.FileName, ".tsv")+".zip")
+	zipPath := filepath.Join(zipDirectory, strings.TrimSuffix(archive.FileName, ".tsv")+".zip")
 	if err := ensureZip(ctx, client, archive, zipPath, userAgent); err != nil {
 		return false, err
 	}
@@ -246,7 +266,6 @@ func downloadZip(ctx context.Context, client *http.Client, url, destination, use
 	}
 
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
 
 	resp, err := client.Do(req)
 	if err != nil {

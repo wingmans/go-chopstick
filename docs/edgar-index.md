@@ -1,7 +1,7 @@
 # EDGAR Indexes and Filing Downloads
 
-The EDGAR downloader stores quarterly index files under `data/` and stores
-downloaded filing files under `data/archives/` by default.
+The EDGAR downloader stores quarterly index files under `data/indexes/` and
+stores downloaded filing files under `data/filings/` by default.
 
 ## Index records
 
@@ -58,11 +58,16 @@ The recommended layout is:
 
 ```text
 data/
+  raw/
+    index-zips/
+      2025-QTR1.zip
+      2025-QTR2.zip
   indexes/
-    2025-QTR1.tsv
-    2025-QTR2.tsv
+    quarterly/
+      2025-QTR1.tsv
+      2025-QTR2.tsv
     master.tsv
-  archives/
+  filings/
     edgar/
       data/
         1000045/
@@ -70,7 +75,7 @@ data/
           0000950170-25-021128-index.html
 ```
 
-The archive directory mirrors the SEC-relative paths exactly. CIK is part of
+The filings directory mirrors the SEC-relative paths exactly. CIK is part of
 the path, but company names are not used because names can change. The
 accession number in the filename identifies the submission, so a separate year
 directory or year suffix is not required.
@@ -87,8 +92,10 @@ edgar download-filings [options]
 
 `download-index` downloads quarterly indexes and stitches `master.tsv` by
 default. `download-filings` reads the existing `master.tsv` and downloads the
-referenced files independently. The default paths are `./data` for indexes,
-`./data/master.tsv` for the master index, and `./data/archives` for filings.
+referenced files independently. The default paths are
+`./data/indexes/quarterly` for TSV indexes, `./data/raw/index-zips` for ZIP
+files, `./data/indexes/master.tsv` for the master index, and `./data/filings`
+for filings.
 
 The default user-agent is `wingman paul@wingmen.io`. It can be overridden on
 either subcommand with `--user-agent`.

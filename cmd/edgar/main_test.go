@@ -12,8 +12,14 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
-	if cfg.index.Directory != "./data" {
+	if cfg.index.Directory != "./data/indexes/quarterly" {
 		t.Fatalf("unexpected index directory %q", cfg.index.Directory)
+	}
+	if cfg.index.ZipDirectory != "./data/raw/index-zips" {
+		t.Fatalf("unexpected ZIP directory %q", cfg.index.ZipDirectory)
+	}
+	if cfg.index.MasterPath != "./data/indexes/master.tsv" {
+		t.Fatalf("unexpected master path %q", cfg.index.MasterPath)
 	}
 
 	if !cfg.index.Stitch {
@@ -36,11 +42,11 @@ func TestParseDownloadFilingsConfigSupportsRepeatedFormTypes(t *testing.T) {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
-	if cfg.filings.masterPath != "./data/master.tsv" {
+	if cfg.filings.masterPath != "./data/indexes/master.tsv" {
 		t.Fatalf("unexpected master path %q", cfg.filings.masterPath)
 	}
 
-	if cfg.filings.config.Directory != "./data/archives" {
+	if cfg.filings.config.Directory != "./data/filings" {
 		t.Fatalf("unexpected filing directory %q", cfg.filings.config.Directory)
 	}
 
