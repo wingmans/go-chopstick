@@ -42,6 +42,7 @@ func (s *stringList) Set(value string) error {
 	}
 
 	*s = append(*s, value)
+
 	return nil
 }
 
@@ -90,6 +91,7 @@ func run(ctx context.Context, args []string) error {
 		Timeout:       30 * time.Second,
 	}
 	logger := ctxlog.FromContext(ctx)
+
 	started := time.Now()
 	defer func() {
 		logger.Info("finished EDGAR command", "command", cfg.command, "duration_ms", time.Since(started).Milliseconds())
@@ -121,11 +123,13 @@ func run(ctx context.Context, args []string) error {
 func parseConfig(args []string) (appConfig, error) {
 	if len(args) == 0 {
 		printUsage()
+
 		return appConfig{}, flag.ErrHelp
 	}
 
 	if args[0] == "-h" || args[0] == "--help" {
 		printUsage()
+
 		return appConfig{}, flag.ErrHelp
 	}
 
@@ -175,9 +179,11 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	if err := flags.Parse(args); err != nil {
 		return appConfig{}, err
 	}
+
 	if cfg.index.SinceYear < edgar.EarliestYear {
 		return appConfig{}, fmt.Errorf("-from-year must be %d or later", edgar.EarliestYear)
 	}
+
 	if strings.TrimSpace(cfg.index.UserAgent) == "" {
 		return appConfig{}, errors.New("-user-agent cannot be empty")
 	}
@@ -220,15 +226,19 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	if err := flags.Parse(args); err != nil {
 		return appConfig{}, err
 	}
+
 	if strings.TrimSpace(cfg.filings.masterPath) == "" {
 		return appConfig{}, errors.New("-master cannot be empty")
 	}
+
 	if strings.TrimSpace(cfg.filings.config.Directory) == "" {
 		return appConfig{}, errors.New("-directory cannot be empty")
 	}
+
 	if strings.TrimSpace(cfg.filings.config.UserAgent) == "" {
 		return appConfig{}, errors.New("-user-agent cannot be empty")
 	}
+
 	cfg.filings.filter.FormTypes = formTypes
 
 	return cfg, nil
