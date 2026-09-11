@@ -109,6 +109,7 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 	if zipDirectory == "" {
 		zipDirectory = cfg.Directory
 	}
+
 	masterPath := cfg.MasterPath
 	if masterPath == "" {
 		masterPath = filepath.Join(cfg.Directory, "master.tsv")

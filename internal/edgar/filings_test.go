@@ -95,6 +95,7 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := os.MkdirAll(filepath.Dir(filingPath), 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -103,19 +104,23 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	writer := gzip.NewWriter(file)
 	if _, err := writer.Write([]byte("readable filing")); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	client := &http.Client{Transport: roundTripper(func(*http.Request) (*http.Response, error) {
 		t.Fatal("unexpected network request for existing compressed file")
+
 		return nil, nil
 	})}
 
@@ -130,6 +135,7 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if string(data) != "readable filing" {
 		t.Fatalf("unexpected normalized content %q", data)
 	}

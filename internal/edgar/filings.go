@@ -192,12 +192,14 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 	defer func() { _ = os.Remove(temporaryName) }()
 
 	body := resp.Body
+
 	var compressedBody io.ReadCloser
 	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
 		compressedBody, err = gzip.NewReader(resp.Body)
 		if err != nil {
 			return fmt.Errorf("decompress %s: %w", requestURL, err)
 		}
+
 		body = compressedBody
 		defer func() { _ = compressedBody.Close() }()
 	}
@@ -226,11 +228,14 @@ func normalizeExistingFile(path string) error {
 	}
 
 	header := make([]byte, 2)
+
 	_, readErr := io.ReadFull(file, header)
 	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
 		_ = file.Close()
+
 		return fmt.Errorf("read existing filing %s: %w", path, readErr)
 	}
+
 	if len(header) < 2 || header[0] != 0x1f || header[1] != 0x8b {
 		if err := file.Close(); err != nil {
 			return fmt.Errorf("close existing filing %s: %w", path, err)
@@ -241,12 +246,14 @@ func normalizeExistingFile(path string) error {
 
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		_ = file.Close()
+
 		return fmt.Errorf("rewind existing filing %s: %w", path, err)
 	}
 
 	reader, err := gzip.NewReader(file)
 	if err != nil {
 		_ = file.Close()
+
 		return fmt.Errorf("open compressed filing %s: %w", path, err)
 	}
 
@@ -254,8 +261,10 @@ func normalizeExistingFile(path string) error {
 	if err != nil {
 		_ = reader.Close()
 		_ = file.Close()
+
 		return fmt.Errorf("create normalized filing %s: %w", path, err)
 	}
+
 	temporaryName := temporary.Name()
 	cleanup := func() {
 		_ = temporary.Close()
@@ -266,23 +275,32 @@ func normalizeExistingFile(path string) error {
 
 	if _, err := io.Copy(temporary, reader); err != nil {
 		cleanup()
+
 		return fmt.Errorf("decompress existing filing %s: %w", path, err)
 	}
+
 	if err := reader.Close(); err != nil {
 		cleanup()
+
 		return fmt.Errorf("close compressed filing %s: %w", path, err)
 	}
+
 	if err := file.Close(); err != nil {
 		_ = temporary.Close()
 		_ = os.Remove(temporaryName)
+
 		return fmt.Errorf("close existing filing %s: %w", path, err)
 	}
+
 	if err := temporary.Close(); err != nil {
 		_ = os.Remove(temporaryName)
+
 		return fmt.Errorf("close normalized filing %s: %w", path, err)
 	}
+
 	if err := os.Rename(temporaryName, path); err != nil {
 		_ = os.Remove(temporaryName)
+
 		return fmt.Errorf("store normalized filing %s: %w", path, err)
 	}
 
