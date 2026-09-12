@@ -1,4 +1,4 @@
-// Package main runs the SEC EDGAR index and filing downloader.
+// Package main downloads SEC EDGAR data and parses local filing submissions.
 package main
 
 import (
@@ -23,11 +23,17 @@ const defaultUserAgent = "wingman paul@wingmen.io"
 const (
 	edgarUserAgentEnv = "EDGAR_USER_AGENT"
 	edgarBaseURLEnv   = "EDGAR_BASE_URL"
+	parseCommand      = "parse"
+	noopHelpFlags     = "-n, --noop"
 )
 
 type appConfig struct {
 	command string
 	index   edgar.Config
+	parse   struct {
+		files stringList
+		noop  bool
+	}
 	filings struct {
 		masterPath string
 		config     edgar.FilingDownloadConfig
@@ -109,6 +115,8 @@ func run(ctx context.Context, args []string) error {
 	}()
 
 	switch cfg.command {
+	case parseCommand:
+		return runParse(ctx, cfg)
 	case "index":
 		logger.Info("starting EDGAR index download",
 			"from_year", cfg.index.SinceYear,
@@ -150,6 +158,8 @@ func parseConfig(args []string) (appConfig, error) {
 	}
 
 	switch args[0] {
+	case parseCommand:
+		return parseSubmissionConfig(args[1:])
 	case "index":
 		return parseDownloadIndexConfig(args[1:])
 	case "filings":
@@ -184,7 +194,7 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 			{"-y, --from-year <year>", "First year to download."},
 			{"-r, --refresh-latest", "Refresh the latest quarter and reuse older files."},
 			{"-s, --stitch", "Concatenate quarterly TSV files into master.tsv."},
-			{"-n, --noop", "Show actions without downloading, extracting, or writing files."},
+			{noopHelpFlags, "Show actions without downloading, extracting, or writing files."},
 		})
 	}
 	flags.IntVar(&cfg.index.SinceYear, "y", cfg.index.SinceYear, "first year to download")
@@ -233,7 +243,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 			{"-c, --cik <cik>", "Only download filings for this CIK."},
 			{"-f, --form-type <type>", "Only download this form type; may be repeated."},
 			{"-y, --year <year>", "Only download filings filed in this year."},
-			{"-n, --noop", "Show actions without downloading or writing files."},
+			{noopHelpFlags, "Show actions without downloading or writing files."},
 		})
 	}
 	flags.StringVar(&cfg.filings.filter.CIK, "c", "", "only download filings for this CIK")
@@ -292,6 +302,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "Commands:")
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
 	fmt.Fprintln(os.Stdout, "  filings           download filing files referenced by a master TSV")
+	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")
 }
