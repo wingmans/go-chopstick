@@ -5,7 +5,7 @@ BIN_DIR := bin
 build:
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/ecb-fx ./cmd/ecb
-	go build -o $(BIN_DIR)/go-edgar ./cmd/edgar
+	go build -o $(BIN_DIR)/edgar ./cmd/edgar
 
 lint:
 	golangci-lint run ./cmd/... ./internal/...
