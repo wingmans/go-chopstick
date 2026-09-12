@@ -157,8 +157,10 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 	info, err := os.Stat(destination)
 	switch {
 	case err == nil && !info.IsDir():
-		if err := normalizeExistingFile(destination); err != nil {
-			return err
+		if !cfg.Noop {
+			if err := normalizeExistingFile(destination); err != nil {
+				return err
+			}
 		}
 
 		ctxlog.FromContext(ctx).Debug("fetched EDGAR filing",
@@ -176,7 +178,7 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 	}
 
 	if cfg.Noop {
-		ctxlog.FromContext(ctx).Debug("would fetch EDGAR filing",
+		ctxlog.FromContext(ctx).Info("would fetch EDGAR filing",
 			"source", "network",
 			"url", requestURL,
 			"filename", filepath.Base(relativePath),

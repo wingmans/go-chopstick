@@ -1,26 +1,44 @@
 # Local Submission Parser and XBRL Reader
 
-Status: initial local reader and persistence implementation available in
-`internal/edgar`. Financial interpretation and taxonomy mapping remain future work.
+Status: local parsing and persistence are integrated with the `filings` workflow.
+Financial interpretation and taxonomy mapping remain future work.
 
 ## Usage
 
 ```sh
+go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025
+go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025 --reprocess
+go run ./cmd/edgar filings -c 0000789019 -n
 go run ./cmd/edgar parse --file golden/sample_10-K.txt
 go run ./cmd/edgar parse -f golden/sample_10-Q.txt -f golden/sample_8-K.txt
-go run ./cmd/edgar parse -n -f golden/sample_10-K.txt
+go run ./cmd/edgar parse -r -f golden/sample_10-K.txt
 ```
 
-`-f, --file` is required and repeatable. `-n, --noop` runs parsing without writing
-results; it defaults to false. Output goes to
-`data/parsed/<CIK>/<accession>/filing.json`. No network access is performed.
+`filings` is the normal download-and-process command. Existing CIK, form-type,
+and filing-year filters select records from `data/indexes/master.tsv`; an empty
+year selects all filing years. The source submission and any referenced HTML
+index are downloaded only when missing. Processing then uses the local submission.
 
-Library entry points are `ParseSubmission`, `SaveParsedFiling`, and
-`LoadParsedFiling`. `MatchesSource` checks parser/schema versions and the source
-checksum for callers that want to reuse results; the command currently reparses
-each explicitly requested file. Filings expose metadata getters and document and
-instance collections. Each instance exposes `FactsByConcept`, `Context`, and
-`Unit`, keeping references scoped to the document that defines them.
+`parse` remains local-only, with required, repeatable `-f, --file` inputs. It uses
+the same processing coordinator and reuse rules as `filings`, without downloads.
+Note that `-f` means `--form-type` in `filings` and `--file` in `parse`.
+
+Both commands provide `-r, --reprocess`, default false. It bypasses reuse and
+rebuilds parsed output; it does not force redownloading or refresh the HTML index.
+No separate skip-processed flag is needed: reuse is the default.
+
+Both commands provide `-n, --noop`, default false. This is now a planning operation:
+it reads local headers and checks existing parsed results and source checksums,
+but does not extract XBRL, download, normalize gzip files, or write output. Missing
+submissions and legacy compressed sources are reported as needing preparation
+before parsing. `parse` reports missing inputs as errors instead of downloading.
+With `--noop --reprocess`, rebuilding is planned but never performed.
+
+Workflow entry points are `ProcessFilings`, `ProcessLocalSubmissions`, and
+`ProcessSubmission`. The low-level `ParseSubmission`, `SaveParsedFiling`, and
+`LoadParsedFiling` APIs remain available separately. Filings expose metadata
+getters and document and instance collections. Each instance exposes
+`FactsByConcept`, `Context`, and `Unit`, keeping references document-local.
 
 Header dates retain their `YYYYMMDD` representation; XBRL period strings retain
 their XML-decoded values. Filers and item information are available as collections,
@@ -34,11 +52,14 @@ The 10-Q's declared document-count discrepancy remains a diagnostic.
 
 Start with local SEC submission files and extract their structure and XBRL data.
 The initial fixtures are the 10-K, 10-Q, and 8-K submissions in `golden/`.
-Downloading, financial interpretation, and taxonomy harmonization are outside
-this first step.
+Downloading belongs to the workflow coordinator, not the parser. Financial
+interpretation and taxonomy harmonization remain outside this step.
 
 ```text
-Local .txt submission
+Filtered master.tsv record -> Reuse/download local submission
+  -> Shared processing coordinator <- Explicit local parse input
+  -> Header identity and parsed-result lookup
+  -> Reuse matching result OR:
   -> Submission reader
   -> Document inventory
   -> XBRL instance reader
@@ -146,7 +167,18 @@ Current extraction statuses are `complete`, `no_xbrl`, `unsupported` (inline-onl
 and `partial` (extraction errors, broken references, or unsupported instance
 elements). Readable submissions with diagnostics can still be persisted; callers
 must inspect the status. Envelope errors fail parsing and do not produce output.
-The command logs diagnostics but does not use them alone as a failing exit status.
+Both commands continue after individual filing failures and return a nonzero exit
+status when any filing failed. Download, envelope, persistence, malformed-XBRL,
+and unresolved-reference errors count as failures. Unsupported features,
+`no_xbrl`, and document-count warnings alone do not. Cancellation stops the batch;
+an unreadable or malformed master index also stops traversal.
+
+The final summary reports `selected`, `processed`, `reused`, `planned`, and
+`failed`. Failure counts can overlap processed/reused counts: a persisted result
+containing malformed-XBRL diagnostics is still a failed filing. Cached failures
+continue to be reported without needlessly rerunning the same extraction.
+Debug logs include the action, source location, filename, paths, and duration;
+existing download logs distinguish cache from network.
 
 `complete` describes extraction, not XBRL schema or taxonomy conformance. This is
 not a full XBRL validator. Tuple interpretation, inline conversion, external schema
@@ -159,16 +191,56 @@ belongs to a later adapter, not the initial XBRL reader.
 
 ## Persistence
 
-Initially persist one versioned JSON document per filing:
+Persist one versioned JSON document per filing:
 
 ```text
 data/parsed/<CIK>/<accession>/filing.json
 ```
 
+Downloads retain their SEC-relative paths and original filenames. Parsed results
+use a ten-digit, zero-padded CIK and the hyphenated accession number. For example:
+
+```text
+data/filings/edgar/data/789019/0000950170-25-010491.txt
+data/parsed/0000789019/0000950170-25-010491/filing.json
+```
+
+The JSON connects the two layouts explicitly:
+
+```json
+{
+  "source_base": "filings",
+  "source_path": "edgar/data/789019/0000950170-25-010491.txt"
+}
+```
+
+Resolve that path relative to the configured filings directory (normally
+`data/filings`). Explicit inputs outside that directory, such as golden files,
+use `source_base: "absolute"` and an absolute `source_path`. This avoids relying
+on the working directory when downstream code locates the original bytes.
+
+Lookup reads the submission header, using the same first-filer ownership rule as
+the full reader; if no FILER section exists, it uses the header CIK. All filers
+remain in metadata. The CIK on a selected master-index row does not override this
+ownership rule, and the accession prefix is never used to infer the filer CIK.
+No source files are relocated to match the parsed layout.
+
 Include filing metadata, document inventory, XBRL facts, contexts, units,
 references, diagnostics, and an explicit extraction status. Include the output
 schema version, parser version, source path, and source-file checksum so a later
 run can determine whether the parsed result is reusable or needs rebuilding.
+
+Reuse requires matching identity, source location, source SHA-256, parser version,
+schema version, and a recognized extraction status. Changed bytes or locations,
+missing/damaged JSON, and incompatible versions trigger rebuilding. Source-read
+and filesystem permission failures are surfaced rather than silently ignored.
+Matching `complete`, `no_xbrl`, `unsupported`, and `partial` results are reusable;
+their status and diagnostics remain visible. Use `--reprocess` to retry unchanged
+inputs explicitly, and bump the parser version when extraction behavior changes.
+
+The output schema is now version 2 because source-path semantics include
+`source_base`. Existing version-1 output is rebuilt lazily when selected. Old
+noncanonical output directories are not deleted or migrated automatically.
 
 Write through a temporary file followed by an atomic rename. Keep large embedded
 payloads in the original submission and reference them from the inventory.
@@ -205,6 +277,11 @@ Add focused fixtures for alternate namespace prefixes, duplicate facts, nil and
 zero values, long lines, truncated envelopes, no-XBRL submissions, and inline-only
 submissions. The initial golden files are a starting point, not evidence of
 compatibility with every issuer or filing generator; broaden coverage later.
+
+Workflow tests cover first processing, reuse without rewriting, forced rebuilding
+without network refresh, checksum/version invalidation, corrupt cached JSON,
+multi-filer identity, relative source paths, filters, dry runs (including gzip),
+cached diagnostic results, cancellation, and continuing batches after failures.
 
 ## References
 

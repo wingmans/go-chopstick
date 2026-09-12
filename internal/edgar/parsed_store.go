@@ -34,7 +34,9 @@ func (f *ParsedFiling) ParsedPath(directory string) (string, error) {
 		}
 	}
 
-	return filepath.Join(directory, f.Metadata.CIK, f.Metadata.Accession, "filing.json"), nil
+	cik := strings.Repeat("0", 10-len(f.Metadata.CIK)) + f.Metadata.CIK
+
+	return filepath.Join(directory, cik, f.Metadata.Accession, "filing.json"), nil
 }
 
 func decimalDigits(value string) bool {

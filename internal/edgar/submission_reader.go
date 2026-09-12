@@ -16,6 +16,7 @@ import (
 
 const (
 	envelopeDone     = "done"
+	envelopeStart    = "start"
 	envelopeBetween  = "between"
 	submissionEndTag = "</SEC-DOCUMENT>"
 	documentEndTag   = "</DOCUMENT>"
@@ -47,8 +48,11 @@ func ParseSubmission(ctx context.Context, path string) (*ParsedFiling, error) {
 	var result ParsedFiling
 
 	result.SchemaVersion = ParsedSchemaVersion
+
 	result.ParserVersion = ParserVersion
-	result.SourcePath = filepath.Clean(path)
+	if err := setSourceReference(&result, path, DefaultFilingsDirectory); err != nil {
+		return nil, err
+	}
 
 	result.Status = ParseNoXBRL
 	if err := readEnvelope(ctx, io.TeeReader(file, hash), &result); err != nil {
@@ -86,7 +90,7 @@ func readEnvelope(ctx context.Context, source io.Reader, result *ParsedFiling) e
 
 	var envelope envelopeReader
 
-	envelope.state = "start"
+	envelope.state = envelopeStart
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -116,13 +120,8 @@ func readEnvelope(ctx context.Context, source io.Reader, result *ParsedFiling) e
 		return fmt.Errorf("truncated submission in %s", envelope.state)
 	}
 
-	result.Metadata.Filers = readFilers(result.Metadata.Header)
-	if len(result.Metadata.Filers) > 0 {
-		result.Metadata.CIK = result.Metadata.Filers[0].CIK
-	}
-
-	if result.Metadata.Accession == "" || result.Metadata.CIK == "" || result.Metadata.FormType == "" {
-		return errors.New("submission header is missing accession, CIK, or form type")
+	if err := finishSubmissionMetadata(&result.Metadata); err != nil {
+		return err
 	}
 
 	for _, line := range result.Metadata.Header {
@@ -137,9 +136,66 @@ func readEnvelope(ctx context.Context, source io.Reader, result *ParsedFiling) e
 	return nil
 }
 
+func finishSubmissionMetadata(metadata *FilingMetadata) error {
+	metadata.Filers = readFilers(metadata.Header)
+	if len(metadata.Filers) > 0 {
+		metadata.CIK = metadata.Filers[0].CIK
+	}
+
+	if metadata.Accession == "" || metadata.CIK == "" || metadata.FormType == "" {
+		return errors.New("submission header is missing accession, CIK, or form type")
+	}
+
+	return nil
+}
+
+// Read only the envelope header to locate a cached result without extracting XBRL.
+func readSubmissionMetadata(ctx context.Context, path string) (FilingMetadata, error) {
+	var result ParsedFiling
+	if filepath.Ext(path) != ".txt" {
+		return result.Metadata, errors.New("submission must have a .txt extension")
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return result.Metadata, err
+	}
+
+	defer func() { _ = file.Close() }()
+
+	reader := bufio.NewReader(file)
+
+	var envelope envelopeReader
+
+	envelope.state = envelopeStart
+	for envelope.state != envelopeBetween {
+		if err := ctx.Err(); err != nil {
+			return result.Metadata, err
+		}
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return result.Metadata, fmt.Errorf("read submission header: %w", err)
+		}
+
+		start := envelope.position
+
+		envelope.position += int64(len(line))
+		if err := envelope.consume(strings.TrimSpace(line), strings.TrimRight(line, "\r\n"), start, &result); err != nil {
+			return result.Metadata, err
+		}
+	}
+
+	if err := finishSubmissionMetadata(&result.Metadata); err != nil {
+		return result.Metadata, err
+	}
+
+	return result.Metadata, nil
+}
+
 func (e *envelopeReader) consume(line, raw string, start int64, result *ParsedFiling) error {
 	switch e.state {
-	case "start":
+	case envelopeStart:
 		if line == "" {
 			return nil
 		}

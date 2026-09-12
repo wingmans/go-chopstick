@@ -31,13 +31,15 @@ type appConfig struct {
 	command string
 	index   edgar.Config
 	parse   struct {
-		files stringList
-		noop  bool
+		files     stringList
+		noop      bool
+		reprocess bool
 	}
 	filings struct {
 		masterPath string
 		config     edgar.FilingDownloadConfig
 		filter     edgar.IndexFilter
+		reprocess  bool
 	}
 }
 
@@ -127,16 +129,24 @@ func run(ctx context.Context, args []string) error {
 
 		return edgar.DownloadIndex(ctx, client, cfg.index)
 	case "filings":
-		logger.Info("starting EDGAR filing download",
+		logger.Info("starting EDGAR filing workflow",
 			"master", cfg.filings.masterPath,
 			"directory", cfg.filings.config.Directory,
 			"cik", cfg.filings.filter.CIK,
 			"form_types", cfg.filings.filter.FormTypes,
 			"year", cfg.filings.filter.Year,
 			"noop", cfg.filings.config.Noop,
+			"reprocess", cfg.filings.reprocess,
 		)
 
-		return edgar.DownloadIndexFiles(ctx, client, cfg.filings.masterPath, cfg.filings.config, cfg.filings.filter)
+		_, err := edgar.ProcessFilings(ctx, client, cfg.filings.masterPath, cfg.filings.config, edgar.ProcessingConfig{
+			Directory:        edgar.DefaultParsedDirectory,
+			FilingsDirectory: cfg.filings.config.Directory,
+			Reprocess:        cfg.filings.reprocess,
+			Noop:             cfg.filings.config.Noop,
+		}, cfg.filings.filter)
+
+		return err
 	default:
 		printUsage()
 
@@ -229,7 +239,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	cfg.command = "filings"
 	cfg.filings.masterPath = "./data/indexes/master.tsv"
 	cfg.filings.config = edgar.FilingDownloadConfig{
-		Directory: "./data/filings",
+		Directory: edgar.DefaultFilingsDirectory,
 		UserAgent: environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		BaseURL:   environmentValue(edgarBaseURLEnv, ""),
 		Noop:      false,
@@ -239,11 +249,12 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	flags := flag.NewFlagSet("filings", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
-		printSubcommandHelp("filings", "Download filing submissions and HTML filing indexes from a master TSV.", []helpOption{
-			{"-c, --cik <cik>", "Only download filings for this CIK."},
-			{"-f, --form-type <type>", "Only download this form type; may be repeated."},
-			{"-y, --year <year>", "Only download filings filed in this year."},
-			{noopHelpFlags, "Show actions without downloading or writing files."},
+		printSubcommandHelp("filings", "Download filings selected from master.tsv and reuse or rebuild parsed results.", []helpOption{
+			{"-c, --cik <cik>", "Select filings for this CIK."},
+			{"-f, --form-type <type>", "Select this form type; may be repeated."},
+			{"-y, --year <year>", "Select filings filed in this year; default is all years."},
+			{"-r, --reprocess", "Rebuild parsed results without forcing a new download."},
+			{noopHelpFlags, "Show planned downloads and processing without changing files."},
 		})
 	}
 	flags.StringVar(&cfg.filings.filter.CIK, "c", "", "only download filings for this CIK")
@@ -254,6 +265,8 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	flags.BoolVar(&cfg.filings.config.Noop, "n", false, "show actions without downloading or writing files")
 	flags.StringVar(&year, "y", "", "only download filings filed in this year")
 	flags.StringVar(&year, "year", "", "only download filings filed in this year")
+	flags.BoolVar(&cfg.filings.reprocess, "r", false, "rebuild parsed results")
+	flags.BoolVar(&cfg.filings.reprocess, "reprocess", false, "rebuild parsed results")
 
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -265,6 +278,10 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 
 	if strings.TrimSpace(cfg.filings.config.UserAgent) == "" {
 		return subcommandError(flags, fmt.Errorf("%s cannot be empty", edgarUserAgentEnv))
+	}
+
+	if flags.NArg() != 0 {
+		return subcommandError(flags, errors.New("unexpected positional arguments"))
 	}
 
 	cfg.filings.filter.FormTypes = formTypes
@@ -301,7 +318,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
-	fmt.Fprintln(os.Stdout, "  filings           download filing files referenced by a master TSV")
+	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")

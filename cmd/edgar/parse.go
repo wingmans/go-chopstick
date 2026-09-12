@@ -6,9 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"time"
 
-	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
 )
 
@@ -21,7 +19,8 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	flags.Usage = func() {
 		printSubcommandHelp(parseCommand, "Read local .txt submissions and store results in data/parsed.", []helpOption{
 			{flags: "-f, --file <path>", description: "Local submission file; required and may be repeated."},
-			{flags: noopHelpFlags, description: "Parse and validate without writing results."},
+			{flags: "-r, --reprocess", description: "Rebuild parsed results even when they are current."},
+			{flags: noopHelpFlags, description: "Show processing decisions without changing files."},
 			{flags: "-h, --help", description: "Show command help."},
 		})
 	}
@@ -29,6 +28,8 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	flags.Var(&cfg.parse.files, "file", "local submission file")
 	flags.BoolVar(&cfg.parse.noop, "n", false, "parse without writing")
 	flags.BoolVar(&cfg.parse.noop, "noop", false, "parse without writing")
+	flags.BoolVar(&cfg.parse.reprocess, "r", false, "rebuild parsed results")
+	flags.BoolVar(&cfg.parse.reprocess, "reprocess", false, "rebuild parsed results")
 
 	if err := flags.Parse(args); err != nil {
 		return appConfig{}, flag.ErrHelp
@@ -52,50 +53,12 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 }
 
 func runParse(ctx context.Context, cfg appConfig) error {
-	for _, path := range cfg.parse.files {
-		if err := parseLocalFile(ctx, path, cfg.parse.noop); err != nil {
-			return err
-		}
-	}
+	_, err := edgar.ProcessLocalSubmissions(ctx, cfg.parse.files, edgar.ProcessingConfig{
+		Directory:        edgar.DefaultParsedDirectory,
+		FilingsDirectory: edgar.DefaultFilingsDirectory,
+		Reprocess:        cfg.parse.reprocess,
+		Noop:             cfg.parse.noop,
+	})
 
-	return nil
-}
-
-func parseLocalFile(ctx context.Context, path string, noop bool) error {
-	started := time.Now()
-
-	filing, err := edgar.ParseSubmission(ctx, path)
-	if err != nil {
-		return err
-	}
-
-	logger := ctxlog.FromContext(ctx)
-	logger.Debug("read EDGAR submission", "source", "local", "path", path,
-		"filename", filepath.Base(path), "duration_ms", time.Since(started).Milliseconds())
-
-	for _, diagnostic := range filing.Diagnostics {
-		logger.Warn("submission diagnostic", "code", diagnostic.Code, "document", diagnostic.Document, "detail", diagnostic.Message)
-	}
-
-	destination, err := filing.ParsedPath(edgar.DefaultParsedDirectory)
-	if err != nil {
-		return err
-	}
-
-	if !noop {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		destination, err = edgar.SaveParsedFiling(edgar.DefaultParsedDirectory, filing)
-		if err != nil {
-			return err
-		}
-	}
-
-	logger.Info("parsed EDGAR submission", "accession", filing.AccessionNumber(), "form_type", filing.FormType(),
-		"status", filing.Status, "documents", len(filing.Documents), "instances", len(filing.Instances),
-		"path", destination, "noop", noop, "duration_ms", time.Since(started).Milliseconds())
-
-	return nil
+	return err
 }

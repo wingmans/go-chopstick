@@ -102,3 +102,38 @@ func TestParseConfigWithoutCommandShowsHelp(t *testing.T) {
 		t.Fatalf("got %v, want flag.ErrHelp", err)
 	}
 }
+
+func TestReprocessFlags(t *testing.T) {
+	const command = "filings"
+	for _, alias := range []string{"-r", "--reprocess"} {
+		filings, err := parseConfig([]string{command, alias})
+		if err != nil || !filings.filings.reprocess {
+			t.Fatalf("filings %s: %v", alias, err)
+		}
+
+		local, err := parseConfig([]string{parseCommand, "-f", "test.txt", alias})
+		if err != nil || !local.parse.reprocess {
+			t.Fatalf("parse %s: %v", alias, err)
+		}
+	}
+
+	filings, err := parseConfig([]string{command})
+	if err != nil || filings.filings.reprocess || filings.filings.filter.Year != 0 {
+		t.Fatal("unexpected filings defaults")
+	}
+
+	local, err := parseConfig([]string{parseCommand, "-f", "test.txt"})
+	if err != nil || local.parse.reprocess {
+		t.Fatal("unexpected parse defaults")
+	}
+
+	for _, args := range [][]string{
+		{command, "unexpected", "--reprocess"},
+		{command, "--reprocess=invalid"},
+		{command, "--not-a-flag"},
+	} {
+		if _, err := parseConfig(args); !errors.Is(err, flag.ErrHelp) {
+			t.Fatalf("bad flags should show help: %v", err)
+		}
+	}
+}

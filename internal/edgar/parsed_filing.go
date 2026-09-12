@@ -1,13 +1,14 @@
 package edgar
 
 const (
-	ParsedSchemaVersion    = 1
-	ParserVersion          = "1"
-	DefaultParsedDirectory = "./data/parsed"
-	ParseComplete          = "complete"
-	ParseNoXBRL            = "no_xbrl"
-	ParseUnsupported       = "unsupported"
-	ParsePartial           = "partial"
+	ParsedSchemaVersion     = 2
+	ParserVersion           = "1"
+	DefaultParsedDirectory  = "./data/parsed"
+	DefaultFilingsDirectory = "./data/filings"
+	ParseComplete           = "complete"
+	ParseNoXBRL             = "no_xbrl"
+	ParseUnsupported        = "unsupported"
+	ParsePartial            = "partial"
 )
 
 // ParsedFiling is a source-level result, not a harmonized financial statement.
@@ -15,6 +16,7 @@ type ParsedFiling struct {
 	SchemaVersion int                  `json:"schema_version"`
 	ParserVersion string               `json:"parser_version"`
 	SourcePath    string               `json:"source_path"`
+	SourceBase    string               `json:"source_base"`
 	SourceSHA256  string               `json:"source_sha256"`
 	Metadata      FilingMetadata       `json:"metadata"`
 	Documents     []SubmissionDocument `json:"documents"`
