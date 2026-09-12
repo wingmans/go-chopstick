@@ -219,7 +219,10 @@ func StitchTo(directory, destination string) error {
 	return nil
 }
 
-func downloadArchive(ctx context.Context, client *http.Client, directory, zipDirectory string, archive Archive, userAgent string, force bool) (bool, error) {
+func downloadArchive(ctx context.Context,
+	client *http.Client, directory, zipDirectory string,
+	archive Archive, userAgent string, force bool,
+) (bool, error) {
 	indexPath := filepath.Join(directory, archive.FileName)
 	if !force {
 		if _, err := os.Stat(indexPath); err == nil {

@@ -26,7 +26,10 @@ func TestReadMasterTSVByFormType(t *testing.T) {
 	defer func() { _ = file.Close() }()
 
 	formType := "10-K"
-	reader := NewIndexReader(file, IndexFilter{FormTypes: []string{formType}})
+	reader := NewIndexReader(file, IndexFilter{
+		CIK:       "",
+		FormTypes: []string{formType},
+	})
 
 	for {
 		record, err := reader.Next()
@@ -77,7 +80,10 @@ func TestIndexReaderReadsAndFiltersRecords(t *testing.T) {
 }
 
 func TestIndexReaderRejectsMalformedRows(t *testing.T) {
-	reader := NewIndexReader(strings.NewReader("123|Example|10-K|not-a-date|filing.txt\n"), IndexFilter{})
+	reader := NewIndexReader(strings.NewReader("123|Example|10-K|not-a-date|filing.txt\n"), IndexFilter{
+		CIK:       "",
+		FormTypes: nil,
+	})
 
 	if _, err := reader.Next(); err == nil {
 		t.Fatal("expected malformed date error")
@@ -85,7 +91,10 @@ func TestIndexReaderRejectsMalformedRows(t *testing.T) {
 }
 
 func TestIndexReaderSkipsBlankRows(t *testing.T) {
-	reader := NewIndexReader(strings.NewReader("\n123|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{})
+	reader := NewIndexReader(strings.NewReader("\n123|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
+		CIK:       "",
+		FormTypes: nil,
+	})
 
 	if _, err := reader.Next(); err != nil {
 		t.Fatalf("Next returned error: %v", err)

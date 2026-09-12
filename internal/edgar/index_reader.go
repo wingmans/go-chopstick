@@ -66,6 +66,7 @@ func NewIndexReader(source io.Reader, filter IndexFilter) *IndexReader {
 	return &IndexReader{
 		scanner: scanner,
 		filter:  filter,
+		line:    0,
 	}
 }
 
@@ -114,6 +115,7 @@ func parseIndexLine(line string) (EdgarIndex, error) {
 		FormType:    strings.TrimSpace(fields[2]),
 		DateFiled:   dateFiled,
 		FilingPath:  strings.TrimSpace(fields[4]),
+		IndexPath:   "",
 	}
 
 	if len(fields) == 6 {

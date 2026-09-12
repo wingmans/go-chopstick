@@ -31,7 +31,10 @@ func UniqueFormTypes(masterPath string) ([]string, error) {
 	}
 	defer func() { _ = file.Close() }()
 
-	reader := NewIndexReader(file, IndexFilter{})
+	reader := NewIndexReader(file, IndexFilter{
+		CIK:       "",
+		FormTypes: nil,
+	})
 	types := make(map[string]struct{})
 
 	for {
@@ -75,7 +78,8 @@ func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath str
 	}
 
 	reader := NewIndexReader(file, filter)
-	pacer := requestPacer{}
+
+	var pacer requestPacer
 
 	for {
 		record, err := reader.Next()
@@ -104,7 +108,7 @@ func DownloadFiling(ctx context.Context, client *http.Client, cfg FilingDownload
 		client = http.DefaultClient
 	}
 
-	pacer := requestPacer{}
+	var pacer requestPacer
 
 	return downloadReferencedFiles(ctx, client, cfg, record, &pacer)
 }

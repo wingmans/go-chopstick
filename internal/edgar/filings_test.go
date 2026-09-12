@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUniqueFormTypes(t *testing.T) {
@@ -37,10 +38,12 @@ func TestUniqueFormTypes(t *testing.T) {
 func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 	directory := t.TempDir()
 	record := EdgarIndex{
-		CIK:        "1",
-		FormType:   "10-K",
-		FilingPath: "edgar/data/1/filing.txt",
-		IndexPath:  "edgar/data/1/filing-index.html",
+		CIK:         "1",
+		CompanyName: "",
+		FormType:    "10-K",
+		DateFiled:   time.Time{},
+		FilingPath:  "edgar/data/1/filing.txt",
+		IndexPath:   "edgar/data/1/filing-index.html",
 	}
 
 	filingPath, err := localFilingPath(directory, record.FilingPath)
@@ -65,15 +68,21 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client := &http.Client{Transport: roundTripper(func(*http.Request) (*http.Response, error) {
-		t.Fatal("unexpected network request for existing file")
+	client := &http.Client{
+		Transport: roundTripper(func(*http.Request) (*http.Response, error) {
+			t.Fatal("unexpected network request for existing file")
 
-		return nil, nil
-	})}
+			return nil, nil
+		}),
+		CheckRedirect: nil,
+		Jar:           nil,
+		Timeout:       0,
+	}
 
 	if err := DownloadFiling(context.Background(), client, FilingDownloadConfig{
 		Directory: directory,
 		UserAgent: "Example contact@example.test",
+		BaseURL:   "",
 	}, record); err != nil {
 		t.Fatalf("DownloadFiling returned error: %v", err)
 	}
@@ -86,9 +95,12 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 	directory := t.TempDir()
 	record := EdgarIndex{
-		CIK:        "1",
-		FormType:   "10-K",
-		FilingPath: "edgar/data/1/filing.txt",
+		CIK:         "1",
+		CompanyName: "",
+		FormType:    "10-K",
+		DateFiled:   time.Time{},
+		FilingPath:  "edgar/data/1/filing.txt",
+		IndexPath:   "",
 	}
 
 	filingPath, err := localFilingPath(directory, record.FilingPath)
@@ -118,15 +130,21 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client := &http.Client{Transport: roundTripper(func(*http.Request) (*http.Response, error) {
-		t.Fatal("unexpected network request for existing compressed file")
+	client := &http.Client{
+		Transport: roundTripper(func(*http.Request) (*http.Response, error) {
+			t.Fatal("unexpected network request for existing compressed file")
 
-		return nil, nil
-	})}
+			return nil, nil
+		}),
+		CheckRedirect: nil,
+		Jar:           nil,
+		Timeout:       0,
+	}
 
 	if err := DownloadFiling(context.Background(), client, FilingDownloadConfig{
 		Directory: directory,
 		UserAgent: "Example contact@example.test",
+		BaseURL:   "",
 	}, record); err != nil {
 		t.Fatalf("DownloadFiling returned error: %v", err)
 	}
@@ -144,24 +162,40 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 func TestDownloadFilingWritesBothReferencedFiles(t *testing.T) {
 	directory := t.TempDir()
 	record := EdgarIndex{
-		CIK:        "1",
-		FormType:   "10-K",
-		FilingPath: "edgar/data/1/filing.txt",
-		IndexPath:  "edgar/data/1/filing-index.html",
+		CIK:         "1",
+		CompanyName: "",
+		FormType:    "10-K",
+		DateFiled:   time.Time{},
+		FilingPath:  "edgar/data/1/filing.txt",
+		IndexPath:   "edgar/data/1/filing-index.html",
 	}
 
 	requests := 0
-	client := &http.Client{Transport: roundTripper(func(req *http.Request) (*http.Response, error) {
-		requests++
+	client := &http.Client{
+		Transport: roundTripper(func(req *http.Request) (*http.Response, error) {
+			requests++
 
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Status:     "200 OK",
-			Body:       io.NopCloser(strings.NewReader(req.URL.Path)),
-			Header:     make(http.Header),
-			Request:    req,
-		}, nil
-	})}
+			return &http.Response{
+				Status:           "200 OK",
+				StatusCode:       http.StatusOK,
+				Proto:            "HTTP/1.1",
+				ProtoMajor:       1,
+				ProtoMinor:       1,
+				Header:           make(http.Header),
+				Body:             io.NopCloser(strings.NewReader(req.URL.Path)),
+				ContentLength:    -1,
+				TransferEncoding: nil,
+				Close:            false,
+				Uncompressed:     false,
+				Trailer:          nil,
+				Request:          req,
+				TLS:              nil,
+			}, nil
+		}),
+		CheckRedirect: nil,
+		Jar:           nil,
+		Timeout:       0,
+	}
 
 	if err := DownloadFiling(context.Background(), client, FilingDownloadConfig{
 		Directory: directory,

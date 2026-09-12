@@ -144,16 +144,18 @@ func parseConfig(args []string) (appConfig, error) {
 }
 
 func parseDownloadIndexConfig(args []string) (appConfig, error) {
-	cfg := appConfig{
-		command: "download-index",
-		index: edgar.Config{
-			Directory:    "./data/indexes/quarterly",
-			ZipDirectory: "./data/raw/index-zips",
-			MasterPath:   "./data/indexes/master.tsv",
-			SinceYear:    edgar.EarliestYear,
-			UserAgent:    defaultUserAgent,
-			Stitch:       true,
-		},
+	var cfg appConfig
+
+	cfg.command = "download-index"
+	cfg.index = edgar.Config{
+		Directory:     "./data/indexes/quarterly",
+		ZipDirectory:  "./data/raw/index-zips",
+		MasterPath:    "./data/indexes/master.tsv",
+		SinceYear:     edgar.EarliestYear,
+		UserAgent:     defaultUserAgent,
+		RefreshLatest: false,
+		Stitch:        true,
+		BaseURL:       "",
 	}
 
 	flags := flag.NewFlagSet("download-index", flag.ContinueOnError)
@@ -197,13 +199,15 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 
 func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	formTypes := stringList{}
-	cfg := appConfig{
-		command: "download-filings",
-	}
+
+	var cfg appConfig
+
+	cfg.command = "download-filings"
 	cfg.filings.masterPath = "./data/indexes/master.tsv"
 	cfg.filings.config = edgar.FilingDownloadConfig{
 		Directory: "./data/filings",
 		UserAgent: defaultUserAgent,
+		BaseURL:   "",
 	}
 
 	flags := flag.NewFlagSet("download-filings", flag.ContinueOnError)
