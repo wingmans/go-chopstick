@@ -44,10 +44,10 @@ The SEC EDGAR downloader is available as a separate command with independent
 subcommands:
 
 ```bash
-go run ./cmd/edgar download-index --from-year 2025
+go run ./cmd/edgar index --from-year 2025
 ```
 
-`download-index` writes one `YYYY-QTRn.tsv` file per quarter to
+`index` writes one `YYYY-QTRn.tsv` file per quarter to
 `./data/indexes/quarterly` and stores ZIP files under `./data/cache/index-zips`.
 It stitches them into `./data/indexes/master.tsv` by default. Use `--refresh-latest` to
 download the newest quarter again while reusing older files. Stitching is
@@ -56,14 +56,15 @@ enabled by default and can be disabled with `--stitch=false`.
 After an index has been downloaded, filing files can be downloaded separately:
 
 ```bash
-go run ./cmd/edgar download-filings --form-type 10-K
+go run ./cmd/edgar filings --form-type 10-K
 ```
 
 This reads `./data/indexes/master.tsv` and stores SEC-relative filing and HTML
 index paths under `./data/filings`. Existing files are skipped. Use `--form-type`
 more than once to select multiple form types, or use `--cik` to restrict the
 download to one filer. The default SEC user-agent is `wingman paul@wingmen.io`;
-both subcommands accept `--user-agent` to override it.
+set `EDGAR_USER_AGENT` to override it. Set `EDGAR_BASE_URL` to override the SEC
+Archives base URL.
 
 The `-end` flag is optional. When omitted, it defaults to the current date.
 

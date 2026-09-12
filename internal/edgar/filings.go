@@ -22,6 +22,7 @@ type FilingDownloadConfig struct {
 	Directory string
 	UserAgent string
 	BaseURL   string
+	Noop      bool
 }
 
 // UniqueFormTypes reads an EDGAR master TSV and returns its distinct form
@@ -36,6 +37,7 @@ func UniqueFormTypes(masterPath string) ([]string, error) {
 	reader := NewIndexReader(file, IndexFilter{
 		CIK:       "",
 		FormTypes: nil,
+		Year:      0,
 	})
 	types := make(map[string]struct{})
 
@@ -150,6 +152,8 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 		return err
 	}
 
+	requestURL := archiveURL(cfg.BaseURL, relativePath)
+
 	info, err := os.Stat(destination)
 	switch {
 	case err == nil && !info.IsDir():
@@ -171,6 +175,17 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 		return fmt.Errorf("check downloaded file %s: %w", destination, err)
 	}
 
+	if cfg.Noop {
+		ctxlog.FromContext(ctx).Debug("would fetch EDGAR filing",
+			"source", "network",
+			"url", requestURL,
+			"filename", filepath.Base(relativePath),
+			"duration_ms", time.Since(started).Milliseconds(),
+		)
+
+		return nil
+	}
+
 	if err := os.MkdirAll(filepath.Dir(destination), 0o750); err != nil {
 		return fmt.Errorf("create download directory: %w", err)
 	}
@@ -178,8 +193,6 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 	if err := pacer.wait(ctx); err != nil {
 		return err
 	}
-
-	requestURL := archiveURL(cfg.BaseURL, relativePath)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {

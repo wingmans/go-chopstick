@@ -140,24 +140,24 @@ simulating command-line arguments.
 The intended commands are:
 
 ```text
-edgar download-index [options]
-edgar download-filings [options]
+edgar index [options]
+edgar filings [options]
 ```
 
 The planned defaults are:
 
 ```text
-download-index:
+index:
   quarterly indexes: ./data/indexes/quarterly
   ZIP files:         ./data/cache/index-zips
   master index:      ./data/indexes/master.tsv
 
-download-filings:
+filings:
   master index:      ./data/indexes/master.tsv
   filings:           ./data/filings
 ```
 
-Stitching is enabled by default for `download-index`. Filing downloads remain a
+Stitching is enabled by default for `index`. Filing downloads remain a
 separate command so index acquisition and filing acquisition can be run,
 retried, and monitored independently.
 

@@ -46,6 +46,7 @@ type EdgarIndex struct {
 type IndexFilter struct {
 	CIK       string
 	FormTypes []string
+	Year      int
 }
 
 // IndexReader reads EDGAR index records one row at a time.
@@ -139,6 +140,10 @@ func parseIndexLine(line string) (EdgarIndex, error) {
 
 func matchesIndexFilter(record EdgarIndex, filter IndexFilter) bool {
 	if filter.CIK != "" && record.CIK != filter.CIK {
+		return false
+	}
+
+	if filter.Year != 0 && record.DateFiled.Year() != filter.Year {
 		return false
 	}
 

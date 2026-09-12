@@ -7,7 +7,10 @@ import (
 )
 
 func TestParseDownloadIndexConfigDefaults(t *testing.T) {
-	cfg, err := parseConfig([]string{"download-index"})
+	t.Setenv(edgarUserAgentEnv, "")
+	t.Setenv(edgarBaseURLEnv, "")
+
+	cfg, err := parseConfig([]string{"index"})
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
@@ -31,14 +34,38 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 	if cfg.index.UserAgent != defaultUserAgent {
 		t.Fatalf("unexpected user agent %q", cfg.index.UserAgent)
 	}
+
+	if cfg.index.Noop {
+		t.Fatal("expected noop to be disabled by default")
+	}
+}
+
+func TestParseConfigUsesEDGAREnvironment(t *testing.T) {
+	t.Setenv(edgarUserAgentEnv, "Test Agent test@example.com")
+	t.Setenv(edgarBaseURLEnv, "https://example.test/Archives")
+
+	cfg, err := parseConfig([]string{"index"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.index.UserAgent != "Test Agent test@example.com" {
+		t.Fatalf("unexpected user agent %q", cfg.index.UserAgent)
+	}
+
+	if cfg.index.BaseURL != "https://example.test/Archives" {
+		t.Fatalf("unexpected base URL %q", cfg.index.BaseURL)
+	}
 }
 
 func TestParseDownloadFilingsConfigSupportsRepeatedFormTypes(t *testing.T) {
 	cfg, err := parseConfig([]string{
-		"download-filings",
+		"filings",
 		"--form-type", "10-K",
 		"--form-type", "10-Q",
 		"--cik", "0000123456",
+		"--year", "2024",
+		"--noop",
 	})
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
@@ -54,6 +81,14 @@ func TestParseDownloadFilingsConfigSupportsRepeatedFormTypes(t *testing.T) {
 
 	if cfg.filings.filter.CIK != "0000123456" {
 		t.Fatalf("unexpected CIK %q", cfg.filings.filter.CIK)
+	}
+
+	if cfg.filings.filter.Year != 2024 {
+		t.Fatalf("unexpected year %d", cfg.filings.filter.Year)
+	}
+
+	if !cfg.filings.config.Noop {
+		t.Fatal("expected noop to be enabled")
 	}
 
 	if got, want := len(cfg.filings.filter.FormTypes), 2; got != want {

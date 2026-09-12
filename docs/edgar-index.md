@@ -86,16 +86,16 @@ The command-line layer is intentionally separate from the EDGAR logic so the
 same operations can later be called by a service or an orchestrator.
 
 ```text
-edgar download-index [options]
-edgar download-filings [options]
+edgar index [options]
+edgar filings [options]
 ```
 
-`download-index` downloads quarterly indexes and stitches `master.tsv` by
-default. `download-filings` reads the existing `master.tsv` and downloads the
+`index` downloads quarterly indexes and stitches `master.tsv` by
+default. `filings` reads the existing `master.tsv` and downloads the
 referenced files independently. The default paths are
 `./data/indexes/quarterly` for TSV indexes, `./data/cache/index-zips` for ZIP
 files, `./data/indexes/master.tsv` for the master index, and `./data/filings`
 for filings.
 
-The default user-agent is `wingman paul@wingmen.io`. It can be overridden on
-either subcommand with `--user-agent`.
+The default user-agent is `wingman paul@wingmen.io`. Set `EDGAR_USER_AGENT` to
+override it. Set `EDGAR_BASE_URL` to override the SEC Archives base URL.

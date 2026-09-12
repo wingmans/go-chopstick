@@ -83,6 +83,7 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 		Directory: directory,
 		UserAgent: "Example contact@example.test",
 		BaseURL:   "",
+		Noop:      false,
 	}, record); err != nil {
 		t.Fatalf("DownloadFiling returned error: %v", err)
 	}
@@ -145,6 +146,7 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 		Directory: directory,
 		UserAgent: "Example contact@example.test",
 		BaseURL:   "",
+		Noop:      false,
 	}, record); err != nil {
 		t.Fatalf("DownloadFiling returned error: %v", err)
 	}
@@ -201,6 +203,7 @@ func TestDownloadFilingWritesBothReferencedFiles(t *testing.T) {
 		Directory: directory,
 		UserAgent: "Example contact@example.test",
 		BaseURL:   "https://example.test/Archives",
+		Noop:      false,
 	}, record); err != nil {
 		t.Fatalf("DownloadFiling returned error: %v", err)
 	}

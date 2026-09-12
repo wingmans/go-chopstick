@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +19,11 @@ import (
 )
 
 const defaultUserAgent = "wingman paul@wingmen.io"
+
+const (
+	edgarUserAgentEnv = "EDGAR_USER_AGENT"
+	edgarBaseURLEnv   = "EDGAR_BASE_URL"
+)
 
 type appConfig struct {
 	command string
@@ -30,6 +36,11 @@ type appConfig struct {
 }
 
 type stringList []string
+
+type helpOption struct {
+	flags       string
+	description string
+}
 
 func (s *stringList) String() string {
 	return strings.Join(*s, ", ")
@@ -98,25 +109,30 @@ func run(ctx context.Context, args []string) error {
 	}()
 
 	switch cfg.command {
-	case "download-index":
+	case "index":
 		logger.Info("starting EDGAR index download",
 			"from_year", cfg.index.SinceYear,
 			"directory", cfg.index.Directory,
 			"stitch", cfg.index.Stitch,
+			"noop", cfg.index.Noop,
 		)
 
 		return edgar.DownloadIndex(ctx, client, cfg.index)
-	case "download-filings":
+	case "filings":
 		logger.Info("starting EDGAR filing download",
 			"master", cfg.filings.masterPath,
 			"directory", cfg.filings.config.Directory,
 			"cik", cfg.filings.filter.CIK,
 			"form_types", cfg.filings.filter.FormTypes,
+			"year", cfg.filings.filter.Year,
+			"noop", cfg.filings.config.Noop,
 		)
 
 		return edgar.DownloadIndexFiles(ctx, client, cfg.filings.masterPath, cfg.filings.config, cfg.filings.filter)
 	default:
-		return fmt.Errorf("unsupported command %q", cfg.command)
+		printUsage()
+
+		return flag.ErrHelp
 	}
 }
 
@@ -134,64 +150,62 @@ func parseConfig(args []string) (appConfig, error) {
 	}
 
 	switch args[0] {
-	case "download-index":
+	case "index":
 		return parseDownloadIndexConfig(args[1:])
-	case "download-filings":
+	case "filings":
 		return parseDownloadFilingsConfig(args[1:])
 	default:
-		return appConfig{}, fmt.Errorf("unknown command %q; use download-index or download-filings", args[0])
+		printUsage()
+
+		return appConfig{}, flag.ErrHelp
 	}
 }
 
 func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
-	cfg.command = "download-index"
+	cfg.command = "index"
 	cfg.index = edgar.Config{
 		Directory:     "./data/indexes/quarterly",
 		ZipDirectory:  "./data/cache/index-zips",
 		MasterPath:    "./data/indexes/master.tsv",
 		SinceYear:     edgar.EarliestYear,
-		UserAgent:     defaultUserAgent,
+		UserAgent:     environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		RefreshLatest: false,
 		Stitch:        true,
-		BaseURL:       "",
+		BaseURL:       environmentValue(edgarBaseURLEnv, ""),
+		Noop:          false,
 	}
 
-	flags := flag.NewFlagSet("download-index", flag.ContinueOnError)
+	flags := flag.NewFlagSet("index", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
-		fmt.Fprintln(os.Stdout, "Usage: edgar download-index [options]")
-		fmt.Fprintln(os.Stdout)
-		fmt.Fprintln(os.Stdout, "Download SEC quarterly filing indexes.")
-		fmt.Fprintln(os.Stdout)
-		fmt.Fprintln(os.Stdout, "Options:")
-		flags.PrintDefaults()
+		printSubcommandHelp("index", "Download SEC quarterly filing indexes.", []helpOption{
+			{"-y, --from-year <year>", "First year to download."},
+			{"-r, --refresh-latest", "Refresh the latest quarter and reuse older files."},
+			{"-s, --stitch", "Concatenate quarterly TSV files into master.tsv."},
+			{"-n, --noop", "Show actions without downloading, extracting, or writing files."},
+		})
 	}
-	flags.StringVar(&cfg.index.Directory, "d", cfg.index.Directory, "directory for downloaded index files")
-	flags.StringVar(&cfg.index.Directory, "directory", cfg.index.Directory, "directory for downloaded index files")
-	flags.StringVar(&cfg.index.ZipDirectory, "zip-directory", cfg.index.ZipDirectory, "directory for downloaded SEC index ZIP files")
-	flags.StringVar(&cfg.index.MasterPath, "master", cfg.index.MasterPath, "path for the stitched master TSV")
 	flags.IntVar(&cfg.index.SinceYear, "y", cfg.index.SinceYear, "first year to download")
 	flags.IntVar(&cfg.index.SinceYear, "from-year", cfg.index.SinceYear, "first year to download")
-	flags.StringVar(&cfg.index.UserAgent, "ua", cfg.index.UserAgent, "SEC User-Agent, including a contact email address")
-	flags.StringVar(&cfg.index.UserAgent, "user-agent", cfg.index.UserAgent, "SEC User-Agent, including a contact email address")
 	flags.BoolVar(&cfg.index.RefreshLatest, "r", false, "refresh the latest quarter and reuse older files")
 	flags.BoolVar(&cfg.index.RefreshLatest, "refresh-latest", false, "refresh the latest quarter and reuse older files")
 	flags.BoolVar(&cfg.index.Stitch, "s", cfg.index.Stitch, "concatenate quarterly TSV files into master.tsv")
 	flags.BoolVar(&cfg.index.Stitch, "stitch", cfg.index.Stitch, "concatenate quarterly TSV files into master.tsv")
-	flags.StringVar(&cfg.index.BaseURL, "base-url", "", "SEC Archives base URL")
+	flags.BoolVar(&cfg.index.Noop, "n", false, "show actions without downloading, extracting, or writing files")
+	flags.BoolVar(&cfg.index.Noop, "noop", false, "show actions without downloading, extracting, or writing files")
 
 	if err := flags.Parse(args); err != nil {
-		return appConfig{}, err
+		if errors.Is(err, flag.ErrHelp) {
+			return appConfig{}, err
+		}
+
+		return appConfig{}, flag.ErrHelp
 	}
 
 	if cfg.index.SinceYear < edgar.EarliestYear {
-		return appConfig{}, fmt.Errorf("-from-year must be %d or later", edgar.EarliestYear)
-	}
-
-	if strings.TrimSpace(cfg.index.UserAgent) == "" {
-		return appConfig{}, errors.New("-user-agent cannot be empty")
+		return subcommandError(flags, fmt.Errorf("--from-year must be %d or later", edgar.EarliestYear))
 	}
 
 	return cfg, nil
@@ -202,62 +216,95 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 
 	var cfg appConfig
 
-	cfg.command = "download-filings"
+	cfg.command = "filings"
 	cfg.filings.masterPath = "./data/indexes/master.tsv"
 	cfg.filings.config = edgar.FilingDownloadConfig{
 		Directory: "./data/filings",
-		UserAgent: defaultUserAgent,
-		BaseURL:   "",
+		UserAgent: environmentValue(edgarUserAgentEnv, defaultUserAgent),
+		BaseURL:   environmentValue(edgarBaseURLEnv, ""),
+		Noop:      false,
 	}
+	year := ""
 
-	flags := flag.NewFlagSet("download-filings", flag.ContinueOnError)
+	flags := flag.NewFlagSet("filings", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
-		fmt.Fprintln(os.Stdout, "Usage: edgar download-filings [options]")
-		fmt.Fprintln(os.Stdout)
-		fmt.Fprintln(os.Stdout, "Download filing submissions and HTML filing indexes from a master TSV.")
-		fmt.Fprintln(os.Stdout)
-		fmt.Fprintln(os.Stdout, "Options:")
-		flags.PrintDefaults()
+		printSubcommandHelp("filings", "Download filing submissions and HTML filing indexes from a master TSV.", []helpOption{
+			{"-c, --cik <cik>", "Only download filings for this CIK."},
+			{"-f, --form-type <type>", "Only download this form type; may be repeated."},
+			{"-y, --year <year>", "Only download filings filed in this year."},
+			{"-n, --noop", "Show actions without downloading or writing files."},
+		})
 	}
-	flags.StringVar(&cfg.filings.masterPath, "m", cfg.filings.masterPath, "master TSV to read")
-	flags.StringVar(&cfg.filings.masterPath, "master", cfg.filings.masterPath, "master TSV to read")
-	flags.StringVar(&cfg.filings.config.Directory, "d", cfg.filings.config.Directory, "directory for downloaded filing files")
-	flags.StringVar(&cfg.filings.config.Directory, "directory", cfg.filings.config.Directory, "directory for downloaded filing files")
-	flags.StringVar(&cfg.filings.config.UserAgent, "ua", cfg.filings.config.UserAgent, "SEC User-Agent, including a contact email address")
-	flags.StringVar(&cfg.filings.config.UserAgent, "user-agent", cfg.filings.config.UserAgent, "SEC User-Agent, including a contact email address")
+	flags.StringVar(&cfg.filings.filter.CIK, "c", "", "only download filings for this CIK")
 	flags.StringVar(&cfg.filings.filter.CIK, "cik", "", "only download filings for this CIK")
 	flags.Var(&formTypes, "form-type", "only download this form type; may be repeated")
 	flags.Var(&formTypes, "f", "only download this form type; may be repeated")
-	flags.StringVar(&cfg.filings.config.BaseURL, "base-url", "", "SEC Archives base URL")
+	flags.BoolVar(&cfg.filings.config.Noop, "noop", false, "show actions without downloading or writing files")
+	flags.BoolVar(&cfg.filings.config.Noop, "n", false, "show actions without downloading or writing files")
+	flags.StringVar(&year, "y", "", "only download filings filed in this year")
+	flags.StringVar(&year, "year", "", "only download filings filed in this year")
 
 	if err := flags.Parse(args); err != nil {
-		return appConfig{}, err
-	}
+		if errors.Is(err, flag.ErrHelp) {
+			return appConfig{}, err
+		}
 
-	if strings.TrimSpace(cfg.filings.masterPath) == "" {
-		return appConfig{}, errors.New("-master cannot be empty")
-	}
-
-	if strings.TrimSpace(cfg.filings.config.Directory) == "" {
-		return appConfig{}, errors.New("-directory cannot be empty")
+		return appConfig{}, flag.ErrHelp
 	}
 
 	if strings.TrimSpace(cfg.filings.config.UserAgent) == "" {
-		return appConfig{}, errors.New("-user-agent cannot be empty")
+		return subcommandError(flags, fmt.Errorf("%s cannot be empty", edgarUserAgentEnv))
 	}
 
 	cfg.filings.filter.FormTypes = formTypes
 
+	if strings.TrimSpace(year) != "" {
+		parsedYear, err := strconv.Atoi(strings.TrimSpace(year))
+		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
+			return subcommandError(flags, errors.New("--year must be a four-digit year"))
+		}
+
+		cfg.filings.filter.Year = parsedYear
+	}
+
 	return cfg, nil
+}
+
+func subcommandError(flags *flag.FlagSet, err error) (appConfig, error) {
+	fmt.Fprintf(os.Stdout, "Error: %v\n\n", err)
+	flags.Usage()
+
+	return appConfig{}, flag.ErrHelp
+}
+
+func environmentValue(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+
+	return fallback
 }
 
 func printUsage() {
 	fmt.Fprintln(os.Stdout, "Usage: edgar <command> [options]")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
-	fmt.Fprintln(os.Stdout, "  download-index    download quarterly SEC filing indexes")
-	fmt.Fprintln(os.Stdout, "  download-filings  download filing files referenced by a master TSV")
+	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
+	fmt.Fprintln(os.Stdout, "  filings           download filing files referenced by a master TSV")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")
+}
+
+func printSubcommandHelp(command, description string, options []helpOption) {
+	fmt.Fprintf(os.Stdout, "Usage: edgar %s [options]\n\n", command)
+	fmt.Fprintln(os.Stdout, description)
+	fmt.Fprintln(os.Stdout)
+	fmt.Fprintln(os.Stdout, "Options:")
+	fmt.Fprintln(os.Stdout)
+
+	for _, option := range options {
+		fmt.Fprintf(os.Stdout, "  %s\n", option.flags)
+		fmt.Fprintf(os.Stdout, "      %s\n\n", option.description)
+	}
 }

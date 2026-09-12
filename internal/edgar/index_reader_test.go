@@ -29,6 +29,7 @@ func TestReadMasterTSVByFormType(t *testing.T) {
 	reader := NewIndexReader(file, IndexFilter{
 		CIK:       "",
 		FormTypes: []string{formType},
+		Year:      0,
 	})
 
 	for {
@@ -55,6 +56,7 @@ func TestIndexReaderReadsAndFiltersRecords(t *testing.T) {
 	reader := NewIndexReader(source, IndexFilter{
 		CIK:       "0000123456",
 		FormTypes: []string{"10-K"},
+		Year:      0,
 	})
 
 	record, err := reader.Next()
@@ -83,6 +85,7 @@ func TestIndexReaderRejectsMalformedRows(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("123|Example|10-K|not-a-date|filing.txt\n"), IndexFilter{
 		CIK:       "",
 		FormTypes: nil,
+		Year:      0,
 	})
 
 	if _, err := reader.Next(); err == nil {
@@ -90,10 +93,36 @@ func TestIndexReaderRejectsMalformedRows(t *testing.T) {
 	}
 }
 
+func TestIndexReaderFiltersByYear(t *testing.T) {
+	source := strings.NewReader(strings.Join([]string{
+		"123|Example|10-K|2023-12-31|filing-2023.txt",
+		"123|Example|10-Q|2024-01-02|filing-2024.txt",
+	}, "\n"))
+	reader := NewIndexReader(source, IndexFilter{
+		CIK:       "",
+		FormTypes: nil,
+		Year:      2024,
+	})
+
+	record, err := reader.Next()
+	if err != nil {
+		t.Fatalf("Next returned error: %v", err)
+	}
+
+	if record.DateFiled.Year() != 2024 {
+		t.Fatalf("got filing year %d, want 2024", record.DateFiled.Year())
+	}
+
+	if _, err := reader.Next(); !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF, got %v", err)
+	}
+}
+
 func TestIndexReaderSkipsBlankRows(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("\n123|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
 		CIK:       "",
 		FormTypes: nil,
+		Year:      0,
 	})
 
 	if _, err := reader.Next(); err != nil {
