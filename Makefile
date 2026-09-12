@@ -8,6 +8,7 @@ build:
 	go build -o $(BIN_DIR)/go-edgar ./cmd/edgar
 
 lint:
+    golangci-lint run --fix
 	golangci-lint run ./cmd/... ./internal/...
 
 run:

@@ -149,7 +149,7 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	cfg.command = "download-index"
 	cfg.index = edgar.Config{
 		Directory:     "./data/indexes/quarterly",
-		ZipDirectory:  "./data/raw/index-zips",
+		ZipDirectory:  "./data/cache/index-zips",
 		MasterPath:    "./data/indexes/master.tsv",
 		SinceYear:     edgar.EarliestYear,
 		UserAgent:     defaultUserAgent,

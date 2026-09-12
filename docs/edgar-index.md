@@ -58,7 +58,7 @@ The recommended layout is:
 
 ```text
 data/
-  raw/
+  cache/
     index-zips/
       2025-QTR1.zip
       2025-QTR2.zip
@@ -93,7 +93,7 @@ edgar download-filings [options]
 `download-index` downloads quarterly indexes and stitches `master.tsv` by
 default. `download-filings` reads the existing `master.tsv` and downloads the
 referenced files independently. The default paths are
-`./data/indexes/quarterly` for TSV indexes, `./data/raw/index-zips` for ZIP
+`./data/indexes/quarterly` for TSV indexes, `./data/cache/index-zips` for ZIP
 files, `./data/indexes/master.tsv` for the master index, and `./data/filings`
 for filings.
 

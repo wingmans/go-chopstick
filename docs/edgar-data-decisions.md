@@ -9,7 +9,7 @@ The local data directory is split by the role of each file:
 
 ```text
 data/
-  raw/
+  cache/
     index-zips/
       2025-QTR1.zip
       2025-QTR2.zip
@@ -28,9 +28,9 @@ data/
           0000950170-24-003550-index.html
 ```
 
-### Raw index ZIP files
+### Cached index ZIP files
 
-ZIP files downloaded from the SEC are kept under `data/raw/index-zips`.
+ZIP files downloaded from the SEC are kept under `data/cache/index-zips`.
 They are untouched upstream downloads and can be retained for reproducibility
 or removed later if disk usage becomes a concern.
 
@@ -149,7 +149,7 @@ The planned defaults are:
 ```text
 download-index:
   quarterly indexes: ./data/indexes/quarterly
-  ZIP files:         ./data/raw/index-zips
+  ZIP files:         ./data/cache/index-zips
   master index:      ./data/indexes/master.tsv
 
 download-filings:

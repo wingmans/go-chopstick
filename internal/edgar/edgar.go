@@ -36,6 +36,7 @@ type Config struct {
 	RefreshLatest bool
 	Stitch        bool
 	BaseURL       string
+	Noop          bool
 }
 
 // Archive describes one quarterly EDGAR index archive.
@@ -115,6 +116,23 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 		masterPath = filepath.Join(cfg.Directory, "master.tsv")
 	}
 
+	if cfg.Noop {
+		logger := ctxlog.FromContext(ctx)
+		for _, archive := range archives {
+			logger.Info("would download EDGAR index archive",
+				"url", archive.URL,
+				"zip_path", filepath.Join(zipDirectory, strings.TrimSuffix(archive.FileName, ".tsv")+".zip"),
+				"index_path", filepath.Join(cfg.Directory, archive.FileName),
+			)
+		}
+
+		if cfg.Stitch {
+			logger.Info("would stitch EDGAR indexes", "directory", cfg.Directory, "master_path", masterPath)
+		}
+
+		return nil
+	}
+
 	for _, directory := range []string{cfg.Directory, zipDirectory, filepath.Dir(masterPath)} {
 		if err := os.MkdirAll(directory, 0o750); err != nil {
 			return fmt.Errorf("create destination directory %s: %w", directory, err)
@@ -124,21 +142,24 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 	for i, archive := range archives {
 		started := time.Now()
 
-		downloaded, err := downloadArchive(ctx, client, cfg.Directory, zipDirectory, archive, cfg.UserAgent, cfg.RefreshLatest && i == 0)
+		network, sourcePath, err := downloadArchive(ctx, client, cfg.Directory, zipDirectory, archive, cfg.UserAgent, cfg.RefreshLatest && i == 0)
 		if err != nil {
 			return err
 		}
 
-		if downloaded {
-			ctxlog.FromContext(ctx).Debug("downloaded archive",
-				"filename", archive.FileName,
-				"duration_ms", time.Since(started).Milliseconds(),
-			)
+		logger := ctxlog.FromContext(ctx)
+
+		attrs := []any{
+			"filename", archive.FileName,
+			"duration_ms", time.Since(started).Milliseconds(),
+		}
+		if network {
+			logger.Debug("fetched EDGAR index", append(attrs, "source", "network", "url", archive.URL)...)
 		} else {
-			ctxlog.FromContext(ctx).Debug("skipped existing archive", "filename", archive.FileName)
+			logger.Debug("fetched EDGAR index", append(attrs, "source", "cache", "path", sourcePath)...)
 		}
 
-		if downloaded && i < len(archives)-1 {
+		if network && i < len(archives)-1 {
 			if err := waitForRequestBudget(ctx, time.Since(started)); err != nil {
 				return err
 			}
@@ -222,26 +243,37 @@ func StitchTo(directory, destination string) error {
 func downloadArchive(ctx context.Context,
 	client *http.Client, directory, zipDirectory string,
 	archive Archive, userAgent string, force bool,
-) (bool, error) {
+) (bool, string, error) {
 	indexPath := filepath.Join(directory, archive.FileName)
 	if !force {
 		if _, err := os.Stat(indexPath); err == nil {
-			return false, nil
+			return false, archive.FileName, nil
 		} else if !errors.Is(err, os.ErrNotExist) {
-			return false, fmt.Errorf("check %s: %w", indexPath, err)
+			return false, "", fmt.Errorf("check %s: %w", indexPath, err)
 		}
 	}
 
 	zipPath := filepath.Join(zipDirectory, strings.TrimSuffix(archive.FileName, ".tsv")+".zip")
-	if err := ensureZip(ctx, client, archive, zipPath, userAgent); err != nil {
-		return false, err
+
+	zipPath, network, err := ensureZip(ctx, client, archive, zipPath, userAgent)
+	if err != nil {
+		return false, "", err
 	}
 
 	if err := extractIndex(zipPath, indexPath); err != nil {
-		return false, fmt.Errorf("extract %s: %w", archive.FileName, err)
+		return false, "", fmt.Errorf("extract %s: %w", archive.FileName, err)
 	}
 
-	return true, nil
+	if network {
+		return true, "", nil
+	}
+
+	path, err := filepath.Rel(zipDirectory, zipPath)
+	if err != nil {
+		return false, filepath.Base(zipPath), nil
+	}
+
+	return false, path, nil
 }
 
 func waitForRequestBudget(ctx context.Context, elapsed time.Duration) error {
@@ -319,21 +351,38 @@ func isZip(path string) bool {
 	return reader.Close() == nil
 }
 
-func ensureZip(ctx context.Context, client *http.Client, archive Archive, zipPath, userAgent string) error {
+func ensureZip(ctx context.Context, client *http.Client, archive Archive, zipPath, userAgent string) (string, bool, error) {
 	_, err := os.Stat(zipPath)
 	switch {
 	case err == nil && isZip(zipPath):
-		return nil
+		return zipPath, false, nil
 	case err == nil:
 		if removeErr := os.Remove(zipPath); removeErr != nil {
-			return fmt.Errorf("remove invalid archive %s: %w", zipPath, removeErr)
+			return "", false, fmt.Errorf("remove invalid archive %s: %w", zipPath, removeErr)
 		}
 	case errors.Is(err, os.ErrNotExist):
 	case err != nil:
-		return fmt.Errorf("check %s: %w", zipPath, err)
+		return "", false, fmt.Errorf("check %s: %w", zipPath, err)
 	}
 
-	return downloadZip(ctx, client, archive.URL, zipPath, userAgent)
+	if legacyPath := legacyZipPath(zipPath); legacyPath != "" && isZip(legacyPath) {
+		return legacyPath, false, nil
+	}
+
+	if err := downloadZip(ctx, client, archive.URL, zipPath, userAgent); err != nil {
+		return "", false, err
+	}
+
+	return zipPath, true, nil
+}
+
+func legacyZipPath(zipPath string) string {
+	cacheDirectory := filepath.Join("data", "cache", "index-zips")
+	if filepath.Dir(zipPath) != cacheDirectory {
+		return ""
+	}
+
+	return filepath.Join("data", "raw", "index-zips", filepath.Base(zipPath))
 }
 
 func extractIndex(zipPath, indexPath string) error {

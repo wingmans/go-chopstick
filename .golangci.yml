@@ -21,7 +21,7 @@ linters:
     - cyclop
     - depguard
     - err113   #temporary
-    - exhaustruct #deprecated
+    - exhaustruct #deprecated, replaced by exhaustruct_v2
     - forbidigo
     - godox
     - godoclint

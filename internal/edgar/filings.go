@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"wingman.com/fetch-ecb/internal/ctxlog"
 )
 
 // FilingDownloadConfig contains the settings for downloading filing files.
@@ -141,6 +143,8 @@ func downloadReferencedFiles(ctx context.Context, client *http.Client, cfg Filin
 }
 
 func downloadReferencedFile(ctx context.Context, client *http.Client, cfg FilingDownloadConfig, relativePath string, pacer *requestPacer) error {
+	started := time.Now()
+
 	destination, err := localFilingPath(cfg.Directory, relativePath)
 	if err != nil {
 		return err
@@ -152,6 +156,13 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 		if err := normalizeExistingFile(destination); err != nil {
 			return err
 		}
+
+		ctxlog.FromContext(ctx).Debug("fetched EDGAR filing",
+			"source", "cache",
+			"path", relativePath,
+			"filename", filepath.Base(relativePath),
+			"duration_ms", time.Since(started).Milliseconds(),
+		)
 
 		return nil
 	case err == nil:
@@ -221,6 +232,13 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 	if err := os.Rename(temporaryName, destination); err != nil {
 		return fmt.Errorf("store downloaded file %s: %w", destination, err)
 	}
+
+	ctxlog.FromContext(ctx).Debug("fetched EDGAR filing",
+		"source", "network",
+		"url", requestURL,
+		"filename", filepath.Base(relativePath),
+		"duration_ms", time.Since(started).Milliseconds(),
+	)
 
 	return nil
 }

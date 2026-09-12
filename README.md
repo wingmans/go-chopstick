@@ -48,7 +48,7 @@ go run ./cmd/edgar download-index --from-year 2025
 ```
 
 `download-index` writes one `YYYY-QTRn.tsv` file per quarter to
-`./data/indexes/quarterly` and stores ZIP files under `./data/raw/index-zips`.
+`./data/indexes/quarterly` and stores ZIP files under `./data/cache/index-zips`.
 It stitches them into `./data/indexes/master.tsv` by default. Use `--refresh-latest` to
 download the newest quarter again while reusing older files. Stitching is
 enabled by default and can be disabled with `--stitch=false`.

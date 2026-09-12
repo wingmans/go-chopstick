@@ -16,7 +16,7 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 		t.Fatalf("unexpected index directory %q", cfg.index.Directory)
 	}
 
-	if cfg.index.ZipDirectory != "./data/raw/index-zips" {
+	if cfg.index.ZipDirectory != "./data/cache/index-zips" {
 		t.Fatalf("unexpected ZIP directory %q", cfg.index.ZipDirectory)
 	}
 
