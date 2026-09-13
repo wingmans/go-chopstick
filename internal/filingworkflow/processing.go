@@ -215,6 +215,7 @@ type ProcessingSummary struct {
 	Reused    int
 	Planned   int
 	Failed    int
+	failures  []error
 }
 
 func (s *ProcessingSummary) record(ctx context.Context, path string, result ProcessingResult, err error) {
@@ -231,6 +232,7 @@ func (s *ProcessingSummary) record(ctx context.Context, path string, result Proc
 
 	if err != nil {
 		s.Failed++
+		s.failures = append(s.failures, fmt.Errorf("%s: %w", path, err))
 
 		ctxlog.FromContext(ctx).Error("filing processing failed", "path", path, "error", err)
 	}
@@ -243,7 +245,7 @@ func (s *ProcessingSummary) log(ctx context.Context, noop bool) {
 
 func (s *ProcessingSummary) failure() error {
 	if s.Failed > 0 {
-		return fmt.Errorf("%d filing(s) failed processing", s.Failed)
+		return fmt.Errorf("%d filing(s) failed processing: %w", s.Failed, errors.Join(s.failures...))
 	}
 
 	return nil

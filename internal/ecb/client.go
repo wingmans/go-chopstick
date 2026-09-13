@@ -120,40 +120,40 @@ func classifyFetchError(ctx context.Context, cfg Config, err error) error {
 	case errors.As(err, &upstreamErr):
 		details["status"] = upstreamErr.Status
 
-		return xerr.WithDetails(xerr.Wrap(
+		return xerr.Wrap(
 			xerr.Unavailable,
 			"ECB_UNAVAILABLE",
 			"ECB service returned an error",
 			err,
-		), details)
+		).WithDetails(details)
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return xerr.WithDetails(xerr.Wrap(
+		return xerr.Wrap(
 			xerr.DeadlineExceeded,
 			"ECB_REQUEST_TIMEOUT",
 			"ECB request timed out",
 			err,
-		), details)
+		).WithDetails(details)
 	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
-		return xerr.WithDetails(xerr.Wrap(
+		return xerr.Wrap(
 			xerr.Canceled,
 			"ECB_REQUEST_CANCELED",
 			"ECB request was canceled",
 			err,
-		), details)
+		).WithDetails(details)
 	case isNetworkError(err):
-		return xerr.WithDetails(xerr.Wrap(
+		return xerr.Wrap(
 			xerr.Unavailable,
 			"ECB_UNAVAILABLE",
 			"ECB service is unavailable",
 			err,
-		), details)
+		).WithDetails(details)
 	default:
-		return xerr.WithDetails(xerr.Wrap(
+		return xerr.Wrap(
 			xerr.Internal,
 			"ECB_FETCH_FAILED",
 			"failed to fetch ECB data",
 			err,
-		), details)
+		).WithDetails(details)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingworkflow"
+	"wingman.com/fetch-ecb/internal/xerr"
 )
 
 const defaultUserAgent = "wingman paul@wingmen.io"
@@ -108,7 +110,7 @@ func run(ctx context.Context, args []string) error {
 			return nil
 		}
 
-		return err
+		return xerr.Wrap(xerr.InvalidInput, "INVALID_CONFIGURATION", "invalid command-line configuration", err)
 	}
 
 	client := &http.Client{
@@ -124,9 +126,11 @@ func run(ctx context.Context, args []string) error {
 		logger.Info("finished EDGAR command", "command", cfg.command, "duration_ms", time.Since(started).Milliseconds())
 	}()
 
+	var commandErr error
+
 	switch cfg.command {
 	case parseCommand:
-		return runParse(ctx, cfg)
+		commandErr = runParse(ctx, cfg)
 	case "index":
 		logger.Info("starting EDGAR index download",
 			"from_year", cfg.index.SinceYear,
@@ -135,7 +139,7 @@ func run(ctx context.Context, args []string) error {
 			"noop", cfg.index.Noop,
 		)
 
-		return edgar.DownloadIndex(ctx, client, cfg.index)
+		commandErr = edgar.DownloadIndex(ctx, client, cfg.index)
 	case "filings":
 		logger.Info("starting EDGAR filing workflow",
 			"master", cfg.filings.masterPath,
@@ -154,15 +158,42 @@ func run(ctx context.Context, args []string) error {
 			Noop:             cfg.filings.config.Noop,
 		}, cfg.filings.filter)
 
-		return err
+		commandErr = err
 	case "serve":
 		logger.Info("starting EDGAR local dashboard", "address", cfg.serve.address, "parsed_directory", cfg.serve.parsedDir)
 
-		return runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir)
+		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir)
 	default:
 		printUsage()
 
 		return flag.ErrHelp
+	}
+
+	return classifyCLIError(ctx, commandErr)
+}
+
+func classifyCLIError(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if _, ok := errors.AsType[*xerr.Error](err); ok {
+		return err
+	}
+
+	switch {
+	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
+		return xerr.Wrap(xerr.Canceled, "COMMAND_CANCELED", "command was canceled", err)
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return xerr.Wrap(xerr.DeadlineExceeded, "COMMAND_TIMEOUT", "command timed out", err)
+	case errors.Is(err, os.ErrNotExist):
+		return xerr.Wrap(xerr.NotFound, "LOCAL_DATA_NOT_FOUND", "required local data was not found", err)
+	default:
+		if _, ok := errors.AsType[net.Error](err); ok {
+			return xerr.Wrap(xerr.Unavailable, "EDGAR_UNAVAILABLE", "EDGAR service is unavailable", err)
+		}
+
+		return xerr.Wrap(xerr.Internal, "EDGAR_COMMAND_FAILED", "EDGAR command failed", err)
 	}
 }
 

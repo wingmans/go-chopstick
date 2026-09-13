@@ -130,7 +130,7 @@ func envOrDefault(key, defaultValue string) string {
 
 func logCLIError(err error) {
 	if structured, ok := errors.AsType[*xerr.Error](err); ok {
-		log.Printf("[%d] %s: %s", structured.Code, structured.Reason, structured.Error())
+		log.Printf("[%s] %s: %s", structured.Code, structured.Reason, structured.Error())
 
 		return
 	}

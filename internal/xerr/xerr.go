@@ -20,25 +20,25 @@ import (
 )
 
 // Code identifies the stable category of an Error.
-type Code int32
+type Code string
 
 const (
 	// OK indicates no error.
-	OK Code = iota
+	OK Code = "OK"
 	// NotFound indicates a missing resource.
-	NotFound
+	NotFound Code = "NOT_FOUND"
 	// InvalidInput indicates invalid caller input.
-	InvalidInput
+	InvalidInput Code = "INVALID_INPUT"
 	// Conflict indicates a state conflict.
-	Conflict
+	Conflict Code = "CONFLICT"
 	// Internal indicates an unexpected internal failure.
-	Internal
+	Internal Code = "INTERNAL"
 	// Unavailable indicates a dependency that cannot be reached or used.
-	Unavailable
+	Unavailable Code = "UNAVAILABLE"
 	// DeadlineExceeded indicates an operation exceeded its deadline.
-	DeadlineExceeded
+	DeadlineExceeded Code = "DEADLINE_EXCEEDED"
 	// Canceled indicates an operation was canceled.
-	Canceled
+	Canceled Code = "CANCELED"
 )
 
 // Error is a structured error with a stable code and an optional cause.
@@ -85,11 +85,17 @@ func (e *Error) Unwrap() error {
 	return e.Cause
 }
 
-// WithDetails attaches operator-facing details to an Error.
-func WithDetails(err *Error, details map[string]any) *Error {
-	err.Details = details
+// WithDetails returns a copy with operator-facing details attached.
+// The original error is not mutated.
+func (e *Error) WithDetails(details map[string]any) *Error {
+	if e == nil {
+		return nil
+	}
 
-	return err
+	clone := e.Clone()
+	clone.Details = maps.Clone(details)
+
+	return clone
 }
 
 // Clone returns a copy of the error and its details.

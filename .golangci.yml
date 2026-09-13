@@ -20,22 +20,22 @@ linters:
     # - containedctx
     - cyclop
     - depguard
-    - err113   #temporary
+    - err113   # Enable incrementally after caller-visible sentinels are defined.
     - exhaustruct #deprecated, replaced by exhaustruct_v2
     - forbidigo
-    - funlen  # temporarily disabled
-    - gocognit  # temporarily disabled
-    - goconst  # temporarily disabled
+    - funlen  # Revisit after workflow boundaries stabilize.
+    - gocognit  # Revisit after workflow boundaries stabilize.
+    - goconst  # Revisit after workflow boundaries stabilize.
     - godox
     - godoclint
     - gomodguard #deprecated; replaced by gomodguard_v2
-    - lll  # temporarily disabled
+    - lll  # Formatting is handled by gofmt/gofumpt.
     - mnd
     - noinlineerr
     - paralleltest
     - testpackage #temporarily disabled
     - varnamelen
-    - wrapcheck
+    - wrapcheck # Enable incrementally at package boundaries.
     - wsl #deprecated; replaced by wsl_v5
 
   settings:

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/xerr"
 )
 
 //go:embed index.html detail.html
@@ -70,7 +71,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 	filings, err := s.loadSummaries()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.writeError(w, err)
 
 		return
 	}
@@ -106,7 +107,7 @@ func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.writeError(w, err)
 
 		return
 	}
@@ -125,7 +126,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.writeError(w, err)
 
 		return
 	}
@@ -147,7 +148,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.template.ExecuteTemplate(w, "detail.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.writeError(w, err)
 	}
 }
 
@@ -270,6 +271,24 @@ func (s *Server) writeJSON(w http.ResponseWriter, value any) {
 	if _, err := w.Write(append(data, '\n')); err != nil && s.logger != nil {
 		s.logger.Debug("write JSON response failed", "error", err)
 	}
+}
+
+func (s *Server) writeError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	message := "internal server error"
+	structured := xerr.Wrap(xerr.Internal, "DASHBOARD_REQUEST_FAILED", message, err)
+
+	if errors.Is(err, os.ErrNotExist) {
+		status = http.StatusNotFound
+		message = "filing not found"
+		structured = xerr.Wrap(xerr.NotFound, "FILING_NOT_FOUND", message, err)
+	}
+
+	if s.logger != nil {
+		s.logger.Error("local dashboard request failed", "error", structured, "code", structured.Code, "status", status)
+	}
+
+	http.Error(w, message, status)
 }
 
 // canonicalCIK preserves significant digits while normalizing leading padding.

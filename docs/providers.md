@@ -2,14 +2,17 @@
 
 ## Comparing datasources for ETF constituents (holdings) data
 
-ETF data for global indices can be obtained from various financial data providers. Here we compare three options:
+ETF data for global indices can be obtained from various financial data
+providers. Here we compare three options:
 
 - iShares ETF Holdings Scraping (Free, Manual)
 - Financial Modeling Prep (FMP) API (Freemium)
 - EOD Historical Data (EODHD) API (Paid)
 
-EOD Historical Data (EODHD) provides comprehensive financial data, including ETF holdings, historical prices, and corporate 
-actions. They offer a robust API that can be used to fetch ETF holdings data programmatically. For now tihis one is out of scope due to cost.
+EOD Historical Data (EODHD) provides comprehensive financial data, including ETF
+holdings, historical prices, and corporate actions. They offer a robust API that
+can be used to fetch ETF holdings data programmatically. For now tihis one is
+out of scope due to cost.
 
 |  Feature           |    iShares (scrape)     | FMP (Freemium)         | EODHD (Paid)                   |
 |--------------------|-------------------------|------------------------|--------------------------------|
@@ -18,9 +21,9 @@ actions. They offer a robust API that can be used to fetch ETF holdings data pro
 | Primary Strength   |    Free, the source     | Speed of implementation | Historical accuracy & Support |
 | Pricing            |    Free                 | Free tier available   | ~$20/mo starting                |
 
-iShares might be brittle of fragile when iShares changes their HTML structure. 
-FMP is easy to implement but has rate limits and a freemium model. 
-EODHD is paid but offers robust support and historical data.
+iShares might be brittle of fragile when iShares changes their HTML structure.
+FMP is easy to implement but has rate limits and a freemium model. EODHD is paid
+but offers robust support and historical data.
 
 
 | Step         | iShares Scraper (Manual)           | API (EODHD/FMP)                             |
@@ -32,16 +35,21 @@ EODHD is paid but offers robust support and historical data.
 
 
 ### Conclusion
-We will try iShares scraping **first** for quick prototyping.
-If it proves too brittle, we can switch to FMP or even (paid) EODHD APIs for more robust data access. When implementing the scraper, we should build in error handling to detect changes in the HTML structure and alert us when the scraper breaks. Using 
-FMP freemium to crosscheck data accuracy is also a good idea. We will prepare for future migration that the underlying data source may change.
+We will try iShares scraping **first** for quick prototyping. If it proves too
+brittle, we can switch to FMP or even (paid) EODHD APIs for more robust data
+access. When implementing the scraper, we should build in error handling to
+detect changes in the HTML structure and alert us when the scraper breaks.
+Using FMP freemium to crosscheck data accuracy is also a good idea. We will
+prepare for future migration that the underlying data source may change.
 
 
 
 ### Implementation Details for iShares Scraper
 
-Preliminary research indicates that iShares uses specific product IDs in their URLs to identify different ETFs. Here are the product IDs for some popular ETFs:
-The  IDs can be used to build a dynamic URL in Go code. For U.S.-listed funds, the pattern is:
+Preliminary research indicates that iShares uses specific product IDs in their
+URLs to identify different ETFs. Here are the product IDs for some popular ETFs:
+The IDs can be used to build a dynamic URL in Go code. For U.S.-listed funds,
+the pattern is:
 
  For example,  the ACWI download link can be assembled as follows:
     [ID] = 239600
@@ -49,22 +57,36 @@ The  IDs can be used to build a dynamic URL in Go code. For U.S.-listed funds, t
 
     https://www.ishares.com/us/products/[ID]/fund-name/1467271812596.ajax?fileType=csv&fileName=[TICKER]_holdings&dataType=fund
     
-    This results in this url: https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf/1467271812596.ajax?fileType=csv&fileName=ACWI_holdings&dataType=fund
+    This results in this URL:
+    https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf/
+    1467271812596.ajax?fileType=csv&fileName=ACWI_holdings&dataType=fund
 
 
     Variable Column Indices
-    Depending on the iShares region (US vs. UK), the "Weight" might be in column 5 or 7. To handle this, we can read the CSV header row first and dynamically determine the index of the "Weight" column. This makes the scraper more robust to changes in the CSV structure.
+    Depending on the iShares region (US vs. UK), the "Weight" might be in
+    column 5 or 7. To handle this, we can read the CSV header row first and
+    dynamically determine the index of the "Weight" column. This makes the
+    scraper more robust to changes in the CSV structure.
 
     Character Encoding
-    Occasionally, international iShares sites use non-UTF8 encodings. The golang.org/x/text/encoding package is more than able to handle this if needed.
+    Occasionally, international iShares sites use non-UTF8 encodings. The
+    golang.org/x/text/encoding package is more than able to handle this if
+    needed.
 
     Rate Limiting
-    Scrape multiple funds (e.g., all 400+ iShares ETFs), add a time.Sleep(2 * time.Second) between requests. BlackRock’s servers may temporarily block your IP if they detect high-frequency automated downloads. This is especially important when planning to download data for many ETFs in a loop. Even a minute delay can help avoid being rate-limited or blocked. This is feasible for Chopstick since ETF holdings change infrequently (monthly or quarterly).
+    Scrape multiple funds (e.g., all 400+ iShares ETFs), add a
+    time.Sleep(2 * time.Second) between requests. BlackRock's servers may
+    temporarily block your IP if they detect high-frequency automated
+    downloads. This is especially important when planning to download data for
+    many ETFs in a loop. Even a minute delay can help avoid being rate-limited
+    or blocked. This is feasible for Chopstick since ETF holdings change
+    infrequently (monthly or quarterly).
 
 
 ## Implementation Details for FMP api for ETF holdings
 
-FMP Endpoint: https://financialmodelingprep.com/api/v3/etf-sector-weightings/ACWI?apikey=YOUR_KEY
+FMP Endpoint:
+https://financialmodelingprep.com/api/v3/etf-sector-weightings/ACWI?apikey=YOUR_KEY
 Go obtain an apikey so we can test it out.
 
 https://site.financialmodelingprep.com/
@@ -79,15 +101,17 @@ type Holding struct {
 }''
 
 // Fetching ACWI holdings via FMP API
-url := "https://financialmodelingprep.com/api/v3/etf-holder/ACWI?apikey=YOUR_KEY"
+url := "https://financialmodelingprep.com/api/v3/etf-holder/ACWI" +
+    "?apikey=YOUR_KEY"
 resp, _ := http.Get(url)
 var holdings []Holding
 json.NewDecoder(resp.Body).Decode(&holdings)``
 
  
 
-Use a Registry Pattern so each source could have a Parse() method that returns your standardized []Holding. This allows 
-us to add a 4th or 5th source later without touching your breakdown logic.
+Use a Registry Pattern so each source could have a Parse() method that returns
+your standardized []Holding. This allows us to add a 4th or 5th source later
+without touching your breakdown logic.
 
 // Parser is the interface every ingestion source must implement
 type Parser interface {
@@ -118,7 +142,8 @@ type Constituent struct {
 
 
 ## Nomenclature Hierarchy
-In professional finance, we distinguish between the Index (the abstract math) and the Fund (the actual bucket of money).
+In professional finance, we distinguish between the Index (the abstract math)
+and the Fund (the actual bucket of money).
 
 | Term              | Professional Context         | Meaning in your Go App                                     |
 |-------------------|------------------------------|------------------------------------------------------------|
@@ -134,44 +159,74 @@ In professional finance, we distinguish between the Index (the abstract math) an
 
 
 "Asset Allocation" vs. "Sector Breakdown"
-Industry-standard reports (like BlackRock or Vanguard factsheets) usually separate these into two distinct sections:
+Industry-standard reports (like BlackRock or Vanguard factsheets) usually
+separate these into two distinct sections:
 
 - Asset Allocation: Always adds up to 100%. (e.g., 98% Stocks, 2% Cash).  
-- Sector/Region Exposure: Dices that 98% of Stocks into categories (e.g., 27% Tech, 15% Finance).
+- Sector/Region Exposure: Dices that 98% of Stocks into categories (e.g.,
+  27% Tech, 15% Finance).
 
 
 
 ## Considerations for Internal Data Representation
-To be as future proof as possible, the goal is to ***decouple***. We seek to separate the "Dirty Ingestion" layer (the logic 
-that handles different API/Scraper quirks) from the "Clean Core" (the logic that does the breakdowns).
+To be as future proof as possible, the goal is to ***decouple***. We seek to
+separate the "Dirty Ingestion" layer (the logic that handles different
+API/Scraper quirks) from the "Clean Core" (the logic that does the breakdowns).
 
-The ingestion layer stores all raw data as-is, while the core layer works with a standardized internal representation. This way we can swap out data sources or add new ones without changing the core logic. 
+The ingestion layer stores all raw data as-is, while the core layer works with
+a standardized internal representation. This way we can swap out data sources
+or add new ones without changing the core logic.
 Storing the raw data makes it possible to reprocess it later if needed.
 
 To achieve this we must create a Standardized Internal Representation. 
 
 
-### multiple classification standards (GICS, ICB, TRBC) may be in use simultaneously.
-To handle scrapers and multiple APIs while remaining "GICS-compliant," our Go struct should separate Identity (who they are) from Classification (what they do) and Exposure (their weight).
+### Multiple classification standards
 
-Various data providers may offer different levels of metadata (e.g., Sector, Industry, Country). Our internal representation should be flexible enough to accommodate this variability while maintaining a consistent structure for analysis.
+Multiple classification standards (GICS, ICB, TRBC) may be in use
+simultaneously. To handle scrapers and multiple APIs while remaining
+"GICS-compliant," our Go struct should separate Identity (who they are) from
+Classification (what they do) and Exposure (their weight).
 
-When fetching data from three possible  sources (iShares, EODHD, and FMP), a Data Normalization challenge arises.
+Various data providers may offer different levels of metadata (e.g., Sector,
+Industry, Country). Our internal representation should be flexible enough to
+accommodate this variability while maintaining a consistent structure for
+analysis.
 
-iShares Scraper:    Typically provides the sector as a string (e.g., "Information Technology").
-EODHD API:          Often supplies both the GICS Code (e.g., 45) and the corresponding string.
-FMP API:            Frequently delivers a simplified category string or an SIC Code (a different, older classification standard).
+When fetching data from three possible sources (iShares, EODHD, and FMP), a
+Data Normalization challenge arises.
+
+iShares Scraper: Typically provides the sector as a string (e.g.,
+"Information Technology").
+EODHD API: Often supplies both the GICS Code (e.g., 45) and the corresponding
+string.
+FMP API: Frequently delivers a simplified category string or an SIC Code (a
+different, older classification standard).
 
 
-In order to deal with these we map strings to codes internally
-To address this, a "Source of Truth" map should be implemented within the Go application. This map will normalize variations in sector strings (e.g., "IT" vs. "Information Technology") into the official GICS Code. This ensures consistency across data sources and simplifies downstream processing.
+In order to deal with these we map strings to codes internally. To address
+this, a "Source of Truth" map should be implemented within the Go application.
+This map will normalize variations in sector strings (e.g., "IT" vs.
+"Information Technology") into the official GICS Code. This ensures
+consistency across data sources and simplifies downstream processing.
 
-Another concept we need to deal with is the changing composition of index over time, eg constituents drop out, go bankrupt or are added to the index?  For our data architecture, the described scenario represents a classic Point-in-Time (PIT) problem. Since indices like the MSCI ACWI are rebalanced regularly (typically on a quarterly basis), overwriting the holdings would result in the loss of historical snapshots, making it impossible to view the composition of the index at a specific point in the past.
+Another concept we need to deal with is the changing composition of an index
+over time, as constituents drop out, go bankrupt, or are added. For our data
+architecture, this is a classic Point-in-Time (PIT) problem. Since indices like
+the MSCI ACWI are rebalanced regularly, overwriting holdings would lose
+historical snapshots and make it impossible to view past index composition.
 
-This his issue is addressed using Temporal Versioning, commonly referred to as the "Slowly Changing Dimension Type 2" approach. This method ensures that historical data is preserved while allowing for changes over time. This makes our data ingestion pipeline a bit more complex, as we need to check for changes in the holdings and create new records with effective dates rather than simply updating existing ones. Implementing this approach allows us to maintain a complete history of index compositions, which is crucial for accurate backtesting and performance analysis. 
+This issue is addressed using Temporal Versioning, commonly referred to as the
+"Slowly Changing Dimension Type 2" approach. This preserves historical data
+while allowing changes over time. The ingestion pipeline must check for
+holding changes and create records with effective dates rather than updating
+existing records. This maintains a complete history for backtesting and
+performance analysis.
 
 The "Snapshot-in-Time" Schema
-Instead of updating a single list, you treat every "fetch" as a unique, immutable version of that index. You identify these versions using an EffectiveDate or a VersionID.
+Instead of updating a single list, treat every "fetch" as a unique, immutable
+version of the index. Identify these versions using an EffectiveDate or a
+VersionID.
 
 
 
@@ -240,15 +295,17 @@ type ConstituentEntry struct {
 	ISIN      string `json:"isin"`              // Links to SecurityMaster
 
 	// Data specific to THIS index at THIS specific time
-	Ticker    string            `json:"ticker"`         // Ticker at time of snapshot
-	Weight    int64             `json:"weight"`         // Scaled integer (8 decimals)
+	Ticker string `json:"ticker"` // Ticker at time of snapshot
+	Weight int64  `json:"weight"` // Scaled integer (8 decimals)
 	
 	// The "Flex Point" for dicing/classifications
 	Labels    map[string]string `json:"labels"`
 }
 ``
 
-Having this structure in place, allows to easily query the index composition at any point in time by joining IndexSnapshot with ConstituentEntry on VersionID. This allows us to reconstruct historical index compositions for backtesting or analysis.
+Having this structure makes it possible to query index composition at any
+point in time by joining IndexSnapshot with ConstituentEntry on VersionID. It
+allows us to reconstruct historical compositions for backtesting and analysis.
 
 It lets us answer questions like:
 
@@ -265,4 +322,6 @@ It lets us answer questions like:
         | GetCustomDiceWeight  | "AI_THEME"          | Groups by a user-defined or AI-generated classification.  |
 
 
-The  constituent table will be the linking pin to other data sources such as financial statements, stock prices, filings of e.g. 10K ,13F  etc. The ISIN serves as the universal key to join with these external datasets.
+The constituent table will link to other data sources such as financial
+statements, stock prices, and filings such as 10-K and 13F. The ISIN serves as
+the universal key for joining these external datasets.
