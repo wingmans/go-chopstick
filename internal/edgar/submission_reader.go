@@ -50,9 +50,7 @@ func ParseSubmission(ctx context.Context, path string) (*ParsedFiling, error) {
 	result.SchemaVersion = ParsedSchemaVersion
 
 	result.ParserVersion = ParserVersion
-	if err := setSourceReference(&result, path, DefaultFilingsDirectory); err != nil {
-		return nil, err
-	}
+	result.SourcePath = filepath.Clean(path)
 
 	result.Status = ParseNoXBRL
 	if err := readEnvelope(ctx, io.TeeReader(file, hash), &result); err != nil {
@@ -191,6 +189,11 @@ func readSubmissionMetadata(ctx context.Context, path string) (FilingMetadata, e
 	}
 
 	return result.Metadata, nil
+}
+
+// ReadSubmissionMetadata reads only the local SEC envelope header.
+func ReadSubmissionMetadata(ctx context.Context, path string) (FilingMetadata, error) {
+	return readSubmissionMetadata(ctx, path)
 }
 
 func (e *envelopeReader) consume(line, raw string, start int64, result *ParsedFiling) error {
@@ -375,7 +378,10 @@ func (f *ParsedFiling) extractInstances(ctx context.Context, source io.ReaderAt)
 			inline = true
 		}
 
-		if !strings.EqualFold(filepath.Ext(document.Filename), ".xml") && document.Type != "EX-101.INS" {
+		filename := strings.ToLower(document.Filename)
+
+		isInstance := document.Type == "EX-101.INS" || strings.HasSuffix(filename, "_htm.xml")
+		if !isInstance {
 			continue
 		}
 

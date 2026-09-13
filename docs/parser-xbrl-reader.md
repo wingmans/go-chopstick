@@ -1,6 +1,8 @@
 # Local Submission Parser and XBRL Reader
 
 Status: local parsing and persistence are integrated with the `filings` workflow.
+The coordinator lives in `internal/filingworkflow`; `internal/edgar` contains
+EDGAR parsing, XBRL, and persistence primitives.
 Financial interpretation and taxonomy mapping remain future work.
 
 ## Usage
@@ -9,9 +11,10 @@ Financial interpretation and taxonomy mapping remain future work.
 go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025
 go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025 --reprocess
 go run ./cmd/edgar filings -c 0000789019 -n
+go run ./cmd/edgar parse -c 0000789019 -f 10-Q -y 2025
 go run ./cmd/edgar parse --file golden/sample_10-K.txt
-go run ./cmd/edgar parse -f golden/sample_10-Q.txt -f golden/sample_8-K.txt
-go run ./cmd/edgar parse -r -f golden/sample_10-K.txt
+go run ./cmd/edgar parse --file golden/sample_10-K.txt --reprocess
+go run ./cmd/edgar serve
 ```
 
 `filings` is the normal download-and-process command. Existing CIK, form-type,
@@ -19,9 +22,18 @@ and filing-year filters select records from `data/indexes/master.tsv`; an empty
 year selects all filing years. The source submission and any referenced HTML
 index are downloaded only when missing. Processing then uses the local submission.
 
-`parse` remains local-only, with required, repeatable `-f, --file` inputs. It uses
-the same processing coordinator and reuse rules as `filings`, without downloads.
-Note that `-f` means `--form-type` in `filings` and `--file` in `parse`.
+`parse` is also batch-oriented. With no `--file`, it reads the default
+`data/indexes/master.tsv`, applies the same `--cik`, `--form-type`, and `--year`
+filters, and processes submissions already present under `data/filings`. It never
+downloads missing submissions. Missing local sources are skipped and logged, so
+the command naturally processes all downloaded but unprocessed filings selected
+by the master index. The default year is empty, meaning all years.
+
+`--file <path>` is an optional explicit local-file escape hatch and may be repeated.
+It is mutually exclusive with the master-index filters. It is intentionally
+long-only: `-f, --form-type` must retain the same meaning on both `parse` and
+`filings`. This is the one deliberate exception to the usual short/long alias
+convention.
 
 Both commands provide `-r, --reprocess`, default false. It bypasses reuse and
 rebuilds parsed output; it does not force redownloading or refresh the HTML index.
@@ -31,12 +43,16 @@ Both commands provide `-n, --noop`, default false. This is now a planning operat
 it reads local headers and checks existing parsed results and source checksums,
 but does not extract XBRL, download, normalize gzip files, or write output. Missing
 submissions and legacy compressed sources are reported as needing preparation
-before parsing. `parse` reports missing inputs as errors instead of downloading.
+before parsing. `parse` reports missing explicit `--file` inputs as errors instead
+of downloading; master-index records whose local source is absent are skipped.
 With `--noop --reprocess`, rebuilding is planned but never performed.
 
-Workflow entry points are `ProcessFilings`, `ProcessLocalSubmissions`, and
-`ProcessSubmission`. The low-level `ParseSubmission`, `SaveParsedFiling`, and
-`LoadParsedFiling` APIs remain available separately. Filings expose metadata
+Workflow entry points in `internal/filingworkflow` are `ProcessFilings`,
+`ProcessLocalFilings`, `ProcessLocalSubmissions`, and `ProcessSubmission`. The low-level
+`internal/edgar` entry points `ParseSubmission`, `SaveParsedFiling`, and
+`LoadParsedFiling` remain available separately. This dependency direction keeps
+the orchestration layer from becoming part of the parser's domain API and keeps
+the CLI itself thin. Filings expose metadata
 getters and document and instance collections. Each instance exposes
 `FactsByConcept`, `Context`, and `Unit`, keeping references document-local.
 
@@ -52,7 +68,8 @@ The 10-Q's declared document-count discrepancy remains a diagnostic.
 
 Start with local SEC submission files and extract their structure and XBRL data.
 The initial fixtures are the 10-K, 10-Q, and 8-K submissions in `golden/`.
-Downloading belongs to the workflow coordinator, not the parser. Financial
+Downloading belongs to the workflow coordinator in `internal/filingworkflow`,
+not the parser. Financial
 interpretation and taxonomy harmonization remain outside this step.
 
 ```text
@@ -125,7 +142,9 @@ a candidate is an XBRL instance.
 
 Do not assume `TYPE=XML` means the payload is XML: the golden submissions also use
 that type for CSS and JavaScript. The reader selects `.xml` filenames or
-`EX-101.INS` documents, then verifies the root namespace.
+`EX-101.INS` documents or conventional instance filenames ending in `_htm.xml`,
+then verifies the root namespace. Taxonomy linkbases such as `_def.xml`, `_lab.xml`,
+and `_pre.xml` remain in the document inventory but are not treated as instances.
 
 Do not initially implement conversion of inline XBRL embedded in HTML. When an
 extracted instance is present, use it rather than combining both representations
@@ -282,6 +301,14 @@ Workflow tests cover first processing, reuse without rewriting, forced rebuildin
 without network refresh, checksum/version invalidation, corrupt cached JSON,
 multi-filer identity, relative source paths, filters, dry runs (including gzip),
 cached diagnostic results, cancellation, and continuing batches after failures.
+
+## Local dashboard
+
+`serve` starts a standard-library `net/http` server over `data/parsed`. It reads
+the persisted `filing.json` files locally and does not contact SEC EDGAR. Open
+`http://127.0.0.1:8080/` after starting it. The dashboard lists parsed filings,
+supports CIK filtering, and links each filing to its complete persisted JSON
+representation for inspection.
 
 ## References
 

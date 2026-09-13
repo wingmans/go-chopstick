@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EDGAR local filings</title>
+  <style>
+    :root { font: 14px/1.4 system-ui, sans-serif; color: #1e293b; background: #f1f5f9; }
+    * { box-sizing: border-box; } body { margin: 0; }
+    header { height: 52px; display: flex; align-items: center; gap: 18px; padding: 0 24px; background: white; border-bottom: 1px solid #dbe3ec; }
+    header strong { color: #0f172a; } form { display: flex; gap: 6px; }
+    input, button { font: inherit; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 5px; }
+    input { width: 180px; background: #f8fafc; } button { color: white; background: #2563eb; border-color: #2563eb; cursor: pointer; }
+    main { max-width: 1500px; margin: auto; padding: 20px 24px 40px; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .card, .panel { background: white; border: 1px solid #dbe3ec; border-radius: 6px; }
+    .card { padding: 12px 14px; } .label { color: #64748b; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .value { margin-top: 3px; font-size: 20px; font-weight: 700; } .panel { overflow: auto; }
+    table { width: 100%; border-collapse: collapse; } th, td { padding: 9px 12px; border-bottom: 1px solid #edf1f5; text-align: left; white-space: nowrap; }
+    th { color: #64748b; background: #f8fafc; font-size: 11px; text-transform: uppercase; } td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    a { color: #2563eb; text-decoration: none; font-weight: 600; } .empty { padding: 48px; color: #64748b; text-align: center; }
+    @media (max-width: 700px) { header { height: auto; flex-wrap: wrap; padding: 12px 16px; } main { padding: 16px; } .summary { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <header><strong>EDGAR / local filings</strong><form id="search"><input id="cik" placeholder="Search CIK"><button>Search</button></form></header>
+  <main>
+    <section class="summary"><div class="card"><div class="label">Company</div><div class="value" id="company">All</div></div><div class="card"><div class="label">CIK</div><div class="value" id="selected-cik">All</div></div><div class="card"><div class="label">Filings</div><div class="value" id="count">0</div></div><div class="card"><div class="label">Source</div><div class="value">Local</div></div></section>
+    <section class="panel"><table><thead><tr><th>Form</th><th>Accession</th><th>Filed</th><th>Report period</th><th>Status</th><th>Facts</th></tr></thead><tbody id="filings"><tr><td colspan="6" class="empty">Loading local parsed filings...</td></tr></tbody></table></section>
+  </main>
+  <script>
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    async function load() { const cik = document.getElementById('cik').value.trim(); const response = await fetch('/api/filings' + (cik ? '?cik=' + encodeURIComponent(cik) : '')); const data = await response.json(); document.getElementById('company').textContent = data.company || 'All'; document.getElementById('selected-cik').textContent = data.cik || 'All'; document.getElementById('count').textContent = data.filing_count; const rows = data.filings.map(f => `<tr><td><a href="/filings/${encodeURIComponent(f.cik)}/${encodeURIComponent(f.accession)}">${esc(f.form_type)}</a></td><td>${esc(f.accession)}</td><td>${esc(f.filing_date)}</td><td>${esc(f.report_date)}</td><td>${esc(f.status)}</td><td class="num">${f.facts}</td></tr>`).join(''); document.getElementById('filings').innerHTML = rows || '<tr><td colspan="6" class="empty">No parsed filings found.</td></tr>'; }
+    document.getElementById('search').addEventListener('submit', e => { e.preventDefault(); load(); }); load().catch(error => { document.getElementById('filings').innerHTML = `<tr><td colspan="6" class="empty">${esc(error)}</td></tr>`; });
+  </script>
+</body>
+</html>

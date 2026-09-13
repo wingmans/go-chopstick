@@ -1,4 +1,4 @@
-package edgar
+package filingworkflow
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	. "wingman.com/fetch-ecb/internal/edgar"
 )
 
 func workflowConfig(t *testing.T) (FilingDownloadConfig, ProcessingConfig) {
@@ -151,5 +153,39 @@ func TestFilingWorkflowContinuesAfterDownloadFailure(t *testing.T) {
 	summary, err := ProcessFilings(t.Context(), &client, master, download, processing, filter)
 	if err == nil || summary.Selected != 2 || summary.Failed != 1 || summary.Processed != 1 {
 		t.Fatalf("summary=%+v error=%v", summary, err)
+	}
+}
+
+func TestProcessLocalFilingsProcessesAvailableUnprocessedRecords(t *testing.T) {
+	root := t.TempDir()
+	filings := filepath.Join(root, "filings")
+	parsed := filepath.Join(root, "parsed")
+
+	localPath, err := LocalFilingPath(filings, "edgar/data/123/submission.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(localPath, []byte(submissionText(testInstance, testInstanceFilename)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	master := writeSubmission(t, "123|Example|10-K|2024-01-01|edgar/data/123/submission.txt\n"+
+		"123|Example|10-Q|2024-01-01|missing.txt\n")
+	processing := ProcessingConfig{Directory: parsed, FilingsDirectory: filings, Reprocess: false, Noop: false}
+	filter := IndexFilter{CIK: "123", FormTypes: nil, Year: 2024}
+
+	first, err := ProcessLocalFilings(t.Context(), master, filings, processing, filter)
+	if err != nil || first.Selected != 1 || first.Processed != 1 {
+		t.Fatalf("first=%+v error=%v", first, err)
+	}
+
+	second, err := ProcessLocalFilings(t.Context(), master, filings, processing, filter)
+	if err != nil || second.Selected != 1 || second.Reused != 1 {
+		t.Fatalf("second=%+v error=%v", second, err)
 	}
 }

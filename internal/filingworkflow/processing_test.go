@@ -1,4 +1,4 @@
-package edgar
+package filingworkflow
 
 import (
 	"context"
@@ -173,7 +173,7 @@ func TestProcessingRetainsDiagnosticResults(t *testing.T) {
 	}{
 		{name: "no xbrl", payload: "plain text", filename: htmlFilename, failure: false},
 		{name: "inline", payload: `<html xmlns:ix="http://www.xbrl.org/2013/inlineXBRL"/>`, filename: htmlFilename, failure: false},
-		{name: "malformed", payload: strings.TrimSuffix(testInstance, "</i:xbrl>"), filename: testInstanceFilename, failure: true},
+		{name: "malformed", payload: strings.TrimSuffix(testInstance, "</xbrl>"), filename: testInstanceFilename, failure: true},
 		{
 			name: "unresolved", payload: strings.ReplaceAll(testInstance, `contextRef="c"`, `contextRef="missing"`),
 			filename: testInstanceFilename, failure: true,

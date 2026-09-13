@@ -118,6 +118,15 @@ func TestIndexReaderFiltersByYear(t *testing.T) {
 	}
 }
 
+func TestIndexReaderMatchesPaddedCIK(t *testing.T) {
+	reader := NewIndexReader(strings.NewReader("789019|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
+		CIK: "0000789019", FormTypes: nil, Year: 0,
+	})
+	if _, err := reader.Next(); err != nil {
+		t.Fatalf("padded CIK did not match master index: %v", err)
+	}
+}
+
 func TestIndexReaderSkipsBlankRows(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("\n123|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
 		CIK:       "",

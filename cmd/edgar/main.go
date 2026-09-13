@@ -16,6 +16,7 @@ import (
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/filingworkflow"
 )
 
 const defaultUserAgent = "wingman paul@wingmen.io"
@@ -31,15 +32,22 @@ type appConfig struct {
 	command string
 	index   edgar.Config
 	parse   struct {
-		files     stringList
-		noop      bool
-		reprocess bool
+		files      stringList
+		formTypes  stringList
+		masterPath string
+		filter     edgar.IndexFilter
+		noop       bool
+		reprocess  bool
 	}
 	filings struct {
 		masterPath string
 		config     edgar.FilingDownloadConfig
 		filter     edgar.IndexFilter
 		reprocess  bool
+	}
+	serve struct {
+		address   string
+		parsedDir string
 	}
 }
 
@@ -139,7 +147,7 @@ func run(ctx context.Context, args []string) error {
 			"reprocess", cfg.filings.reprocess,
 		)
 
-		_, err := edgar.ProcessFilings(ctx, client, cfg.filings.masterPath, cfg.filings.config, edgar.ProcessingConfig{
+		_, err := filingworkflow.ProcessFilings(ctx, client, cfg.filings.masterPath, cfg.filings.config, filingworkflow.ProcessingConfig{
 			Directory:        edgar.DefaultParsedDirectory,
 			FilingsDirectory: cfg.filings.config.Directory,
 			Reprocess:        cfg.filings.reprocess,
@@ -147,6 +155,10 @@ func run(ctx context.Context, args []string) error {
 		}, cfg.filings.filter)
 
 		return err
+	case "serve":
+		logger.Info("starting EDGAR local dashboard", "address", cfg.serve.address, "parsed_directory", cfg.serve.parsedDir)
+
+		return runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir)
 	default:
 		printUsage()
 
@@ -174,6 +186,8 @@ func parseConfig(args []string) (appConfig, error) {
 		return parseDownloadIndexConfig(args[1:])
 	case "filings":
 		return parseDownloadFilingsConfig(args[1:])
+	case "serve":
+		return parseServeConfig(args[1:])
 	default:
 		printUsage()
 
@@ -320,6 +334,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
+	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")
 }

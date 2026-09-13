@@ -103,6 +103,21 @@ func TestParseConfigWithoutCommandShowsHelp(t *testing.T) {
 	}
 }
 
+func TestParseServeConfigDefaults(t *testing.T) {
+	cfg, err := parseConfig([]string{"serve"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.serve.address != "127.0.0.1:8080" {
+		t.Fatalf("unexpected serve address %q", cfg.serve.address)
+	}
+
+	if cfg.serve.parsedDir != "./data/parsed" {
+		t.Fatalf("unexpected parsed directory %q", cfg.serve.parsedDir)
+	}
+}
+
 func TestReprocessFlags(t *testing.T) {
 	const command = "filings"
 	for _, alias := range []string{"-r", "--reprocess"} {

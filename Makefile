@@ -1,4 +1,4 @@
-.PHONY: build lint run release test clean
+.PHONY: build lint run integration release test clean
 
 BIN_DIR := bin
 
@@ -9,6 +9,9 @@ build:
 
 lint:
 	golangci-lint run ./cmd/... ./internal/...
+
+integration: build
+	bash scripts/edgar-e2e.sh
 
 run:
 	go run ./cmd/ecb

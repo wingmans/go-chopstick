@@ -139,7 +139,7 @@ func parseIndexLine(line string) (EdgarIndex, error) {
 }
 
 func matchesIndexFilter(record EdgarIndex, filter IndexFilter) bool {
-	if filter.CIK != "" && record.CIK != filter.CIK {
+	if filter.CIK != "" && normalizeCIK(record.CIK) != normalizeCIK(filter.CIK) {
 		return false
 	}
 
@@ -152,4 +152,16 @@ func matchesIndexFilter(record EdgarIndex, filter IndexFilter) bool {
 	}
 
 	return slices.Contains(filter.FormTypes, record.FormType)
+}
+
+// normalizeCIK compares the SEC's padded and unpadded representations equally.
+func normalizeCIK(value string) string {
+	value = strings.TrimSpace(value)
+
+	value = strings.TrimLeft(value, "0")
+	if value == "" {
+		return "0"
+	}
+
+	return value
 }

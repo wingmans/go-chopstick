@@ -9,9 +9,7 @@ import (
 )
 
 func TestParseSubmissionFlags(t *testing.T) {
-	const firstFile = "one.txt"
-
-	cfg, err := parseConfig([]string{parseCommand, "-f", firstFile, "--file", "two.txt", "-n"})
+	cfg, err := parseConfig([]string{parseCommand, "--file", "one.txt", "--file", "two.txt", "-n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,17 +18,22 @@ func TestParseSubmissionFlags(t *testing.T) {
 		t.Fatalf("unexpected parse config: %+v", cfg.parse)
 	}
 
-	cfg, err = parseConfig([]string{parseCommand, "--file", firstFile})
-	if err != nil || cfg.parse.noop {
-		t.Fatal("noop should default to false")
+	cfg, err = parseConfig([]string{parseCommand, "--cik", "123", "--form-type", "10-Q", "--year", "2024"})
+	if err != nil || cfg.parse.noop || cfg.parse.filter.CIK != "123" || cfg.parse.filter.Year != 2024 || len(cfg.parse.filter.FormTypes) != 1 {
+		t.Fatalf("unexpected parse filters: %+v", cfg.parse)
+	}
+
+	cfg, err = parseConfig([]string{parseCommand})
+	if err != nil || cfg.parse.noop || cfg.parse.filter.Year != 0 {
+		t.Fatal("unexpected parse defaults")
 	}
 
 	for _, args := range [][]string{
-		{parseCommand},
 		{parseCommand, "--unknown"},
 		{parseCommand, "-f"},
-		{parseCommand, "-f", "one.xml"},
-		{parseCommand, "-f", firstFile, "unexpected", "--unknown"},
+		{parseCommand, "--file", "one.xml"},
+		{parseCommand, "--file", "one.txt", "--cik", "123"},
+		{parseCommand, "unexpected", "--unknown"},
 		{parseCommand, "--help"},
 	} {
 		if _, err := parseConfig(args); !errors.Is(err, flag.ErrHelp) {
@@ -48,7 +51,7 @@ func TestParseCommandNoopAndPersistence(t *testing.T) {
 	directory := t.TempDir()
 	t.Chdir(directory)
 
-	if err := run(t.Context(), []string{parseCommand, "-f", source, "--noop"}); err != nil {
+	if err := run(t.Context(), []string{parseCommand, "--file", source, "--noop"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -56,7 +59,7 @@ func TestParseCommandNoopAndPersistence(t *testing.T) {
 		t.Fatalf("noop wrote data: %v", err)
 	}
 
-	if err := run(t.Context(), []string{parseCommand, "-f", source}); err != nil {
+	if err := run(t.Context(), []string{parseCommand, "--file", source}); err != nil {
 		t.Fatal(err)
 	}
 

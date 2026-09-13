@@ -1,0 +1,36 @@
+{{define "detail.html"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Filing.Metadata.FormType}} {{.Filing.Metadata.Accession}}</title>
+  <style>
+    :root { font: 14px/1.4 system-ui, sans-serif; color: #1e293b; background: #f1f5f9; }
+    * { box-sizing: border-box; } body { margin: 0; }
+    header { padding: 14px 24px; background: white; border-bottom: 1px solid #dbe3ec; }
+    main { max-width: 1500px; margin: auto; padding: 20px 24px 40px; }
+    .back { color: #2563eb; text-decoration: none; font-weight: 600; } h1 { margin: 18px 0 4px; font-size: 24px; } .meta { color: #64748b; }
+    .summary, .panel { background: white; border: 1px solid #dbe3ec; border-radius: 6px; } .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; margin: 20px 0; background: #dbe3ec; }
+    .card { padding: 12px 14px; background: white; } .label { color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; } .value { margin-top: 3px; font-weight: 700; }
+    .panel { overflow: auto; } h2 { padding: 14px 16px 0; font-size: 16px; } table { width: 100%; border-collapse: collapse; } th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #edf1f5; white-space: nowrap; } th { color: #64748b; background: #f8fafc; font-size: 11px; text-transform: uppercase; } td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    @media (max-width: 700px) { main { padding: 16px; } .summary { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <header><a class="back" href="/">&larr; All filings</a></header>
+  <main>
+    <h1>{{.Filing.Metadata.FormType}} filing</h1>
+    <div class="meta">{{.Filing.Metadata.Accession}}</div>
+    <section class="summary">
+      <div class="card"><div class="label">Company</div><div class="value">{{if .Filing.Metadata.Filers}}{{(index .Filing.Metadata.Filers 0).Name}}{{else}}Unknown{{end}}</div></div>
+      <div class="card"><div class="label">CIK</div><div class="value">{{.Filing.Metadata.CIK}}</div></div>
+      <div class="card"><div class="label">Filed</div><div class="value">{{.Filing.Metadata.FilingDate}}</div></div>
+      <div class="card"><div class="label">Report date</div><div class="value">{{.Filing.Metadata.ReportDate}}</div></div>
+      <div class="card"><div class="label">Status</div><div class="value">{{.Filing.Status}}</div></div>
+    </section>
+    <section class="panel"><h2>XBRL facts ({{len .Facts}})</h2><table><thead><tr><th>Concept</th><th>Value</th><th>Context</th><th>Unit</th><th>Decimals</th></tr></thead><tbody>{{range .Facts}}<tr><td>{{.Concept}}</td><td class="num">{{if .Nil}}nil{{else}}{{.Value}}{{end}}</td><td>{{.Context}}</td><td>{{.Unit}}</td><td>{{.Decimals}}</td></tr>{{end}}</tbody></table></section>
+  </main>
+</body>
+</html>
+{{end}}

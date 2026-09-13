@@ -358,6 +358,15 @@ func localFilingPath(directory, relativePath string) (string, error) {
 	return filepath.Join(directory, cleanPath), nil
 }
 
+// LocalFilingPath returns the on-disk path for an SEC-relative archive path.
+// It is exported for workflow packages that coordinate downloaded sources.
+func LocalFilingPath(directory, relativePath string) (string, error) {
+	return localFilingPath(directory, relativePath)
+}
+
+// NormalizeLocalFiling expands a cached gzip filing without performing network I/O.
+func NormalizeLocalFiling(path string) error { return normalizeExistingFile(path) }
+
 func archiveURL(baseURL, relativePath string) string {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if baseURL == "" {

@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const testInstanceFilename = "test.xml"
+const testInstanceFilename = "test_htm.xml"
 
 const testInstance = `<?xml version="1.0"?>
 <i:xbrl xmlns:i="http://www.xbrl.org/2003/instance" xmlns:t="urn:test"
@@ -140,7 +140,7 @@ func checkGoldenReferences(t *testing.T, instance *XBRLInstance, form string) {
 }
 
 func TestSubmissionOffsetsAndHeader(t *testing.T) {
-	source := strings.ReplaceAll(submissionText(testInstance, "anything.xml"), "\n", "\r\n")
+	source := strings.ReplaceAll(submissionText(testInstance, "anything_htm.xml"), "\n", "\r\n")
 	path := writeSubmission(t, source)
 
 	filing, err := ParseSubmission(t.Context(), path)
@@ -323,8 +323,8 @@ func TestSubmissionWrappersAndAttachments(t *testing.T) {
 }
 
 func TestSubmissionMultipleInstancesKeepReferenceScopes(t *testing.T) {
-	first := submissionText(testInstance, "first.xml")
-	second := submissionText(strings.ReplaceAll(testInstance, "9007199254740993.01", "42"), "second.xml")
+	first := submissionText(testInstance, "first_htm.xml")
+	second := submissionText(strings.ReplaceAll(testInstance, "9007199254740993.01", "42"), "second_htm.xml")
 	start := strings.Index(second, documentStartTag)
 	text := strings.ReplaceAll(first, submissionEndTag+"\n", second[start:])
 
@@ -341,7 +341,7 @@ func TestSubmissionMultipleInstancesKeepReferenceScopes(t *testing.T) {
 		t.Fatal("fact occurrences merged")
 	}
 
-	if filing.Instances[1].DocumentIndex != 1 || filing.Instances[1].Document != "second.xml" {
+	if filing.Instances[1].DocumentIndex != 1 || filing.Instances[1].Document != "second_htm.xml" {
 		t.Fatal("document provenance lost")
 	}
 }

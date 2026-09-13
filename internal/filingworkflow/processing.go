@@ -1,4 +1,4 @@
-package edgar
+package filingworkflow
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
+	"wingman.com/fetch-ecb/internal/edgar"
 )
 
 const (
@@ -29,7 +30,7 @@ type ProcessingConfig struct {
 type ProcessingResult struct {
 	Action string
 	Path   string
-	Filing *ParsedFiling
+	Filing *edgar.ParsedFiling
 }
 
 // ProcessSubmission is shared by the local command and the download workflow.
@@ -39,12 +40,12 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 	started := time.Now()
 
-	metadata, err := readSubmissionMetadata(ctx, path)
+	metadata, err := edgar.ReadSubmissionMetadata(ctx, path)
 	if err != nil {
 		return result, err
 	}
 
-	var identity ParsedFiling
+	var identity edgar.ParsedFiling
 
 	identity.Metadata = metadata
 	if err := setSourceReference(&identity, path, cfg.FilingsDirectory); err != nil {
@@ -77,7 +78,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 		return result, nil
 	}
 
-	result.Filing, err = ParseSubmission(ctx, path)
+	result.Filing, err = edgar.ParseSubmission(ctx, path)
 	if err != nil {
 		return result, err
 	}
@@ -90,7 +91,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 		return result, err
 	}
 
-	result.Path, err = SaveParsedFiling(cfg.Directory, result.Filing)
+	result.Path, err = edgar.SaveParsedFiling(cfg.Directory, result.Filing)
 	if err != nil {
 		return result, err
 	}
@@ -101,10 +102,10 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	return result, extractionFailure(result.Filing)
 }
 
-func reusableFiling(ctx context.Context, destination, source string, identity ParsedFiling) (ParsedFiling, bool, error) {
-	var missing ParsedFiling
+func reusableFiling(ctx context.Context, destination, source string, identity edgar.ParsedFiling) (edgar.ParsedFiling, bool, error) {
+	var missing edgar.ParsedFiling
 
-	filing, err := LoadParsedFiling(destination)
+	filing, err := edgar.LoadParsedFiling(destination)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			return missing, false, err
@@ -123,7 +124,7 @@ func reusableFiling(ctx context.Context, destination, source string, identity Pa
 	}
 
 	switch filing.Status {
-	case ParseComplete, ParseNoXBRL, ParsePartial, ParseUnsupported:
+	case edgar.ParseComplete, edgar.ParseNoXBRL, edgar.ParsePartial, edgar.ParseUnsupported:
 	default:
 		return missing, false, nil
 	}
@@ -140,7 +141,7 @@ func reusableFiling(ctx context.Context, destination, source string, identity Pa
 	return *filing, true, nil
 }
 
-func setSourceReference(filing *ParsedFiling, path, root string) error {
+func setSourceReference(filing *edgar.ParsedFiling, path, root string) error {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return err
@@ -171,7 +172,7 @@ func setSourceReference(filing *ParsedFiling, path, root string) error {
 
 // Unsupported features are limitations, while malformed XML and broken
 // references are processing failures even when their diagnostics are cached.
-func extractionFailure(filing *ParsedFiling) error {
+func extractionFailure(filing *edgar.ParsedFiling) error {
 	for _, diagnostic := range filing.Diagnostics {
 		if diagnostic.Code == "xbrl_error" || diagnostic.Code == "xbrl_reference" {
 			return fmt.Errorf("filing %s has extraction errors; inspect diagnostics", filing.AccessionNumber())
