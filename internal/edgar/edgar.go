@@ -149,6 +149,11 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 			return err
 		}
 
+		if _, err := writeChecksum(filepath.Join(cfg.Directory, archive.FileName),
+			checksumSource(network), archive.URL); err != nil {
+			return err
+		}
+
 		logger := ctxlog.FromContext(ctx)
 
 		attrs := []any{
@@ -172,9 +177,21 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 		if err := StitchTo(cfg.Directory, masterPath); err != nil {
 			return err
 		}
+
+		if _, err := writeChecksum(masterPath, "generated", ""); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func checksumSource(network bool) string {
+	if network {
+		return "network"
+	}
+
+	return "cache"
 }
 
 // Stitch concatenates all quarterly TSV files in directory into master.tsv.

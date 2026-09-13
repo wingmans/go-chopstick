@@ -7,17 +7,6 @@ import (
 	"net/http"
 )
 
-// HTTPError describes a non-success response from the EDGAR service.
-type HTTPError struct {
-	URL        string
-	StatusCode int
-	Status     string
-}
-
-func (e *HTTPError) Error() string {
-	return fmt.Sprintf("EDGAR rejected %s with HTTP %s", e.URL, e.Status)
-}
-
 type edgarClient struct {
 	httpClient *http.Client
 	userAgent  string
@@ -59,4 +48,15 @@ func (c edgarClient) get(ctx context.Context, requestURL string) (*http.Response
 	}
 
 	return nil, upstreamError
+}
+
+// HTTPError describes a non-success response from the EDGAR service.
+type HTTPError struct {
+	URL        string
+	StatusCode int
+	Status     string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("EDGAR rejected %s with HTTP %s", e.URL, e.Status)
 }
