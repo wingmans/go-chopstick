@@ -36,6 +36,15 @@ func TestXBRLSourceValues(t *testing.T) {
 	}
 }
 
+func TestXBRLAcceptsUSASCIIDeclaration(t *testing.T) {
+	source := strings.Replace(testInstance, `<?xml version="1.0"?>`, `<?xml version="1.0" encoding="US-ASCII"?>`, 1)
+
+	instance, recognized, err := readXBRL(t.Context(), strings.NewReader(source))
+	if err != nil || !recognized || len(instance.Facts) == 0 {
+		t.Fatalf("recognized=%v error=%v facts=%d", recognized, err, len(instance.Facts))
+	}
+}
+
 func TestXBRLContextsUnitsAndLinks(t *testing.T) {
 	instance, recognized, err := readXBRL(t.Context(), strings.NewReader(testInstance))
 	if err != nil || !recognized {

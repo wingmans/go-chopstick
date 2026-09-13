@@ -2,7 +2,7 @@ package edgar
 
 const (
 	ParsedSchemaVersion     = 2
-	ParserVersion           = "1"
+	ParserVersion           = "2"
 	DefaultParsedDirectory  = "./data/parsed"
 	DefaultFilingsDirectory = "./data/filings"
 	ParseComplete           = "complete"

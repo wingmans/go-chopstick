@@ -8,28 +8,35 @@
   <style>
     :root { font: 14px/1.4 system-ui, sans-serif; color: #1e293b; background: #f1f5f9; }
     * { box-sizing: border-box; } body { margin: 0; }
-    header { padding: 14px 24px; background: white; border-bottom: 1px solid #dbe3ec; }
-    main { max-width: 1500px; margin: auto; padding: 20px 24px 40px; }
-    .back { color: #2563eb; text-decoration: none; font-weight: 600; } h1 { margin: 18px 0 4px; font-size: 24px; } .meta { color: #64748b; }
-    .summary, .panel { background: white; border: 1px solid #dbe3ec; border-radius: 6px; } .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; margin: 20px 0; background: #dbe3ec; }
-    .card { padding: 12px 14px; background: white; } .label { color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; } .value { margin-top: 3px; font-weight: 700; }
-    .panel { overflow: auto; } h2 { padding: 14px 16px 0; font-size: 16px; } table { width: 100%; border-collapse: collapse; } th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #edf1f5; white-space: nowrap; } th { color: #64748b; background: #f8fafc; font-size: 11px; text-transform: uppercase; } td.num { text-align: right; font-variant-numeric: tabular-nums; }
-    @media (max-width: 700px) { main { padding: 16px; } .summary { grid-template-columns: repeat(2, 1fr); } }
+    header { display: flex; align-items: center; padding: 12px 24px; background: white; border-bottom: 1px solid #dbe3ec; }
+    main { max-width: 1500px; margin: auto; padding: 22px 24px 40px; }
+    .back { color: #2563eb; text-decoration: none; font-weight: 600; } .heading { margin: 22px 0 16px; }
+    h1 { margin: 0 0 3px; font-size: 25px; color: #0f172a; } .subtitle { color: #64748b; }
+    .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; margin: 18px 0 22px; background: #dbe3ec; border: 1px solid #dbe3ec; border-radius: 6px; overflow: hidden; }
+    .card { min-width: 0; padding: 13px 14px; background: white; } .label { color: #64748b; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .value { overflow: hidden; margin-top: 3px; color: #0f172a; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .panel { overflow: hidden; margin-top: 16px; background: white; border: 1px solid #dbe3ec; border-radius: 6px; }
+    .panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 16px 10px; } h2 { margin: 0; font-size: 16px; } .muted { color: #64748b; font-size: 12px; }
+    .table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; } th, td { padding: 8px 12px; border-bottom: 1px solid #edf1f5; text-align: left; white-space: nowrap; } th { color: #64748b; background: #f8fafc; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; } td.num { max-width: 520px; overflow: hidden; text-align: right; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+    @media (max-width: 800px) { main { padding: 16px; } .summary { grid-template-columns: repeat(2, 1fr); } .heading { margin-top: 16px; } }
   </style>
 </head>
 <body>
   <header><a class="back" href="/">&larr; All filings</a></header>
   <main>
-    <h1>{{.Filing.Metadata.FormType}} filing</h1>
-    <div class="meta">{{.Filing.Metadata.Accession}}</div>
+    <section class="heading">
+      <h1>{{if .Filing.Metadata.Filers}}{{(index .Filing.Metadata.Filers 0).Name}}{{else}}Unknown company{{end}}</h1>
+      <div class="subtitle">{{.Filing.Metadata.FormType}} &middot; {{.Filing.Metadata.Accession}} &middot; source-level parsed data</div>
+    </section>
     <section class="summary">
-      <div class="card"><div class="label">Company</div><div class="value">{{if .Filing.Metadata.Filers}}{{(index .Filing.Metadata.Filers 0).Name}}{{else}}Unknown{{end}}</div></div>
       <div class="card"><div class="label">CIK</div><div class="value">{{.Filing.Metadata.CIK}}</div></div>
       <div class="card"><div class="label">Filed</div><div class="value">{{.Filing.Metadata.FilingDate}}</div></div>
       <div class="card"><div class="label">Report date</div><div class="value">{{.Filing.Metadata.ReportDate}}</div></div>
-      <div class="card"><div class="label">Status</div><div class="value">{{.Filing.Status}}</div></div>
+      <div class="card"><div class="label">Documents</div><div class="value">{{.DocumentCount}}</div></div>
+      <div class="card"><div class="label">XBRL facts</div><div class="value">{{len .Facts}}</div></div>
     </section>
-    <section class="panel"><h2>XBRL facts ({{len .Facts}})</h2><table><thead><tr><th>Concept</th><th>Value</th><th>Context</th><th>Unit</th><th>Decimals</th></tr></thead><tbody>{{range .Facts}}<tr><td>{{.Concept}}</td><td class="num">{{if .Nil}}nil{{else}}{{.Value}}{{end}}</td><td>{{.Context}}</td><td>{{.Unit}}</td><td>{{.Decimals}}</td></tr>{{end}}</tbody></table></section>
+    <section class="panel"><div class="panel-heading"><h2>XBRL facts</h2><span class="muted">Raw concepts, values, contexts, and units</span></div><div class="table-wrap"><table><thead><tr><th>Concept</th><th>Value</th><th>Period</th><th>Context</th><th>Unit</th><th>Dimensions</th><th>Decimals</th></tr></thead><tbody>{{range .Facts}}<tr><td>{{.Concept}}</td><td class="num">{{if .Nil}}nil{{else}}{{.Value}}{{end}}</td><td>{{.Period}}</td><td>{{.Context}}</td><td>{{.Unit}}</td><td class="num">{{.Dimensions}}</td><td>{{.Decimals}}</td></tr>{{end}}</tbody></table></div></section>
+    <section class="panel"><div class="panel-heading"><h2>Parsed structure</h2><span class="muted">Reader output</span></div><div class="summary" style="margin:0;border:0;border-radius:0"><div class="card"><div class="label">XBRL instances</div><div class="value">{{.InstanceCount}}</div></div><div class="card"><div class="label">Contexts</div><div class="value">{{.ContextCount}}</div></div><div class="card"><div class="label">Diagnostics</div><div class="value">{{len .Filing.Diagnostics}}</div></div><div class="card"><div class="label">Parser version</div><div class="value">{{.Filing.ParserVersion}}</div></div><div class="card"><div class="label">Status</div><div class="value">{{.Filing.Status}}</div></div></div></section>
   </main>
 </body>
 </html>

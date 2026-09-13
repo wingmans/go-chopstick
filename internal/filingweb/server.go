@@ -130,12 +130,17 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := detailData{Filing: filing}
+	data := detailData{
+		Filing: filing, DocumentCount: len(filing.Documents), InstanceCount: len(filing.Instances),
+	}
 	for _, instance := range filing.Instances {
+		data.ContextCount += len(instance.Contexts)
 		for _, fact := range instance.Facts {
+			period, dimensions := contextDetails(instance.Contexts, fact.ContextRef)
 			data.Facts = append(data.Facts, factRow{
 				Concept: fact.Concept.Local, Value: fact.Value, Context: fact.ContextRef,
 				Unit: fact.UnitRef, Decimals: fact.Decimals, Nil: fact.Nil,
+				Period: period, Dimensions: dimensions,
 			})
 		}
 	}
@@ -146,17 +151,39 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 }
 
 type detailData struct {
-	Filing *edgar.ParsedFiling
-	Facts  []factRow
+	Filing        *edgar.ParsedFiling
+	Facts         []factRow
+	DocumentCount int
+	InstanceCount int
+	ContextCount  int
 }
 
 type factRow struct {
-	Concept  string
-	Value    string
-	Context  string
-	Unit     string
-	Decimals string
-	Nil      bool
+	Concept    string
+	Value      string
+	Context    string
+	Unit       string
+	Decimals   string
+	Nil        bool
+	Period     string
+	Dimensions int
+}
+
+func contextDetails(contexts []edgar.FactContext, id string) (string, int) {
+	for _, context := range contexts {
+		if context.ID != id {
+			continue
+		}
+
+		period := context.Instant
+		if period == "" && (context.StartDate != "" || context.EndDate != "") {
+			period = context.StartDate + " to " + context.EndDate
+		}
+
+		return period, len(context.Dimensions)
+	}
+
+	return "", 0
 }
 
 func (s *Server) loadFiling(parts []string) (*edgar.ParsedFiling, error) {

@@ -201,6 +201,19 @@ func TestSubmissionLongLinesAndNoXBRL(t *testing.T) {
 	}
 }
 
+func TestSubmissionAcceptsPrivacyEnhancedWrapper(t *testing.T) {
+	source := "-----BEGIN PRIVACY-ENHANCED MESSAGE-----\n" + submissionText(testInstance, testInstanceFilename) + "-----END PRIVACY-ENHANCED MESSAGE-----\n"
+
+	filing, err := ParseSubmission(t.Context(), writeSubmission(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if filing.Metadata.Accession != "0000000123-24-000001" || len(filing.Instances) != 1 {
+		t.Fatalf("wrapper changed parsed filing: accession=%q instances=%d", filing.Metadata.Accession, len(filing.Instances))
+	}
+}
+
 func TestSubmissionRejectsMalformedEnvelope(t *testing.T) {
 	source := submissionText(testInstance, testInstanceFilename)
 	for name, input := range map[string]string{

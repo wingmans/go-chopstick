@@ -33,7 +33,7 @@ func New(opts ...Option) *slog.Logger {
 
 	if o.levelOverride != nil {
 		level = parseLogLevel(*o.levelOverride)
-	} else if raw := os.Getenv("LOG_LEVEL"); raw != "" {
+	} else if raw := logLevelEnvironment(); raw != "" {
 		level = parseLogLevel(raw)
 	}
 
@@ -41,7 +41,7 @@ func New(opts ...Option) *slog.Logger {
 }
 
 func NewLoggerFromEnv() *slog.Logger {
-	raw := os.Getenv("LOG_LEVEL")
+	raw := logLevelEnvironment()
 
 	level := slog.LevelInfo
 	if raw != "" {
@@ -49,6 +49,14 @@ func NewLoggerFromEnv() *slog.Logger {
 	}
 
 	return slog.New(tint.NewTextHandler(os.Stdout, tintOptions(level)))
+}
+
+func logLevelEnvironment() string {
+	if raw := os.Getenv("LOG_LEVEL"); raw != "" {
+		return raw
+	}
+
+	return os.Getenv("LOGLEVEL")
 }
 
 func tintOptions(level slog.Level) *tint.Options {

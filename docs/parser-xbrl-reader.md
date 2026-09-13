@@ -29,6 +29,14 @@ downloads missing submissions. Missing local sources are skipped and logged, so
 the command naturally processes all downloaded but unprocessed filings selected
 by the master index. The default year is empty, meaning all years.
 
+The submission reader supports older SEC files wrapped in a
+`PRIVACY-ENHANCED MESSAGE` envelope. The wrapper is treated as transport
+metadata; the enclosed `<SEC-DOCUMENT>` remains the parsed envelope and source
+byte offsets are preserved. Legacy XBRL instances declaring `US-ASCII` are
+accepted through an explicit ASCII pass-through charset reader. See
+[xbrl-parsing-error-fix.md](xbrl-parsing-error-fix.md) for the troubleshooting
+history and verification fixtures.
+
 `--file <path>` is an optional explicit local-file escape hatch and may be repeated.
 It is mutually exclusive with the master-index filters. It is intentionally
 long-only: `-f, --form-type` must retain the same meaning on both `parse` and
@@ -306,9 +314,10 @@ cached diagnostic results, cancellation, and continuing batches after failures.
 
 `serve` starts a standard-library `net/http` server over `data/parsed`. It reads
 the persisted `filing.json` files locally and does not contact SEC EDGAR. Open
-`http://127.0.0.1:8080/` after starting it. The dashboard lists parsed filings,
-supports CIK filtering, and links each filing to its complete persisted JSON
-representation for inspection.
+`http://127.0.0.1:8080/` after starting it. The dashboard lists parsed filings
+and supports CIK filtering. Each filing opens a details page with filing
+metadata, structural counts, and source-level XBRL facts; the JSON API remains
+available for complete persisted-file inspection.
 
 ## References
 

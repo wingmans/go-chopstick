@@ -59,6 +59,47 @@ The change is covered by submission-reader tests using `_htm.xml` instance fixtu
 go test ./...
 ```
 
+## Legacy EDGAR envelope and ASCII XBRL declarations
+
+### Symptoms
+
+Older Microsoft 10-K submissions produced either:
+
+```text
+expected <SEC-DOCUMENT>
+```
+
+or XBRL diagnostics such as:
+
+```text
+xml: encoding "us-ascii" declared but Decoder.CharsetReader is nil
+```
+
+### Cause
+
+The 2010 submission was wrapped in a `PRIVACY-ENHANCED MESSAGE` envelope. The
+actual SEC submission began after the PEM-style wrapper line. The 2011-2013
+XBRL instance documents used valid ASCII content while explicitly declaring
+`us-ascii` or `US-ASCII` in their XML declaration.
+
+### Fix
+
+The submission reader now accepts the privacy-enhanced wrapper and continues
+to parse the enclosed SEC envelope. Wrapper lines are counted as part of the
+source stream, so embedded document byte offsets remain unchanged.
+
+The XBRL reader configures `CharsetReader` to pass through ASCII and UTF-8
+content. Other unknown charsets still produce an extraction diagnostic instead
+of being silently mis-decoded.
+
+`LOGLEVEL` is also accepted as an alias for `LOG_LEVEL`, matching the spelling
+used by existing command invocations.
+
+### Verification
+
+Regression fixtures cover the privacy-enhanced envelope and a `US-ASCII` XML
+declaration. The full suite passes with `go test ./...`.
+
 ## Entry format for future errors
 
 For each new issue, add a dated section containing:

@@ -16,6 +16,9 @@ integration: build
 run:
 	go run ./cmd/ecb
 
+serve:
+	LOGLEVEL=debug ./bin/edgar serve     
+
 test:
 	go test ./...
 

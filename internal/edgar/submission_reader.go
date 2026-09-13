@@ -21,6 +21,8 @@ const (
 	submissionEndTag = "</SEC-DOCUMENT>"
 	documentEndTag   = "</DOCUMENT>"
 	documentStartTag = "<DOCUMENT>"
+	pemBeginTag      = "-----BEGIN PRIVACY-ENHANCED MESSAGE-----"
+	pemEndTag        = "-----END PRIVACY-ENHANCED MESSAGE-----"
 )
 
 // ParseSubmission reads a local .txt SEC envelope and its extracted XBRL instances.
@@ -203,11 +205,21 @@ func (e *envelopeReader) consume(line, raw string, start int64, result *ParsedFi
 			return nil
 		}
 
+		if line == pemBeginTag {
+			e.state = "privacy_header"
+
+			return nil
+		}
+
 		if !strings.HasPrefix(line, "<SEC-DOCUMENT>") {
 			return errors.New("expected <SEC-DOCUMENT>")
 		}
 
 		e.state = "header_start"
+	case "privacy_header":
+		if strings.HasPrefix(line, "<SEC-DOCUMENT>") {
+			e.state = "header_start"
+		}
 	case "header_start":
 		if line == "" {
 			return nil
@@ -262,7 +274,7 @@ func (e *envelopeReader) consume(line, raw string, start int64, result *ParsedFi
 		result.Documents = append(result.Documents, e.document)
 		e.state = envelopeBetween
 	case envelopeDone:
-		if line != "" {
+		if line != "" && line != pemEndTag {
 			return errors.New("unexpected content after </SEC-DOCUMENT>")
 		}
 	}

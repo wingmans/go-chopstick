@@ -13,6 +13,13 @@ func readXBRL(ctx context.Context, source io.Reader) (XBRLInstance, bool, error)
 	var instance XBRLInstance
 
 	decoder := xml.NewDecoder(source)
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		if strings.EqualFold(charset, "us-ascii") || strings.EqualFold(charset, "ascii") || strings.EqualFold(charset, "utf-8") {
+			return input, nil
+		}
+
+		return nil, fmt.Errorf("unsupported XML charset %q", charset)
+	}
 
 	start, err := firstXMLElement(decoder)
 	if err != nil {
