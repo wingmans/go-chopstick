@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingweb"
@@ -53,12 +54,16 @@ func parseServeConfig(args []string) (appConfig, error) {
 }
 
 func runServe(ctx context.Context, logger *slog.Logger, address, parsedDir string) error {
-	httpServer := &http.Server{Addr: address, Handler: filingweb.NewServer(parsedDir, logger)}
+	httpServer := &http.Server{ //nolint:exhaustruct_v5 // standard library server has many optional fields.
+		Addr:              address,
+		Handler:           filingweb.NewServer(parsedDir, logger),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	go func() {
 		<-ctx.Done()
 
-		_ = httpServer.Shutdown(context.Background())
+		_ = httpServer.Shutdown(ctx)
 	}()
 
 	err := httpServer.ListenAndServe()

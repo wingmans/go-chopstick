@@ -79,11 +79,11 @@ func TestDownloadIndexExtractsAndAppendsHTMLURL(t *testing.T) {
 
 func TestStitch(t *testing.T) {
 	directory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(directory, "2025-QTR2.tsv"), []byte("second\n"), 0o640); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "2025-QTR2.tsv"), []byte("second\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(directory, "2025-QTR1.tsv"), []byte("first\n"), 0o640); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "2025-QTR1.tsv"), []byte("first\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

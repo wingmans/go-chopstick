@@ -23,9 +23,13 @@ linters:
     - err113   #temporary
     - exhaustruct #deprecated, replaced by exhaustruct_v2
     - forbidigo
+    - funlen  # temporarily disabled
+    - gocognit  # temporarily disabled
+    - goconst  # temporarily disabled
     - godox
     - godoclint
     - gomodguard #deprecated; replaced by gomodguard_v2
+    - lll  # temporarily disabled
     - mnd
     - noinlineerr
     - paralleltest

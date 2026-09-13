@@ -3,6 +3,7 @@ package edgar
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"testing"
 	"time"
 )
+
+var errUnexpectedNetworkRequest = errors.New("unexpected network request")
 
 func TestUniqueFormTypes(t *testing.T) {
 	directory := t.TempDir()
@@ -21,7 +24,7 @@ func TestUniqueFormTypes(t *testing.T) {
 		"2|Two|10-K|2024-01-02|edgar/data/2/k.txt",
 		"3|Three|10-Q|2024-01-03|edgar/data/3/q.txt",
 	}, "\n")
-	if err := os.WriteFile(masterPath, []byte(contents), 0o640); err != nil {
+	if err := os.WriteFile(masterPath, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +58,7 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filingPath, []byte("already downloaded"), 0o640); err != nil {
+	if err := os.WriteFile(filingPath, []byte("already downloaded"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +67,7 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(indexPath, []byte("already downloaded"), 0o640); err != nil {
+	if err := os.WriteFile(indexPath, []byte("already downloaded"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,7 +75,7 @@ func TestDownloadFilingSkipsExistingFiles(t *testing.T) {
 		Transport: roundTripper(func(*http.Request) (*http.Response, error) {
 			t.Fatal("unexpected network request for existing file")
 
-			return nil, nil
+			return nil, errUnexpectedNetworkRequest
 		}),
 		CheckRedirect: nil,
 		Jar:           nil,
@@ -135,7 +138,7 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 		Transport: roundTripper(func(*http.Request) (*http.Response, error) {
 			t.Fatal("unexpected network request for existing compressed file")
 
-			return nil, nil
+			return nil, errUnexpectedNetworkRequest
 		}),
 		CheckRedirect: nil,
 		Jar:           nil,

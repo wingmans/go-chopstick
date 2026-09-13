@@ -270,7 +270,7 @@ func downloadArchive(ctx context.Context,
 
 	path, err := filepath.Rel(zipDirectory, zipPath)
 	if err != nil {
-		return false, filepath.Base(zipPath), nil
+		return false, "", fmt.Errorf("relative archive path %s: %w", zipPath, err)
 	}
 
 	return false, path, nil

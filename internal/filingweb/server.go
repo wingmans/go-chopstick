@@ -131,7 +131,8 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := detailData{
-		Filing: filing, DocumentCount: len(filing.Documents), InstanceCount: len(filing.Instances),
+		Filing: filing, Facts: []factRow{}, DocumentCount: len(filing.Documents),
+		InstanceCount: len(filing.Instances), ContextCount: 0,
 	}
 	for _, instance := range filing.Instances {
 		data.ContextCount += len(instance.Contexts)
@@ -258,7 +259,17 @@ func (s *Server) loadSummaries() ([]filingSummary, error) {
 
 func (s *Server) writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(value)
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		http.Error(w, "could not encode response", http.StatusInternalServerError)
+
+		return
+	}
+
+	if _, err := w.Write(append(data, '\n')); err != nil && s.logger != nil {
+		s.logger.Debug("write JSON response failed", "error", err)
+	}
 }
 
 // canonicalCIK preserves significant digits while normalizing leading padding.

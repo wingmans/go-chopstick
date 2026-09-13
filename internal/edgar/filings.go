@@ -16,6 +16,8 @@ import (
 	"wingman.com/fetch-ecb/internal/ctxlog"
 )
 
+const maxNormalizedFilingSize = 1 << 30
+
 // FilingDownloadConfig contains the settings for downloading filing files.
 // Directory is the local root under which SEC-relative paths are preserved.
 type FilingDownloadConfig struct {
@@ -310,10 +312,17 @@ func normalizeExistingFile(path string) error {
 		_ = os.Remove(temporaryName)
 	}
 
-	if _, err := io.Copy(temporary, reader); err != nil {
+	written, err := io.Copy(temporary, io.LimitReader(reader, maxNormalizedFilingSize+1))
+	if err != nil {
 		cleanup()
 
 		return fmt.Errorf("decompress existing filing %s: %w", path, err)
+	}
+
+	if written > maxNormalizedFilingSize {
+		cleanup()
+
+		return fmt.Errorf("decompressed filing %s exceeds %d bytes", path, maxNormalizedFilingSize)
 	}
 
 	if err := reader.Close(); err != nil {
