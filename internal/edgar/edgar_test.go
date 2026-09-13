@@ -56,7 +56,9 @@ func TestDownloadIndexExtractsAndAppendsHTMLURL(t *testing.T) {
 	indexPath := filepath.Join(directory, "2026-QTR1.tsv")
 
 	zipPath := filepath.Join(directory, "2026-QTR1.zip")
-	if err := downloadZip(context.Background(), client, "https://example.test/master.zip", zipPath, "Example contact@example.test"); err != nil {
+	if err := downloadZip(context.Background(), newEDGARClient(client,
+		"Example contact@example.test"), "https://example.test/master.zip",
+		zipPath); err != nil {
 		t.Fatalf("downloadZip returned error: %v", err)
 	}
 

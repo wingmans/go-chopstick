@@ -189,6 +189,10 @@ func classifyCLIError(ctx context.Context, err error) error {
 	case errors.Is(err, os.ErrNotExist):
 		return xerr.Wrap(xerr.NotFound, "LOCAL_DATA_NOT_FOUND", "required local data was not found", err)
 	default:
+		if _, ok := errors.AsType[*edgar.HTTPError](err); ok {
+			return xerr.Wrap(xerr.Unavailable, "EDGAR_REJECTED_REQUEST", "EDGAR rejected the request", err)
+		}
+
 		if _, ok := errors.AsType[net.Error](err); ok {
 			return xerr.Wrap(xerr.Unavailable, "EDGAR_UNAVAILABLE", "EDGAR service is unavailable", err)
 		}

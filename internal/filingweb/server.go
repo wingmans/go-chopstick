@@ -235,7 +235,17 @@ func (s *Server) loadSummaries() ([]filingSummary, error) {
 			facts += len(instance.Facts)
 		}
 
-		result = append(result, filingSummary{CIK: filing.Metadata.CIK, Company: company, Accession: filing.Metadata.Accession, FormType: filing.Metadata.FormType, FilingDate: filing.Metadata.FilingDate, ReportDate: filing.Metadata.ReportDate, Status: filing.Status, Facts: facts})
+		result = append(result,
+			filingSummary{
+				CIK:        filing.Metadata.CIK,
+				Company:    company,
+				Accession:  filing.Metadata.Accession,
+				FormType:   filing.Metadata.FormType,
+				FilingDate: filing.Metadata.FilingDate,
+				ReportDate: filing.Metadata.ReportDate,
+				Status:     filing.Status,
+				Facts:      facts,
+			})
 
 		return nil
 	})

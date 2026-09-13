@@ -21,8 +21,11 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 			ReportDate: "20260912", Items: []string{}, Header: []string{},
 			Filers: []edgar.SubmissionFiler{{CIK: "789019", Name: "Example Corp.", Header: []string{}}},
 		},
-		SourcePath: "", SourceBase: "", SourceSHA256: "", Documents: []edgar.SubmissionDocument{}, Instances: []edgar.XBRLInstance{}, Diagnostics: []edgar.ParseDiagnostic{},
-		Status: edgar.ParseComplete,
+		SourcePath: "", SourceBase: "", SourceSHA256: "",
+		Documents:   []edgar.SubmissionDocument{},
+		Instances:   []edgar.XBRLInstance{},
+		Diagnostics: []edgar.ParseDiagnostic{},
+		Status:      edgar.ParseComplete,
 	}
 	if _, err := edgar.SaveParsedFiling(parsedDir, filing); err != nil {
 		t.Fatalf("SaveParsedFiling returned error: %v", err)

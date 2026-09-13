@@ -97,6 +97,8 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 		client = http.DefaultClient
 	}
 
+	edgarClient := newEDGARClient(client, cfg.UserAgent)
+
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = DefaultBaseURL
 	}
@@ -142,7 +144,7 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 	for i, archive := range archives {
 		started := time.Now()
 
-		network, sourcePath, err := downloadArchive(ctx, client, cfg.Directory, zipDirectory, archive, cfg.UserAgent, cfg.RefreshLatest && i == 0)
+		network, sourcePath, err := downloadArchive(ctx, edgarClient, cfg.Directory, zipDirectory, archive, cfg.RefreshLatest && i == 0)
 		if err != nil {
 			return err
 		}
@@ -240,9 +242,8 @@ func StitchTo(directory, destination string) error {
 	return nil
 }
 
-func downloadArchive(ctx context.Context,
-	client *http.Client, directory, zipDirectory string,
-	archive Archive, userAgent string, force bool,
+func downloadArchive(ctx context.Context, client edgarClient,
+	directory, zipDirectory string, archive Archive, force bool,
 ) (bool, string, error) {
 	indexPath := filepath.Join(directory, archive.FileName)
 	if !force {
@@ -255,7 +256,7 @@ func downloadArchive(ctx context.Context,
 
 	zipPath := filepath.Join(zipDirectory, strings.TrimSuffix(archive.FileName, ".tsv")+".zip")
 
-	zipPath, network, err := ensureZip(ctx, client, archive, zipPath, userAgent)
+	zipPath, network, err := ensureZip(ctx, client, archive, zipPath)
 	if err != nil {
 		return false, "", err
 	}
@@ -295,23 +296,12 @@ func waitForRequestBudget(ctx context.Context, elapsed time.Duration) error {
 	}
 }
 
-func downloadZip(ctx context.Context, client *http.Client, url, destination, userAgent string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func downloadZip(ctx context.Context, client edgarClient, url, destination string) error {
+	resp, err := client.get(ctx, url)
 	if err != nil {
-		return fmt.Errorf("create request for %s: %w", url, err)
-	}
-
-	req.Header.Set("User-Agent", userAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("download %s: %w", url, err)
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("SEC rejected %s with HTTP %s", url, resp.Status)
-	}
 
 	temporary, err := os.CreateTemp(filepath.Dir(destination), ".edgar-*.part")
 	if err != nil {
@@ -351,7 +341,7 @@ func isZip(path string) bool {
 	return reader.Close() == nil
 }
 
-func ensureZip(ctx context.Context, client *http.Client, archive Archive, zipPath, userAgent string) (string, bool, error) {
+func ensureZip(ctx context.Context, client edgarClient, archive Archive, zipPath string) (string, bool, error) {
 	_, err := os.Stat(zipPath)
 	switch {
 	case err == nil && isZip(zipPath):
@@ -369,7 +359,7 @@ func ensureZip(ctx context.Context, client *http.Client, archive Archive, zipPat
 		return legacyPath, false, nil
 	}
 
-	if err := downloadZip(ctx, client, archive.URL, zipPath, userAgent); err != nil {
+	if err := downloadZip(ctx, client, archive.URL, zipPath); err != nil {
 		return "", false, err
 	}
 

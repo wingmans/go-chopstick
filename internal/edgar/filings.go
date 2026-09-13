@@ -83,6 +83,8 @@ func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath str
 		client = http.DefaultClient
 	}
 
+	edgarClient := newEDGARClient(client, cfg.UserAgent)
+
 	reader := NewIndexReader(file, filter)
 
 	var pacer requestPacer
@@ -97,7 +99,7 @@ func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath str
 			return fmt.Errorf("read master index %s: %w", masterPath, err)
 		}
 
-		if err := downloadReferencedFiles(ctx, client, cfg, record, &pacer); err != nil {
+		if err := downloadReferencedFiles(ctx, edgarClient, cfg, record, &pacer); err != nil {
 			return fmt.Errorf("download filing for CIK %s at %s: %w", record.CIK, record.FilingPath, err)
 		}
 	}
@@ -114,9 +116,11 @@ func DownloadFiling(ctx context.Context, client *http.Client, cfg FilingDownload
 		client = http.DefaultClient
 	}
 
+	edgarClient := newEDGARClient(client, cfg.UserAgent)
+
 	var pacer requestPacer
 
-	return downloadReferencedFiles(ctx, client, cfg, record, &pacer)
+	return downloadReferencedFiles(ctx, edgarClient, cfg, record, &pacer)
 }
 
 func validateFilingDownloadConfig(cfg FilingDownloadConfig) error {
@@ -131,7 +135,7 @@ func validateFilingDownloadConfig(cfg FilingDownloadConfig) error {
 	return nil
 }
 
-func downloadReferencedFiles(ctx context.Context, client *http.Client, cfg FilingDownloadConfig, record EdgarIndex, pacer *requestPacer) error {
+func downloadReferencedFiles(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, record EdgarIndex, pacer *requestPacer) error {
 	paths := []string{record.FilingPath}
 	if record.IndexPath != "" && record.IndexPath != record.FilingPath {
 		paths = append(paths, record.IndexPath)
@@ -146,7 +150,7 @@ func downloadReferencedFiles(ctx context.Context, client *http.Client, cfg Filin
 	return nil
 }
 
-func downloadReferencedFile(ctx context.Context, client *http.Client, cfg FilingDownloadConfig, relativePath string, pacer *requestPacer) error {
+func downloadReferencedFile(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, relativePath string, pacer *requestPacer) error {
 	started := time.Now()
 
 	destination, err := localFilingPath(cfg.Directory, relativePath)
@@ -198,22 +202,11 @@ func downloadReferencedFile(ctx context.Context, client *http.Client, cfg Filing
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	resp, err := client.get(ctx, requestURL)
 	if err != nil {
-		return fmt.Errorf("create request for %s: %w", requestURL, err)
-	}
-
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("download %s: %w", requestURL, err)
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("SEC rejected %s with HTTP %s", requestURL, resp.Status)
-	}
 
 	temporary, err := os.CreateTemp(filepath.Dir(destination), ".edgar-*.part")
 	if err != nil {

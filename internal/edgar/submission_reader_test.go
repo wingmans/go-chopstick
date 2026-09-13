@@ -202,7 +202,9 @@ func TestSubmissionLongLinesAndNoXBRL(t *testing.T) {
 }
 
 func TestSubmissionAcceptsPrivacyEnhancedWrapper(t *testing.T) {
-	source := "-----BEGIN PRIVACY-ENHANCED MESSAGE-----\n" + submissionText(testInstance, testInstanceFilename) + "-----END PRIVACY-ENHANCED MESSAGE-----\n"
+	source := "-----BEGIN PRIVACY-ENHANCED MESSAGE-----\n" +
+		submissionText(testInstance, testInstanceFilename) +
+		"-----END PRIVACY-ENHANCED MESSAGE-----\n"
 
 	filing, err := ParseSubmission(t.Context(), writeSubmission(t, source))
 	if err != nil {
