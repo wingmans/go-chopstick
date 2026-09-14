@@ -45,6 +45,7 @@ type EdgarIndex struct {
 // not filter. FormTypes is matched exactly and case-sensitively.
 type IndexFilter struct {
 	CIK       string
+	CIKs      []string
 	FormTypes []string
 	Year      int
 }
@@ -141,6 +142,22 @@ func parseIndexLine(line string) (EdgarIndex, error) {
 func matchesIndexFilter(record EdgarIndex, filter IndexFilter) bool {
 	if filter.CIK != "" && normalizeCIK(record.CIK) != normalizeCIK(filter.CIK) {
 		return false
+	}
+
+	if len(filter.CIKs) > 0 {
+		matched := false
+
+		for _, cik := range filter.CIKs {
+			if normalizeCIK(record.CIK) == normalizeCIK(cik) {
+				matched = true
+
+				break
+			}
+		}
+
+		if !matched {
+			return false
+		}
 	}
 
 	if filter.Year != 0 && record.DateFiled.Year() != filter.Year {

@@ -1,4 +1,4 @@
-.PHONY: build lint run integration release test clean
+.PHONY: build constituents lint run integration release test clean
 
 BIN_DIR := bin
 
@@ -6,6 +6,11 @@ build:
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/ecb-fx ./cmd/ecb
 	go build -o $(BIN_DIR)/edgar ./cmd/edgar
+	go build -o $(BIN_DIR)/constituents ./cmd/constituents
+
+constituents:
+	mkdir -p data/sets
+	go run ./cmd/constituents
 
 lint:
 	golangci-lint run ./cmd/... ./internal/...

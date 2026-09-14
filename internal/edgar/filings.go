@@ -38,6 +38,7 @@ func UniqueFormTypes(masterPath string) ([]string, error) {
 
 	reader := NewIndexReader(file, IndexFilter{
 		CIK:       "",
+		CIKs:      nil,
 		FormTypes: nil,
 		Year:      0,
 	})

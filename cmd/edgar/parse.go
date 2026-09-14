@@ -25,6 +25,7 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	flags.Usage = func() {
 		printSubcommandHelp(parseCommand, "Process downloaded local submissions selected from master.tsv.", []helpOption{
 			{flags: "-c, --cik <cik>", description: "Select filings for this CIK."},
+			{flags: "    --set <name>", description: "Select current members from data/sets/<name>.json."},
 			{flags: "-f, --form-type <type>", description: "Select this form type; may be repeated."},
 			{flags: "-y, --year <year>", description: "Select filings filed in this year; default is all years."},
 			{flags: "    --file <path>", description: "Process this local submission; may be repeated."},
@@ -35,6 +36,7 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	}
 	flags.StringVar(&cfg.parse.filter.CIK, "c", "", "select filings for this CIK")
 	flags.StringVar(&cfg.parse.filter.CIK, "cik", "", "select filings for this CIK")
+	flags.StringVar(&cfg.parse.setName, "set", "", "select filings for this constituent set")
 	flags.Var(&cfg.parse.formTypes, "f", "select this form type; may be repeated")
 	flags.Var(&cfg.parse.formTypes, "form-type", "select this form type; may be repeated")
 	flags.StringVar(&year, "y", "", "select filings filed in this year")
@@ -53,8 +55,10 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, errors.New("unexpected positional arguments; use --file for individual submissions"))
 	}
 
-	if len(cfg.parse.files) > 0 && (cfg.parse.filter.CIK != "" || len(cfg.parse.formTypes) > 0 || strings.TrimSpace(year) != "") {
-		return subcommandError(flags, errors.New("--file cannot be combined with --cik, --form-type, or --year"))
+	if len(cfg.parse.files) > 0 && (cfg.parse.filter.CIK != "" ||
+		cfg.parse.setName != "" || len(cfg.parse.formTypes) > 0 ||
+		strings.TrimSpace(year) != "") {
+		return subcommandError(flags, errors.New("--file cannot be combined with --cik, --set, --form-type, or --year"))
 	}
 
 	for _, path := range cfg.parse.files {
@@ -64,6 +68,9 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	}
 
 	cfg.parse.filter.FormTypes = cfg.parse.formTypes
+	if err := applyConstituentSet(&cfg.parse.filter, cfg.parse.setName); err != nil {
+		return subcommandError(flags, err)
+	}
 
 	if strings.TrimSpace(year) != "" {
 		parsedYear, err := strconv.Atoi(strings.TrimSpace(year))

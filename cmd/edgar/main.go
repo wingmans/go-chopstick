@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingworkflow"
@@ -28,6 +30,7 @@ const (
 	edgarBaseURLEnv   = "EDGAR_BASE_URL"
 	parseCommand      = "parse"
 	noopHelpFlags     = "-n, --noop"
+	defaultSetDir     = "./data/sets"
 )
 
 type appConfig struct {
@@ -38,6 +41,7 @@ type appConfig struct {
 		formTypes  stringList
 		masterPath string
 		filter     edgar.IndexFilter
+		setName    string
 		noop       bool
 		reprocess  bool
 	}
@@ -45,6 +49,7 @@ type appConfig struct {
 		masterPath string
 		config     edgar.FilingDownloadConfig
 		filter     edgar.IndexFilter
+		setName    string
 		reprocess  bool
 	}
 	serve struct {
@@ -145,6 +150,7 @@ func run(ctx context.Context, args []string) error {
 			"master", cfg.filings.masterPath,
 			"directory", cfg.filings.config.Directory,
 			"cik", cfg.filings.filter.CIK,
+			"set", cfg.filings.setName,
 			"form_types", cfg.filings.filter.FormTypes,
 			"year", cfg.filings.filter.Year,
 			"noop", cfg.filings.config.Noop,
@@ -300,6 +306,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	flags.Usage = func() {
 		printSubcommandHelp("filings", "Download filings selected from master.tsv and reuse or rebuild parsed results.", []helpOption{
 			{"-c, --cik <cik>", "Select filings for this CIK."},
+			{"    --set <name>", "Select current members from data/sets/<name>.json."},
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"-y, --year <year>", "Select filings filed in this year; default is all years."},
 			{"-r, --reprocess", "Rebuild parsed results without forcing a new download."},
@@ -308,6 +315,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	}
 	flags.StringVar(&cfg.filings.filter.CIK, "c", "", "only download filings for this CIK")
 	flags.StringVar(&cfg.filings.filter.CIK, "cik", "", "only download filings for this CIK")
+	flags.StringVar(&cfg.filings.setName, "set", "", "only download filings for this constituent set")
 	flags.Var(&formTypes, "form-type", "only download this form type; may be repeated")
 	flags.Var(&formTypes, "f", "only download this form type; may be repeated")
 	flags.BoolVar(&cfg.filings.config.Noop, "noop", false, "show actions without downloading or writing files")
@@ -334,6 +342,9 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	}
 
 	cfg.filings.filter.FormTypes = formTypes
+	if err := applyConstituentSet(&cfg.filings.filter, cfg.filings.setName); err != nil {
+		return subcommandError(flags, err)
+	}
 
 	if strings.TrimSpace(year) != "" {
 		parsedYear, err := strconv.Atoi(strings.TrimSpace(year))
@@ -345,6 +356,27 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func applyConstituentSet(filter *edgar.IndexFilter, name string) error {
+	name = strings.TrimSpace(name)
+
+	if name == "" {
+		return nil
+	}
+
+	if filepath.Base(name) != name || filepath.Ext(name) != "" {
+		return errors.New("--set must be a set name, not a path")
+	}
+
+	set, err := constituents.LoadJSON(filepath.Join(defaultSetDir, name+".json"))
+	if err != nil {
+		return err
+	}
+
+	filter.CIKs = set.CIKs()
+
+	return nil
 }
 
 func subcommandError(flags *flag.FlagSet, err error) (appConfig, error) {

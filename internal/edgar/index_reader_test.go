@@ -28,6 +28,7 @@ func TestReadMasterTSVByFormType(t *testing.T) {
 	formType := "10-K"
 	reader := NewIndexReader(file, IndexFilter{
 		CIK:       "",
+		CIKs:      nil,
 		FormTypes: []string{formType},
 		Year:      0,
 	})
@@ -55,6 +56,7 @@ func TestIndexReaderReadsAndFiltersRecords(t *testing.T) {
 
 	reader := NewIndexReader(source, IndexFilter{
 		CIK:       "0000123456",
+		CIKs:      nil,
 		FormTypes: []string{"10-K"},
 		Year:      0,
 	})
@@ -84,6 +86,7 @@ func TestIndexReaderReadsAndFiltersRecords(t *testing.T) {
 func TestIndexReaderRejectsMalformedRows(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("123|Example|10-K|not-a-date|filing.txt\n"), IndexFilter{
 		CIK:       "",
+		CIKs:      nil,
 		FormTypes: nil,
 		Year:      0,
 	})
@@ -100,6 +103,7 @@ func TestIndexReaderFiltersByYear(t *testing.T) {
 	}, "\n"))
 	reader := NewIndexReader(source, IndexFilter{
 		CIK:       "",
+		CIKs:      nil,
 		FormTypes: nil,
 		Year:      2024,
 	})
@@ -120,16 +124,37 @@ func TestIndexReaderFiltersByYear(t *testing.T) {
 
 func TestIndexReaderMatchesPaddedCIK(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("789019|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
-		CIK: "0000789019", FormTypes: nil, Year: 0,
+		CIK: "0000789019", CIKs: nil, FormTypes: nil, Year: 0,
 	})
 	if _, err := reader.Next(); err != nil {
 		t.Fatalf("padded CIK did not match master index: %v", err)
 	}
 }
 
+func TestIndexReaderFiltersByCIKSet(t *testing.T) {
+	reader := NewIndexReader(strings.NewReader(strings.Join([]string{
+		"789019|Microsoft|10-K|2024-01-02|msft.txt",
+		"320193|Apple|10-K|2024-01-03|apple.txt",
+	}, "\n")), IndexFilter{
+		CIK:       "",
+		CIKs:      []string{"0000320193"},
+		FormTypes: nil,
+		Year:      0,
+	})
+
+	record, err := reader.Next()
+	if err != nil {
+		t.Fatalf("Next returned error: %v", err)
+	}
+	if record.CIK != "320193" {
+		t.Fatalf("got CIK %s, want 320193", record.CIK)
+	}
+}
+
 func TestIndexReaderSkipsBlankRows(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("\n123|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
 		CIK:       "",
+		CIKs:      nil,
 		FormTypes: nil,
 		Year:      0,
 	})
