@@ -4,30 +4,30 @@ The project uses a small, local taxonomy to give common SEC XBRL concepts
 stable product names. It is a comparison aid for the dashboard, not a
 replacement for the official SEC or FASB taxonomies.
 
-## Source Of Truth
+## Registry
 
-The initial registry is stored in
-`internal/filingview/taxonomy.json` and embedded in the binary. Embedding the
-default keeps behavior independent of the process working directory. The
-loader also accepts an explicit JSON path for experiments and manually
-trimmed registries.
+The default registry is stored in
+`internal/filingview/taxonomy.json` and embedded in the binary. This keeps
+behavior independent of the process working directory. The loader also
+accepts an explicit JSON path for experiments and manually trimmed registries.
 
-The registry has a schema version and a taxonomy version. Taxonomy changes
-must be reviewed and committed like code because they can change displayed
-values and comparisons.
+The registry has both a schema version and a taxonomy version. Changes must be
+reviewed and committed like code because they can change displayed values and
+comparisons.
 
 ## Storage Decision
 
-The default taxonomy is stored at
-`internal/filingview/taxonomy.json`. It is embedded in the binary so command
-behavior does not depend on the process working directory. This file is
-application configuration and is version-controlled with the code that
-interprets it.
+The taxonomy is application configuration and is version-controlled with the
+code that interprets it.
 
-The taxonomy does not belong beside the golden filings. The `golden/`
-directory contains test inputs and expected results. Constituent memberships
-belong in `data/sets/`, while generated parsed data and downloaded filings
-belong in `data/parsed/` and `data/filings/` respectively.
+The taxonomy does not belong beside golden filings. The directory boundaries
+are:
+
+- `internal/filingview/taxonomy.json`: shipped default taxonomy;
+- `golden/`: test filings and expected results;
+- `data/sets/`: constituent memberships;
+- `data/parsed/`: generated parsed results;
+- `data/filings/`: pristine downloaded filings.
 
 Experimental or manually trimmed registries can be stored elsewhere and
 selected explicitly with `--taxonomy`:
@@ -83,15 +83,30 @@ The batch linter uses view metadata and does not require `master.tsv`. Results
 are sorted by path. A load or schema error fails the command; unmapped terms
 are reported as findings and do not fail the command.
 
-The first linter reports the taxonomy version, projected row count, mapped
-rows, and unmapped terms with their source namespace and occurrence count.
-This is deliberately a view-level check. It cannot report facts discarded
-during compaction.
+The compact linter reports the taxonomy version, projected row count, mapped
+rows, unmapped terms, and basic data-quality findings. It cannot report facts
+discarded during compaction.
 
-Future source coverage analysis should inspect `filing.json` and classify
-facts as mapped, unmapped, ignored, dimensional, or unsupported. Suggestions
-may be generated for review, but the taxonomy should not learn automatically
-from encountered filings.
+Source-level coverage is available for verbose parsed filings:
+
+```text
+edgar taxonomy coverage --cik 789019 --form-type 10-K
+edgar taxonomy coverage --file data/parsed/.../filing.json
+```
+
+Coverage reports every source fact before compaction. It includes unmapped
+concepts, company extensions, dimensional facts, missing contexts, invalid
+periods, missing units, and duplicate facts.
+
+The `us-gaap-coverage` fixture contains nineteen companies selected across
+technology, communications, financials, healthcare, energy, consumer
+staples, industrials, materials, real estate, and utilities. The small
+`golden` fixture remains available for fast tests.
+
+Source coverage now inspects `filing.json` before compaction. Future
+improvements may add ignored and unsupported categories plus reviewable
+suggestions, but the taxonomy should not learn automatically from encountered
+filings.
 
 ## Rollups And Ratios
 

@@ -4,14 +4,14 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_PATH="$ROOT_DIR/bin/edgar"
-SET_NAME="golden"
+SET_NAME="us-gaap-coverage"
 
 cd "$ROOT_DIR"
 export LOGLEVEL=debug
 
-echo "Preparing golden constituent set"
+echo "Preparing US-GAAP coverage constituent set"
 mkdir -p data/sets
-cp golden/golden.json data/sets/golden.json
+cp golden/us-gaap-coverage.json data/sets/us-gaap-coverage.json
 
 if [[ ! -x "$CLI_PATH" ]]; then
   echo "error: $CLI_PATH is missing; run 'make build' first" >&2
