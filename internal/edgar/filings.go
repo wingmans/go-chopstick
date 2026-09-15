@@ -27,6 +27,36 @@ type FilingDownloadConfig struct {
 	Noop      bool
 }
 
+// FilingDownloader downloads filings with one request budget across its
+// complete lifetime. Reuse one downloader for a batch.
+type FilingDownloader struct {
+	client edgarClient
+	cfg    FilingDownloadConfig
+	pacer  requestPacer
+}
+
+// NewFilingDownloader creates a paced filing downloader.
+func NewFilingDownloader(client *http.Client, cfg FilingDownloadConfig) (*FilingDownloader, error) {
+	if err := validateFilingDownloadConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	return &FilingDownloader{
+		client: newEDGARClient(client, cfg.UserAgent),
+		cfg:    cfg,
+		pacer:  requestPacer{lastRequest: time.Time{}},
+	}, nil
+}
+
+// Download downloads one filing and its referenced HTML index file.
+func (d *FilingDownloader) Download(ctx context.Context, record EdgarIndex) error {
+	return downloadReferencedFiles(ctx, d.client, d.cfg, record, &d.pacer)
+}
+
 // UniqueFormTypes reads an EDGAR master TSV and returns its distinct form
 // types in sorted order.
 func UniqueFormTypes(masterPath string) ([]string, error) {
@@ -76,19 +106,12 @@ func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath str
 	}
 	defer func() { _ = file.Close() }()
 
-	if err := validateFilingDownloadConfig(cfg); err != nil {
+	downloader, err := NewFilingDownloader(client, cfg)
+	if err != nil {
 		return err
 	}
 
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	edgarClient := newEDGARClient(client, cfg.UserAgent)
-
 	reader := NewIndexReader(file, filter)
-
-	var pacer requestPacer
 
 	for {
 		record, err := reader.Next()
@@ -100,7 +123,7 @@ func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath str
 			return fmt.Errorf("read master index %s: %w", masterPath, err)
 		}
 
-		if err := downloadReferencedFiles(ctx, edgarClient, cfg, record, &pacer); err != nil {
+		if err := downloader.Download(ctx, record); err != nil {
 			return fmt.Errorf("download filing for CIK %s at %s: %w", record.CIK, record.FilingPath, err)
 		}
 	}
@@ -109,19 +132,12 @@ func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath str
 // DownloadFiling downloads the filing and HTML index files referenced by one
 // EdgarIndex. Existing files are skipped.
 func DownloadFiling(ctx context.Context, client *http.Client, cfg FilingDownloadConfig, record EdgarIndex) error {
-	if err := validateFilingDownloadConfig(cfg); err != nil {
+	downloader, err := NewFilingDownloader(client, cfg)
+	if err != nil {
 		return err
 	}
 
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	edgarClient := newEDGARClient(client, cfg.UserAgent)
-
-	var pacer requestPacer
-
-	return downloadReferencedFiles(ctx, edgarClient, cfg, record, &pacer)
+	return downloader.Download(ctx, record)
 }
 
 func validateFilingDownloadConfig(cfg FilingDownloadConfig) error {

@@ -38,6 +38,11 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 		client = http.DefaultClient
 	}
 
+	downloader, err := edgar.NewFilingDownloader(client, download)
+	if err != nil {
+		return summary, err
+	}
+
 	reader := edgar.NewIndexReader(file, filter)
 
 	for {
@@ -63,7 +68,7 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 
 		recordProcessing := processing
 		recordProcessing.FormType = record.FormType
-		result, err := processIndexRecord(ctx, client, download, recordProcessing, record)
+		result, err := processIndexRecord(ctx, downloader, download.Directory, recordProcessing, record)
 		summary.record(ctx, record.FilingPath, result, err)
 
 		if err := ctx.Err(); err != nil {
@@ -162,18 +167,18 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 	return summary, summary.failure()
 }
 
-func processIndexRecord(ctx context.Context, client *http.Client, download edgar.FilingDownloadConfig,
+func processIndexRecord(ctx context.Context, downloader *edgar.FilingDownloader, directory string,
 	processing ProcessingConfig, record edgar.EdgarIndex,
 ) (ProcessingResult, error) {
 	var result ProcessingResult
 
 	started := time.Now()
 
-	if err := edgar.DownloadFiling(ctx, client, download, record); err != nil {
+	if err := downloader.Download(ctx, record); err != nil {
 		return result, err
 	}
 
-	path, err := edgar.LocalFilingPath(download.Directory, record.FilingPath)
+	path, err := edgar.LocalFilingPath(directory, record.FilingPath)
 	if err != nil {
 		return result, err
 	}

@@ -23,7 +23,7 @@ const (
 	DefaultBaseURL = "https://www.sec.gov/Archives"
 	headerLines    = 11
 	separator      = "|"
-	requestBudget  = 2 * time.Second
+	requestBudget  = 125 * time.Millisecond
 )
 
 // Config contains the inputs used to download the quarterly indexes.

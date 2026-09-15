@@ -115,9 +115,10 @@ This makes the process idempotent and restartable. Interrupted or failed
 downloads do not appear as completed files on the next run, and reruns do not
 redownload completed files.
 
-Requests are paced conservatively, with a two-second minimum interval between
-network request starts. This is well below the SEC's 10 requests-per-second
-threshold. Local filesystem checks do not consume request budget.
+Requests use a 125-millisecond minimum interval between network request
+starts. This stays below the SEC's documented maximum of 10 requests per
+second while avoiding unnecessary delay. Local filesystem checks do not
+consume request budget.
 
 Every request must use a descriptive SEC user-agent containing contact
 information.

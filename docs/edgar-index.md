@@ -47,10 +47,10 @@ renamed into place only after the response has been copied successfully. A
 partial download therefore does not look like a completed file on the next
 run.
 
-Requests are paced with a two-second minimum request budget. This is far below
-the SEC's 10 requests-per-second threshold and keeps the downloader
-deliberately conservative. Local existence checks do not consume request
-budget.
+Requests are paced with a 125-millisecond minimum interval between network
+request starts. This stays below the SEC's documented maximum of 10 requests
+per second while avoiding the former two-second delay. Local existence checks
+do not consume request budget.
 
 ## Folder structure
 
