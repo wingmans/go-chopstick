@@ -19,6 +19,7 @@ SEC submission or the verbose parsed result.
 | --- | --- |
 | `schema_version` | Version of the compact view format. |
 | `parser_version` | Parser version that produced the view. |
+| `taxonomy_version` | Taxonomy registry version used for the projection. |
 | `source_path` | Local source reference retained for lineage. |
 | `source_sha256` | Checksum of the original submission. |
 | `metadata` | Filing identity, dates, CIK, form, and company. |

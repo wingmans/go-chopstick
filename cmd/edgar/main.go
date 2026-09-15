@@ -19,6 +19,7 @@ import (
 	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/filingview"
 	"wingman.com/fetch-ecb/internal/filingworkflow"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
@@ -55,6 +56,10 @@ type appConfig struct {
 	serve struct {
 		address   string
 		parsedDir string
+	}
+	taxonomy struct {
+		file     string
+		taxonomy string
 	}
 }
 
@@ -171,6 +176,8 @@ func run(ctx context.Context, args []string) error {
 		logger.Info("starting EDGAR local dashboard", "address", cfg.serve.address, "parsed_directory", cfg.serve.parsedDir)
 
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir)
+	case "taxonomy":
+		commandErr = runTaxonomyLint(cfg.taxonomy.file, cfg.taxonomy.taxonomy)
 	default:
 		printUsage()
 
@@ -231,11 +238,59 @@ func parseConfig(args []string) (appConfig, error) {
 		return parseDownloadFilingsConfig(args[1:])
 	case "serve":
 		return parseServeConfig(args[1:])
+	case "taxonomy":
+		return parseTaxonomyConfig(args[1:])
 	default:
 		printUsage()
 
 		return appConfig{}, flag.ErrHelp
 	}
+}
+
+//nolint:wsl_v5 // Command parsing is kept in one readable validation block.
+func parseTaxonomyConfig(args []string) (appConfig, error) {
+	var cfg appConfig
+	cfg.command = "taxonomy"
+	flags := flag.NewFlagSet("taxonomy", flag.ContinueOnError)
+	flags.SetOutput(os.Stdout)
+	flags.Usage = func() {
+		printSubcommandHelp("taxonomy lint", "Inspect a compact filing view against the taxonomy.", []helpOption{
+			{"-f, --file <path>", "Compact filing-view.json to inspect."},
+			{"-t, --taxonomy <path>", "Use a taxonomy JSON file instead of the embedded default."},
+			{"-h, --help", "Show command help."},
+		})
+	}
+	flags.StringVar(&cfg.taxonomy.file, "f", "", "compact filing-view.json to inspect")
+	flags.StringVar(&cfg.taxonomy.file, "file", "", "compact filing-view.json to inspect")
+	flags.StringVar(&cfg.taxonomy.taxonomy, "t", "", "taxonomy JSON file")
+	flags.StringVar(&cfg.taxonomy.taxonomy, "taxonomy", "", "taxonomy JSON file")
+	if err := flags.Parse(args); err != nil {
+		return appConfig{}, flag.ErrHelp
+	}
+	if flags.NArg() != 1 || flags.Arg(0) != "lint" {
+		return subcommandError(flags, errors.New("use 'edgar taxonomy lint --file <path>'"))
+	}
+	if strings.TrimSpace(cfg.taxonomy.file) == "" {
+		return subcommandError(flags, errors.New("--file is required"))
+	}
+
+	return cfg, nil
+}
+
+//nolint:wsl_v5 // Loading, linting, and reporting form one boundary operation.
+func runTaxonomyLint(path, taxonomyPath string) error {
+	view, err := filingview.Load(path)
+	if err != nil {
+		return fmt.Errorf("load filing view: %w", err)
+	}
+	taxonomy, err := filingview.LoadTaxonomy(taxonomyPath)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintln(os.Stdout, filingview.LintView(view, taxonomy))
+
+	return err
 }
 
 func parseDownloadIndexConfig(args []string) (appConfig, error) {
@@ -404,6 +459,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
 	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
+	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")
 }

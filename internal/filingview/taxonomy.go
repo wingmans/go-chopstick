@@ -1,126 +1,137 @@
 package filingview
 
-import "slices"
+import (
+	_ "embed"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+)
 
-type metricDefinition struct {
-	Key       string
-	Label     string
-	Statement string
-	Concepts  []string
+//go:embed taxonomy.json
+var defaultTaxonomyJSON []byte
+
+type Taxonomy struct {
+	SchemaVersion   int                `json:"schema_version"`
+	TaxonomyVersion string             `json:"taxonomy_version"`
+	Metrics         []MetricDefinition `json:"metrics"`
+	Ratios          []RatioDefinition  `json:"ratios"`
 }
 
-// taxonomy is intentionally small and editable. Concepts retain their SEC
-// names in the view; these keys provide stable product-level names.
+type MetricDefinition struct {
+	Key       string             `json:"key"`
+	Label     string             `json:"label"`
+	Statement string             `json:"statement"`
+	Concepts  []ConceptReference `json:"concepts"`
+}
+
+type ConceptReference struct {
+	NamespaceFamily string `json:"namespace_family"`
+	Name            string `json:"name"`
+	Priority        int    `json:"priority"`
+}
+
+type RatioDefinition struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Numerator   string `json:"numerator"`
+	Denominator string `json:"denominator"`
+	Format      string `json:"format"`
+	Formula     string `json:"formula"`
+}
+
+// LoadTaxonomy reads a taxonomy file. An empty path loads the checked-in
+// default, which keeps command behavior independent of the working directory.
 //
-//nolint:gochecknoglobals // The registry is intentionally easy to edit.
-var taxonomy = []metricDefinition{
-	{
-		Key: "revenue", Label: "Revenue", Statement: "income",
-		Concepts: []string{"RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet"},
-	},
-	{
-		Key: "cost_of_revenue", Label: "Cost of revenue", Statement: "income",
-		Concepts: []string{"CostOfRevenue", "CostOfGoodsAndServicesSold"},
-	},
-	{
-		Key: "gross_profit", Label: "Gross profit", Statement: "income",
-		Concepts: []string{"GrossProfit"},
-	},
-	{
-		Key: "operating_income", Label: "Operating income", Statement: "income",
-		Concepts: []string{"OperatingIncomeLoss"},
-	},
-	{
-		Key: "net_income", Label: "Net income", Statement: "income",
-		Concepts: []string{"NetIncomeLoss", "ProfitLoss"},
-	},
-	{
-		Key: "eps_diluted", Label: "Diluted EPS", Statement: "income",
-		Concepts: []string{"EarningsPerShareDiluted"},
-	},
-	{
-		Key: "assets", Label: "Assets", Statement: "balance",
-		Concepts: []string{"Assets"},
-	},
-	{
-		Key: "current_assets", Label: "Current assets", Statement: "balance",
-		Concepts: []string{"AssetsCurrent"},
-	},
-	{
-		Key: "cash", Label: "Cash and equivalents", Statement: "balance",
-		Concepts: []string{"CashAndCashEquivalentsAtCarryingValue"},
-	},
-	{
-		Key: "liabilities", Label: "Liabilities", Statement: "balance",
-		Concepts: []string{"Liabilities"},
-	},
-	{
-		Key: "current_liabilities", Label: "Current liabilities", Statement: "balance",
-		Concepts: []string{"LiabilitiesCurrent"},
-	},
-	{
-		Key: "equity", Label: "Shareholders' equity", Statement: "balance",
-		Concepts: []string{"StockholdersEquity"},
-	},
-	{
-		Key: "operating_cash_flow", Label: "Operating cash flow", Statement: "cash_flow",
-		Concepts: []string{"NetCashProvidedByUsedInOperatingActivities"},
-	},
-	{
-		Key: "investing_cash_flow", Label: "Investing cash flow", Statement: "cash_flow",
-		Concepts: []string{"NetCashProvidedByUsedInInvestingActivities"},
-	},
-	{
-		Key: "financing_cash_flow", Label: "Financing cash flow", Statement: "cash_flow",
-		Concepts: []string{"NetCashProvidedByUsedInFinancingActivities"},
-	},
-	{
-		Key: "capital_expenditures", Label: "Capital expenditures", Statement: "cash_flow",
-		Concepts: []string{"PaymentsToAcquirePropertyPlantAndEquipment"},
-	},
-}
-
-type ratioDefinition struct {
-	Key         string
-	Label       string
-	Numerator   string
-	Denominator string
-	Format      string
-	Formula     string
-}
-
-//nolint:gochecknoglobals // The registry is intentionally easy to edit.
-var ratios = []ratioDefinition{
-	{
-		Key: "gross_margin", Label: "Gross margin", Numerator: "gross_profit",
-		Denominator: "revenue", Format: "percent", Formula: "gross profit / revenue",
-	},
-	{
-		Key: "operating_margin", Label: "Operating margin", Numerator: "operating_income",
-		Denominator: "revenue", Format: "percent", Formula: "operating income / revenue",
-	},
-	{
-		Key: "net_margin", Label: "Net margin", Numerator: "net_income",
-		Denominator: "revenue", Format: "percent", Formula: "net income / revenue",
-	},
-	{
-		Key: "current_ratio", Label: "Current ratio", Numerator: "current_assets",
-		Denominator: "current_liabilities", Format: "multiple",
-		Formula: "current assets / current liabilities",
-	},
-	{
-		Key: "debt_to_equity", Label: "Liabilities to equity", Numerator: "liabilities",
-		Denominator: "equity", Format: "multiple",
-		Formula: "liabilities / shareholders' equity",
-	},
-}
-
-func metricDefinitionForConcept(concept string) (metricDefinition, bool) {
-	for _, definition := range taxonomy {
-		if slices.Contains(definition.Concepts, concept) {
-			return definition, true
+//nolint:wsl_v5 // Loading and validating the registry is one boundary.
+func LoadTaxonomy(path string) (Taxonomy, error) {
+	data := defaultTaxonomyJSON
+	if strings.TrimSpace(path) != "" {
+		var err error
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return Taxonomy{}, fmt.Errorf("read taxonomy %s: %w", path, err)
 		}
 	}
 
-	return metricDefinition{Key: "", Label: "", Statement: "", Concepts: nil}, false
+	var taxonomy Taxonomy
+	if err := json.Unmarshal(data, &taxonomy); err != nil {
+		return Taxonomy{}, fmt.Errorf("decode taxonomy: %w", err)
+	}
+	if err := taxonomy.Validate(); err != nil {
+		return Taxonomy{}, fmt.Errorf("validate taxonomy: %w", err)
+	}
+
+	return taxonomy, nil
+}
+
+//nolint:wsl_v5 // Registry validation is intentionally explicit.
+func (t Taxonomy) Validate() error {
+	if t.SchemaVersion != 1 {
+		return fmt.Errorf("unsupported taxonomy schema %d", t.SchemaVersion)
+	}
+	if strings.TrimSpace(t.TaxonomyVersion) == "" {
+		return errors.New("taxonomy version is empty")
+	}
+	seen := make(map[string]struct{}, len(t.Metrics))
+	for _, metric := range t.Metrics {
+		if metric.Key == "" || metric.Label == "" || metric.Statement == "" {
+			return errors.New("metric has an empty key, label, or statement")
+		}
+		if _, ok := seen[metric.Key]; ok {
+			return fmt.Errorf("duplicate metric key %q", metric.Key)
+		}
+		seen[metric.Key] = struct{}{}
+		if len(metric.Concepts) == 0 {
+			return fmt.Errorf("metric %q has no concepts", metric.Key)
+		}
+		for _, concept := range metric.Concepts {
+			if concept.Name == "" {
+				return fmt.Errorf("metric %q has an empty concept name", metric.Key)
+			}
+		}
+	}
+
+	return nil
+}
+
+func defaultTaxonomy() Taxonomy {
+	taxonomy, err := LoadTaxonomy("")
+	if err != nil {
+		panic(err)
+	}
+
+	return taxonomy
+}
+
+func (t Taxonomy) metricForConcept(namespace, concept string) (MetricDefinition, bool) {
+	for _, definition := range t.Metrics {
+		for _, reference := range definition.Concepts {
+			if reference.Name == concept && namespaceMatches(reference.NamespaceFamily, namespace) {
+				return definition, true
+			}
+		}
+	}
+
+	return MetricDefinition{
+		Key: "", Label: "", Statement: "", Concepts: nil,
+	}, false
+}
+
+//nolint:wsl_v5 // Namespace matching keeps the small policy together.
+func namespaceMatches(family, namespace string) bool {
+	if family == "" || family == "any" {
+		return true
+	}
+	if family == "us-gaap" {
+		return strings.Contains(namespace, "/us-gaap/") ||
+			strings.Contains(namespace, "/us-gaap:")
+	}
+
+	return strings.Contains(namespace, family)
+}
+
+func (t Taxonomy) ratioDefinitions() []RatioDefinition {
+	return t.Ratios
 }

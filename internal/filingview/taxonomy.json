@@ -1,0 +1,260 @@
+{
+  "schema_version": 1,
+  "taxonomy_version": "local-2026-01",
+  "metrics": [
+    {
+      "key": "revenue",
+      "label": "Revenue",
+      "statement": "income",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
+          "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "Revenues",
+          "priority": 2
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "SalesRevenueNet",
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "key": "cost_of_revenue",
+      "label": "Cost of revenue",
+      "statement": "income",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "CostOfRevenue",
+          "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "CostOfGoodsAndServicesSold",
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "key": "gross_profit",
+      "label": "Gross profit",
+      "statement": "income",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "GrossProfit",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "operating_income",
+      "label": "Operating income",
+      "statement": "income",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "OperatingIncomeLoss",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "net_income",
+      "label": "Net income",
+      "statement": "income",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "NetIncomeLoss",
+          "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "ProfitLoss",
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "key": "eps_diluted",
+      "label": "Diluted EPS",
+      "statement": "income",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "EarningsPerShareDiluted",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "assets",
+      "label": "Assets",
+      "statement": "balance",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "Assets",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "current_assets",
+      "label": "Current assets",
+      "statement": "balance",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "AssetsCurrent",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "cash",
+      "label": "Cash and equivalents",
+      "statement": "balance",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "CashAndCashEquivalentsAtCarryingValue",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "liabilities",
+      "label": "Liabilities",
+      "statement": "balance",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "Liabilities",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "current_liabilities",
+      "label": "Current liabilities",
+      "statement": "balance",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "LiabilitiesCurrent",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "equity",
+      "label": "Shareholders' equity",
+      "statement": "balance",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "StockholdersEquity",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "operating_cash_flow",
+      "label": "Operating cash flow",
+      "statement": "cash_flow",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "NetCashProvidedByUsedInOperatingActivities",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "investing_cash_flow",
+      "label": "Investing cash flow",
+      "statement": "cash_flow",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "NetCashProvidedByUsedInInvestingActivities",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "financing_cash_flow",
+      "label": "Financing cash flow",
+      "statement": "cash_flow",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "NetCashProvidedByUsedInFinancingActivities",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "capital_expenditures",
+      "label": "Capital expenditures",
+      "statement": "cash_flow",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "PaymentsToAcquirePropertyPlantAndEquipment",
+          "priority": 1
+        }
+      ]
+    }
+  ],
+  "ratios": [
+    {
+      "key": "gross_margin",
+      "label": "Gross margin",
+      "numerator": "gross_profit",
+      "denominator": "revenue",
+      "format": "percent",
+      "formula": "gross profit / revenue"
+    },
+    {
+      "key": "operating_margin",
+      "label": "Operating margin",
+      "numerator": "operating_income",
+      "denominator": "revenue",
+      "format": "percent",
+      "formula": "operating income / revenue"
+    },
+    {
+      "key": "net_margin",
+      "label": "Net margin",
+      "numerator": "net_income",
+      "denominator": "revenue",
+      "format": "percent",
+      "formula": "net income / revenue"
+    },
+    {
+      "key": "current_ratio",
+      "label": "Current ratio",
+      "numerator": "current_assets",
+      "denominator": "current_liabilities",
+      "format": "multiple",
+      "formula": "current assets / current liabilities"
+    },
+    {
+      "key": "debt_to_equity",
+      "label": "Liabilities to equity",
+      "numerator": "liabilities",
+      "denominator": "equity",
+      "format": "multiple",
+      "formula": "liabilities / shareholders' equity"
+    }
+  ]
+}

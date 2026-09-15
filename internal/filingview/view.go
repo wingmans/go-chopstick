@@ -18,17 +18,18 @@ import (
 const SchemaVersion = 1
 
 type View struct {
-	SchemaVersion int                        `json:"schema_version"`
-	ParserVersion string                     `json:"parser_version"`
-	SourcePath    string                     `json:"source_path"`
-	SourceSHA256  string                     `json:"source_sha256"`
-	Metadata      Metadata                   `json:"metadata"`
-	Documents     []edgar.SubmissionDocument `json:"documents"`
-	Summary       []SummaryGroup             `json:"summary"`
-	Statements    Statements                 `json:"statements"`
-	Ratios        []RatioSeries              `json:"ratios"`
-	Counts        Counts                     `json:"counts"`
-	Diagnostics   []edgar.ParseDiagnostic    `json:"diagnostics"`
+	SchemaVersion   int                        `json:"schema_version"`
+	ParserVersion   string                     `json:"parser_version"`
+	TaxonomyVersion string                     `json:"taxonomy_version"`
+	SourcePath      string                     `json:"source_path"`
+	SourceSHA256    string                     `json:"source_sha256"`
+	Metadata        Metadata                   `json:"metadata"`
+	Documents       []edgar.SubmissionDocument `json:"documents"`
+	Summary         []SummaryGroup             `json:"summary"`
+	Statements      Statements                 `json:"statements"`
+	Ratios          []RatioSeries              `json:"ratios"`
+	Counts          Counts                     `json:"counts"`
+	Diagnostics     []edgar.ParseDiagnostic    `json:"diagnostics"`
 }
 
 type Metadata struct {
@@ -55,10 +56,12 @@ type SummaryGroup struct {
 }
 
 type FactSeries struct {
-	Label   string               `json:"label"`
-	Concept string               `json:"concept"`
-	Unit    string               `json:"unit"`
-	Values  map[string]FactValue `json:"values"`
+	Key       string               `json:"key,omitempty"`
+	Label     string               `json:"label"`
+	Namespace string               `json:"namespace,omitempty"`
+	Concept   string               `json:"concept"`
+	Unit      string               `json:"unit"`
+	Values    map[string]FactValue `json:"values"`
 }
 
 type FactValue struct {
@@ -105,12 +108,14 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 	}
 
 	statements, ratios := buildStatements(filing)
+	taxonomy := defaultTaxonomy()
 
 	return View{
-		SchemaVersion: SchemaVersion,
-		ParserVersion: filing.ParserVersion,
-		SourcePath:    filing.SourcePath,
-		SourceSHA256:  filing.SourceSHA256,
+		SchemaVersion:   SchemaVersion,
+		ParserVersion:   filing.ParserVersion,
+		TaxonomyVersion: taxonomy.TaxonomyVersion,
+		SourcePath:      filing.SourcePath,
+		SourceSHA256:    filing.SourceSHA256,
 		Metadata: Metadata{
 			Accession: filing.Metadata.Accession, CIK: filing.Metadata.CIK,
 			FormType: filing.Metadata.FormType, FilingDate: filing.Metadata.FilingDate,
@@ -196,6 +201,7 @@ func Load(path string) (View, error) {
 }
 
 func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
+	taxonomy := defaultTaxonomy()
 	periodsByGroup := map[string]map[string]string{}
 	seriesByGroup := map[string]map[string]*FactSeries{}
 
@@ -208,7 +214,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 		}
 
 		for _, fact := range instance.Facts {
-			label, ok := summaryConceptLabel(fact.Concept.Local)
+			definition, ok := taxonomy.metricForConcept(fact.Concept.Namespace, fact.Concept.Local)
 			if !ok {
 				continue
 			}
@@ -228,7 +234,11 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 			}
 			row := seriesByGroup[group][key]
 			if row == nil {
-				row = &FactSeries{Label: label, Concept: fact.Concept.Local, Unit: fact.UnitRef, Values: map[string]FactValue{}}
+				row = &FactSeries{
+					Key: definition.Key, Label: definition.Label,
+					Namespace: fact.Concept.Namespace, Concept: fact.Concept.Local,
+					Unit: fact.UnitRef, Values: map[string]FactValue{},
+				}
 				seriesByGroup[group][key] = row
 			}
 			periodsByGroup[group][periodKey] = periodLabel
@@ -320,19 +330,4 @@ func parseDate(value string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("invalid date %q", value)
-}
-
-func summaryConceptLabel(local string) (string, bool) {
-	labels := map[string]string{
-		"Assets": "Assets", "CashAndCashEquivalentsAtCarryingValue": "Cash and equivalents",
-		"GrossProfit": "Gross profit", "Liabilities": "Liabilities",
-		"LiabilitiesAndStockholdersEquity": "Liabilities and equity",
-		"NetIncomeLoss":                    "Net income", "OperatingIncomeLoss": "Operating income",
-		"ProfitLoss": "Profit or loss", "Revenues": "Revenue",
-		"RevenueFromContractWithCustomerExcludingAssessedTax": "Revenue",
-		"SalesRevenueNet": "Revenue", "StockholdersEquity": "Shareholders' equity",
-	}
-	label, ok := labels[local]
-
-	return label, ok
 }

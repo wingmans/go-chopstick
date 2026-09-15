@@ -14,6 +14,7 @@ type statementAccumulator struct {
 }
 
 func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
+	taxonomy := defaultTaxonomy()
 	accumulators := map[string]*statementAccumulator{
 		"income":    {Rows: map[string]map[string]*FactSeries{}},
 		"balance":   {Rows: map[string]map[string]*FactSeries{}},
@@ -29,7 +30,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 		}
 
 		for _, fact := range instance.Facts {
-			definition, ok := metricDefinitionForConcept(fact.Concept.Local)
+			definition, ok := taxonomy.metricForConcept(fact.Concept.Namespace, fact.Concept.Local)
 			if !ok {
 				continue
 			}
@@ -49,7 +50,11 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 			key := definition.Key + "\x00" + fact.UnitRef
 			row := accumulator.Rows[group][key]
 			if row == nil {
-				row = &FactSeries{Label: definition.Label, Concept: fact.Concept.Local, Unit: fact.UnitRef, Values: map[string]FactValue{}}
+				row = &FactSeries{
+					Key: definition.Key, Label: definition.Label,
+					Namespace: fact.Concept.Namespace, Concept: fact.Concept.Local,
+					Unit: fact.UnitRef, Values: map[string]FactValue{},
+				}
 				accumulator.Rows[group][key] = row
 			}
 			row.Values[periodKey] = FactValue{
@@ -68,7 +73,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 		CashFlow: StatementView{Title: "Cash flow", Groups: statementGroups(accumulators["cash_flow"])},
 	}
 
-	return statements, buildRatios(accumulators)
+	return statements, buildRatios(accumulators, taxonomy)
 }
 
 func statementPeriod(statement, group string) bool {
@@ -107,9 +112,9 @@ func statementGroups(accumulator *statementAccumulator) []SummaryGroup {
 	return groups
 }
 
-func buildRatios(accumulators map[string]*statementAccumulator) []RatioSeries {
-	result := make([]RatioSeries, 0, len(ratios))
-	for _, definition := range ratios {
+func buildRatios(accumulators map[string]*statementAccumulator, taxonomy Taxonomy) []RatioSeries {
+	result := make([]RatioSeries, 0, len(taxonomy.ratioDefinitions()))
+	for _, definition := range taxonomy.ratioDefinitions() {
 		statement := "income"
 		if definition.Key == "current_ratio" || definition.Key == "debt_to_equity" {
 			statement = "balance"
@@ -127,7 +132,7 @@ func buildRatios(accumulators map[string]*statementAccumulator) []RatioSeries {
 	return result
 }
 
-func ratioValues(accumulator *statementAccumulator, definition ratioDefinition) map[string]string {
+func ratioValues(accumulator *statementAccumulator, definition RatioDefinition) map[string]string {
 	result := map[string]string{}
 	for group, rows := range accumulator.Rows {
 		for key, numerator := range rows {

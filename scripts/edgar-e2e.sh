@@ -30,7 +30,8 @@ echo "Downloading 2026 filings for set $SET_NAME"
 "$CLI_PATH" filings \
   --set "$SET_NAME" \
   --year 2026 \
-  --form-type 10-K \
+  --form-type 10-K 
+  
   # --form-type 10-Q \
   # --form-type 8-K
 
