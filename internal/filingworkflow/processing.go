@@ -12,6 +12,7 @@ import (
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/filingview"
 )
 
 const (
@@ -36,6 +37,8 @@ type ProcessingResult struct {
 
 // ProcessSubmission is shared by the local command and the download workflow.
 // Noop checks existing results but never parses or persists a stale result.
+//
+//nolint:nestif // Cache validation and no-op handling are one workflow boundary.
 func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (ProcessingResult, error) {
 	var result ProcessingResult
 
@@ -66,6 +69,13 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 		if reusable {
 			result.Action, result.Filing = ActionReused, &cached
+
+			if !cfg.Noop {
+				if _, err := filingview.Save(cfg.Directory, &cached); err != nil {
+					return result, err
+				}
+			}
+
 			logProcessing(ctx, path, result, cfg, started)
 
 			return result, extractionFailure(&cached)
@@ -94,6 +104,10 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 	result.Path, err = edgar.SaveParsedFiling(cfg.Directory, result.Filing)
 	if err != nil {
+		return result, err
+	}
+
+	if _, err := filingview.Save(cfg.Directory, result.Filing); err != nil {
 		return result, err
 	}
 

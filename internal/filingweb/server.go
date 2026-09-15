@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/filingview"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
@@ -124,7 +125,7 @@ func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
 func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/filings/"), "/")
 
-	filing, err := s.loadFiling(parts)
+	view, err := s.loadView(parts)
 	if errors.Is(err, os.ErrNotExist) {
 		http.NotFound(w, r)
 
@@ -137,23 +138,30 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := detailData{
-		Filing: filing, Facts: []factRow{}, DocumentCount: len(filing.Documents),
-		InstanceCount: len(filing.Instances), ContextCount: 0,
-		Summary: []summaryGroup{},
+	filing := &edgar.ParsedFiling{
+		SchemaVersion: edgar.ParsedSchemaVersion,
+		ParserVersion: view.ParserVersion,
+		SourcePath:    view.SourcePath,
+		SourceBase:    "",
+		SourceSHA256:  view.SourceSHA256,
+		Metadata: edgar.FilingMetadata{
+			Accession: view.Metadata.Accession, CIK: view.Metadata.CIK,
+			FormType: view.Metadata.FormType, FilingDate: view.Metadata.FilingDate,
+			ReportDate: view.Metadata.ReportDate,
+			Filers:     []edgar.SubmissionFiler{{CIK: view.Metadata.CIK, Name: view.Metadata.Company, Header: []string{}}},
+			Items:      []string{}, Header: []string{},
+		},
+		Documents: view.Documents, Instances: []edgar.XBRLInstance{},
+		Diagnostics: []edgar.ParseDiagnostic{}, Status: view.Counts.Status,
 	}
-
-	data.Summary = financialSummary(filing)
-	for _, instance := range filing.Instances {
-		data.ContextCount += len(instance.Contexts)
-		for _, fact := range instance.Facts {
-			period, dimensions := contextDetails(instance.Contexts, fact.ContextRef)
-			data.Facts = append(data.Facts, factRow{
-				Concept: conceptLabel(fact.Concept.Local), Value: fact.Value, Context: fact.ContextRef,
-				Unit: fact.UnitRef, Decimals: fact.Decimals, Nil: fact.Nil,
-				Period: period, Dimensions: dimensions,
-			})
-		}
+	data := detailData{
+		Filing: filing, Summary: view.Summary,
+		Statements: []filingview.StatementView{
+			view.Statements.Income, view.Statements.Balance, view.Statements.CashFlow,
+		},
+		Ratios: view.Ratios, Facts: view.Counts.Facts,
+		DocumentCount: view.Counts.Documents, InstanceCount: view.Counts.Instances,
+		ContextCount: view.Counts.Contexts, Diagnostics: len(view.Diagnostics),
 	}
 
 	if err := s.template.ExecuteTemplate(w, "detail.html", data); err != nil {
@@ -163,180 +171,14 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 
 type detailData struct {
 	Filing        *edgar.ParsedFiling
-	Summary       []summaryGroup
-	Facts         []factRow
+	Summary       []filingview.SummaryGroup
+	Statements    []filingview.StatementView
+	Ratios        []filingview.RatioSeries
+	Facts         int
 	DocumentCount int
 	InstanceCount int
 	ContextCount  int
-}
-
-type summaryGroup struct {
-	Title   string
-	Periods []string
-	Rows    []factSeries
-}
-
-type factSeries struct {
-	Label   string
-	Concept string
-	Unit    string
-	Values  map[string]factValue
-}
-
-type factValue struct {
-	Value string
-	Nil   bool
-}
-
-func financialSummary(filing *edgar.ParsedFiling) []summaryGroup {
-	groupPeriods := map[string]map[string]string{}
-	groupSeries := map[string]map[string]*factSeries{}
-
-	for _, instance := range filing.Instances {
-		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
-		for _, context := range instance.Contexts {
-			if len(context.Dimensions) == 0 {
-				contexts[context.ID] = context
-			}
-		}
-
-		for _, fact := range instance.Facts {
-			if _, ok := summaryConceptLabel(fact.Concept.Local); !ok {
-				continue
-			}
-
-			context, ok := contexts[fact.ContextRef]
-			if !ok {
-				continue
-			}
-
-			group, periodKey, periodLabel := classifyPeriod(context, filing.Metadata.ReportDate)
-			if group == "" {
-				continue
-			}
-
-			key := fact.Concept.Namespace + "\x00" + fact.Concept.Local + "\x00" + fact.UnitRef
-
-			if groupPeriods[group] == nil {
-				groupPeriods[group] = map[string]string{}
-				groupSeries[group] = map[string]*factSeries{}
-			}
-
-			row, ok := groupSeries[group][key]
-			if !ok {
-				row = &factSeries{
-					Label:   conceptLabel(fact.Concept.Local),
-					Concept: fact.Concept.Local,
-					Unit:    fact.UnitRef,
-					Values:  map[string]factValue{},
-				}
-				groupSeries[group][key] = row
-			}
-
-			groupPeriods[group][periodKey] = periodLabel
-			row.Values[periodKey] = factValue{Value: fact.Value, Nil: fact.Nil}
-		}
-	}
-
-	order := []string{"Fiscal year", "Quarterly", "Year to date", "Instant"}
-	groups := make([]summaryGroup, 0, len(groupPeriods))
-
-	for _, title := range order {
-		periods, ok := groupPeriods[title]
-		if !ok {
-			continue
-		}
-
-		periodKeys := make([]string, 0, len(periods))
-		for key := range periods {
-			periodKeys = append(periodKeys, key)
-		}
-
-		sort.Sort(sort.Reverse(sort.StringSlice(periodKeys)))
-
-		rows := make([]factSeries, 0, len(groupSeries[title]))
-		for _, row := range groupSeries[title] {
-			rows = append(rows, *row)
-		}
-
-		sort.Slice(rows, func(i, j int) bool {
-			if rows[i].Label != rows[j].Label {
-				return rows[i].Label < rows[j].Label
-			}
-
-			return rows[i].Unit < rows[j].Unit
-		})
-
-		groups = append(groups, summaryGroup{Title: title, Periods: periodKeys, Rows: rows})
-	}
-
-	return groups
-}
-
-func classifyPeriod(context edgar.FactContext, reportDate string) (string, string, string) {
-	if context.Instant != "" {
-		label := displayDate(context.Instant)
-
-		return "Instant", label, label
-	}
-
-	start, startErr := parseDate(context.StartDate)
-
-	end, endErr := parseDate(context.EndDate)
-	if startErr != nil || endErr != nil || start.After(end) {
-		return "", "", ""
-	}
-
-	fiscalEnd, err := parseDate(reportDate)
-	if err != nil {
-		fiscalEnd = end
-	}
-
-	months := (end.Year()-start.Year())*12 + int(end.Month()) - int(start.Month()) + 1
-	fiscalYear := end.Year()
-
-	if months >= 10 {
-		label := fmt.Sprintf("FY%d", fiscalYear)
-
-		return "Fiscal year", label, label
-	}
-
-	if months == 3 {
-		fiscalStartMonth := fiscalEnd.Month()%12 + 1
-		quarter := (int(start.Month())-int(fiscalStartMonth)+12)%12/3 + 1
-		label := fmt.Sprintf("Q%d FY%d", quarter, fiscalYear)
-
-		return "Quarterly", label, label
-	}
-
-	if months > 3 {
-		label := fmt.Sprintf("YTD FY%d", fiscalYear)
-
-		return "Year to date", label, label
-	}
-
-	return "", "", ""
-}
-
-func displayDate(value string) string {
-	for _, layout := range []string{"2006-01-02", "20060102"} {
-		date, err := time.Parse(layout, value)
-		if err == nil {
-			return date.Format("2006-01-02")
-		}
-	}
-
-	return value
-}
-
-func parseDate(value string) (time.Time, error) {
-	for _, layout := range []string{"2006-01-02", "20060102"} {
-		if date, err := time.Parse(layout, value); err == nil {
-			return date, nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("invalid date %q", value)
+	Diagnostics   int
 }
 
 func (s *Server) document(w http.ResponseWriter, r *http.Request) {
@@ -416,32 +258,22 @@ func (s *Server) sourcePath(filing *edgar.ParsedFiling) (string, error) {
 	return source, nil
 }
 
-type factRow struct {
-	Concept    string
-	Value      string
-	Context    string
-	Unit       string
-	Decimals   string
-	Nil        bool
-	Period     string
-	Dimensions int
-}
-
-func contextDetails(contexts []edgar.FactContext, id string) (string, int) {
-	for _, context := range contexts {
-		if context.ID != id {
-			continue
-		}
-
-		period := context.Instant
-		if period == "" && (context.StartDate != "" || context.EndDate != "") {
-			period = context.StartDate + " to " + context.EndDate
-		}
-
-		return period, len(context.Dimensions)
+func (s *Server) loadView(parts []string) (filingview.View, error) {
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return filingview.View{}, os.ErrNotExist
 	}
 
-	return "", 0
+	cik := canonicalCIK(parts[0])
+	if cik == "" {
+		return filingview.View{}, os.ErrNotExist
+	}
+
+	path := filepath.Join(s.parsedDir, cik, parts[1], "filing-view.json")
+	if !withinDirectory(s.parsedDir, path) {
+		return filingview.View{}, os.ErrNotExist
+	}
+
+	return filingview.Load(path)
 }
 
 func (s *Server) loadFiling(parts []string) (*edgar.ParsedFiling, error) {
@@ -472,35 +304,25 @@ func (s *Server) loadSummaries() ([]filingSummary, error) {
 			return err
 		}
 
-		if info.IsDir() || info.Name() != "filing.json" {
+		if info.IsDir() || info.Name() != "filing-view.json" {
 			return nil
 		}
 
-		filing, err := edgar.LoadParsedFiling(path)
+		view, err := filingview.Load(path)
 		if err != nil {
 			return fmt.Errorf("load %s: %w", path, err)
 		}
 
-		company := ""
-		if len(filing.Metadata.Filers) > 0 {
-			company = filing.Metadata.Filers[0].Name
-		}
-
-		facts := 0
-		for _, instance := range filing.Instances {
-			facts += len(instance.Facts)
-		}
-
 		result = append(result,
 			filingSummary{
-				CIK:        filing.Metadata.CIK,
-				Company:    company,
-				Accession:  filing.Metadata.Accession,
-				FormType:   filing.Metadata.FormType,
-				FilingDate: filing.Metadata.FilingDate,
-				ReportDate: filing.Metadata.ReportDate,
-				Status:     filing.Status,
-				Facts:      facts,
+				CIK:        view.Metadata.CIK,
+				Company:    view.Metadata.Company,
+				Accession:  view.Metadata.Accession,
+				FormType:   view.Metadata.FormType,
+				FilingDate: view.Metadata.FilingDate,
+				ReportDate: view.Metadata.ReportDate,
+				Status:     view.Counts.Status,
+				Facts:      view.Counts.Facts,
 			})
 
 		return nil
