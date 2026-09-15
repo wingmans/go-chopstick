@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingworkflow"
 )
@@ -85,9 +86,22 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 }
 
 func runParse(ctx context.Context, cfg appConfig) error {
+	logger := ctxlog.FromContext(ctx)
+	logger.Info("starting EDGAR parse workflow",
+		"master", cfg.parse.masterPath,
+		"cik", cfg.parse.filter.CIK,
+		"set", cfg.parse.setName,
+		"set_members", len(cfg.parse.filter.CIKs),
+		"form_types", cfg.parse.filter.FormTypes,
+		"year", cfg.parse.filter.Year,
+		"noop", cfg.parse.noop,
+		"reprocess", cfg.parse.reprocess,
+	)
+
 	processing := filingworkflow.ProcessingConfig{
 		Directory:        edgar.DefaultParsedDirectory,
 		FilingsDirectory: edgar.DefaultFilingsDirectory,
+		FormType:         "",
 		Reprocess:        cfg.parse.reprocess,
 		Noop:             cfg.parse.noop,
 	}

@@ -23,6 +23,7 @@ const (
 type ProcessingConfig struct {
 	Directory        string
 	FilingsDirectory string
+	FormType         string
 	Reprocess        bool
 	Noop             bool
 }
@@ -65,7 +66,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 		if reusable {
 			result.Action, result.Filing = ActionReused, &cached
-			logProcessing(ctx, path, result, cfg.Noop, started)
+			logProcessing(ctx, path, result, cfg, started)
 
 			return result, extractionFailure(&cached)
 		}
@@ -73,7 +74,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 	if cfg.Noop {
 		result.Action = ActionPlanned
-		logProcessing(ctx, path, result, true, started)
+		logProcessing(ctx, path, result, cfg, started)
 
 		return result, nil
 	}
@@ -97,7 +98,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	}
 
 	result.Action = ActionProcessed
-	logProcessing(ctx, path, result, false, started)
+	logProcessing(ctx, path, result, cfg, started)
 
 	return result, extractionFailure(result.Filing)
 }
@@ -182,11 +183,11 @@ func extractionFailure(filing *edgar.ParsedFiling) error {
 	return nil
 }
 
-func logProcessing(ctx context.Context, source string, result ProcessingResult, noop bool, started time.Time) {
+func logProcessing(ctx context.Context, source string, result ProcessingResult, cfg ProcessingConfig, started time.Time) {
 	logger := ctxlog.FromContext(ctx)
 
 	level := slog.LevelDebug
-	if noop {
+	if cfg.Noop {
 		level = slog.LevelInfo
 	}
 
@@ -197,7 +198,8 @@ func logProcessing(ctx context.Context, source string, result ProcessingResult, 
 
 	logger.Log(ctx, level, "EDGAR processing decision", "source", location, "path", source,
 		"filename", filepath.Base(source), "parsed_path", result.Path, "action", result.Action,
-		"noop", noop, "duration_ms", time.Since(started).Milliseconds())
+		"form_type", cfg.FormType,
+		"noop", cfg.Noop, "duration_ms", time.Since(started).Milliseconds())
 
 	if result.Filing == nil {
 		return

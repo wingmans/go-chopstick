@@ -1,0 +1,32 @@
+{
+  "name": "golden",
+  "as_of": "2026-09-14",
+  "source": "golden fixture",
+  "members": [
+    {
+      "cik": "0000320193",
+      "ticker": "AAPL",
+      "name": "Apple Inc."
+    },
+    {
+      "cik": "0001018724",
+      "ticker": "AMZN",
+      "name": "Amazon.com, Inc."
+    },
+    {
+      "cik": "0001067983",
+      "ticker": "BRK-B",
+      "name": "Berkshire Hathaway Inc."
+    },
+    {
+      "cik": "0000789019",
+      "ticker": "MSFT",
+      "name": "Microsoft Corporation"
+    },
+    {
+      "cik": "0001045810",
+      "ticker": "NVDA",
+      "name": "NVIDIA Corporation"
+    }
+  ]
+}

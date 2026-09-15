@@ -22,7 +22,10 @@ func workflowConfig(t *testing.T) (FilingDownloadConfig, ProcessingConfig) {
 			Directory: filepath.Join(root, "filings"),
 			UserAgent: "Test test@example.com", BaseURL: "https://example.test", Noop: false,
 		},
-		ProcessingConfig{Directory: filepath.Join(root, "parsed"), FilingsDirectory: filepath.Join(root, "filings"), Reprocess: false, Noop: false}
+		ProcessingConfig{
+			Directory: filepath.Join(root, "parsed"), FilingsDirectory: filepath.Join(root, "filings"),
+			FormType: "", Reprocess: false, Noop: false,
+		}
 }
 
 func TestFilingWorkflowDownloadsFiltersAndReuses(t *testing.T) {
@@ -176,7 +179,7 @@ func TestProcessLocalFilingsProcessesAvailableUnprocessedRecords(t *testing.T) {
 
 	master := writeSubmission(t, "123|Example|10-K|2024-01-01|edgar/data/123/submission.txt\n"+
 		"123|Example|10-Q|2024-01-01|missing.txt\n")
-	processing := ProcessingConfig{Directory: parsed, FilingsDirectory: filings, Reprocess: false, Noop: false}
+	processing := ProcessingConfig{Directory: parsed, FilingsDirectory: filings, FormType: "", Reprocess: false, Noop: false}
 	filter := IndexFilter{CIK: "123", CIKs: nil, FormTypes: nil, Year: 2024}
 
 	first, err := ProcessLocalFilings(t.Context(), master, filings, processing, filter)

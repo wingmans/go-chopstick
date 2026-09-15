@@ -14,7 +14,10 @@ import (
 func processingConfig(t *testing.T) ProcessingConfig {
 	t.Helper()
 
-	return ProcessingConfig{Directory: filepath.Join(t.TempDir(), "parsed"), FilingsDirectory: "", Reprocess: false, Noop: false}
+	return ProcessingConfig{
+		Directory: filepath.Join(t.TempDir(), "parsed"), FilingsDirectory: "",
+		FormType: "", Reprocess: false, Noop: false,
+	}
 }
 
 func TestProcessingReuseAndForce(t *testing.T) {

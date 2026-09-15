@@ -151,6 +151,7 @@ func run(ctx context.Context, args []string) error {
 			"directory", cfg.filings.config.Directory,
 			"cik", cfg.filings.filter.CIK,
 			"set", cfg.filings.setName,
+			"set_members", len(cfg.filings.filter.CIKs),
 			"form_types", cfg.filings.filter.FormTypes,
 			"year", cfg.filings.filter.Year,
 			"noop", cfg.filings.config.Noop,
@@ -160,6 +161,7 @@ func run(ctx context.Context, args []string) error {
 		_, err := filingworkflow.ProcessFilings(ctx, client, cfg.filings.masterPath, cfg.filings.config, filingworkflow.ProcessingConfig{
 			Directory:        edgar.DefaultParsedDirectory,
 			FilingsDirectory: cfg.filings.config.Directory,
+			FormType:         "",
 			Reprocess:        cfg.filings.reprocess,
 			Noop:             cfg.filings.config.Noop,
 		}, cfg.filings.filter)

@@ -54,7 +54,16 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 			return summary, err
 		}
 
-		result, err := processIndexRecord(ctx, client, download, processing, record)
+		ctxlog.FromContext(ctx).Debug("selected EDGAR filing",
+			"cik", record.CIK,
+			"form_type", record.FormType,
+			"date_filed", record.DateFiled.Format("2006-01-02"),
+			"path", record.FilingPath,
+		)
+
+		recordProcessing := processing
+		recordProcessing.FormType = record.FormType
+		result, err := processIndexRecord(ctx, client, download, recordProcessing, record)
 		summary.record(ctx, record.FilingPath, result, err)
 
 		if err := ctx.Err(); err != nil {
@@ -98,6 +107,13 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 			return summary, err
 		}
 
+		ctxlog.FromContext(ctx).Debug("selected local EDGAR filing",
+			"cik", record.CIK,
+			"form_type", record.FormType,
+			"date_filed", record.DateFiled.Format("2006-01-02"),
+			"path", record.FilingPath,
+		)
+
 		path, err := edgar.LocalFilingPath(directory, record.FilingPath)
 		if err != nil {
 			return summary, err
@@ -137,7 +153,9 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 			}
 		}
 
-		result, err := ProcessSubmission(ctx, path, processing)
+		recordProcessing := processing
+		recordProcessing.FormType = record.FormType
+		result, err := ProcessSubmission(ctx, path, recordProcessing)
 		summary.record(ctx, record.FilingPath, result, err)
 	}
 
@@ -170,6 +188,7 @@ func processIndexRecord(ctx context.Context, client *http.Client, download edgar
 			result.Action = ActionPlanned
 			ctxlog.FromContext(ctx).Info("would process after downloading or normalizing source",
 				"path", record.FilingPath, "filename", filepath.Base(path), "action", result.Action,
+				"form_type", processing.FormType,
 				"duration_ms", time.Since(started).Milliseconds())
 
 			return result, nil

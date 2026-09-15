@@ -146,6 +146,7 @@ func TestIndexReaderFiltersByCIKSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Next returned error: %v", err)
 	}
+
 	if record.CIK != "320193" {
 		t.Fatalf("got CIK %s, want 320193", record.CIK)
 	}
