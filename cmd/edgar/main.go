@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -58,8 +59,14 @@ type appConfig struct {
 		parsedDir string
 	}
 	taxonomy struct {
-		file     string
-		taxonomy string
+		operation string
+		file      string
+		taxonomy  string
+		parsedDir string
+		filter    edgar.IndexFilter
+		formTypes stringList
+		setName   string
+		year      string
 	}
 }
 
@@ -177,7 +184,8 @@ func run(ctx context.Context, args []string) error {
 
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir)
 	case "taxonomy":
-		commandErr = runTaxonomyLint(cfg.taxonomy.file, cfg.taxonomy.taxonomy)
+		commandErr = runTaxonomyCommand(cfg.taxonomy.operation, cfg.taxonomy.file,
+			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter)
 	default:
 		printUsage()
 
@@ -254,43 +262,188 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	flags := flag.NewFlagSet("taxonomy", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
-		printSubcommandHelp("taxonomy lint", "Inspect a compact filing view against the taxonomy.", []helpOption{
-			{"-f, --file <path>", "Compact filing-view.json to inspect."},
+		printSubcommandHelp("taxonomy <lint|coverage>", "Inspect local filing data against the taxonomy.", []helpOption{
+			{"-i, --file <path>", "Inspect one filing-view.json or filing.json."},
+			{"-c, --cik <cik>", "Select locally parsed filings for this CIK."},
+			{"-s, --set <name>", "Select current members from data/sets/<name>.json."},
+			{"-f, --form-type <type>", "Select this form type; may be repeated."},
+			{"-y, --year <year>", "Select filings filed in this year."},
+			{"-d, --parsed-dir <path>", "Parsed filing directory; default ./data/parsed."},
 			{"-t, --taxonomy <path>", "Use a taxonomy JSON file instead of the embedded default."},
 			{"-h, --help", "Show command help."},
 		})
 	}
-	flags.StringVar(&cfg.taxonomy.file, "f", "", "compact filing-view.json to inspect")
-	flags.StringVar(&cfg.taxonomy.file, "file", "", "compact filing-view.json to inspect")
+	cfg.taxonomy.parsedDir = edgar.DefaultParsedDirectory
+	flags.StringVar(&cfg.taxonomy.file, "i", "", "lint one compact filing-view.json")
+	flags.StringVar(&cfg.taxonomy.file, "file", "", "lint one compact filing-view.json")
+	flags.StringVar(&cfg.taxonomy.filter.CIK, "c", "", "select locally parsed filings for this CIK")
+	flags.StringVar(&cfg.taxonomy.filter.CIK, "cik", "", "select locally parsed filings for this CIK")
+	flags.StringVar(&cfg.taxonomy.setName, "s", "", "select current members from a constituent set")
+	flags.StringVar(&cfg.taxonomy.setName, "set", "", "select current members from a constituent set")
+	flags.Var(&cfg.taxonomy.formTypes, "f", "select this form type; may be repeated")
+	flags.Var(&cfg.taxonomy.formTypes, "form-type", "select this form type; may be repeated")
+	flags.StringVar(&cfg.taxonomy.year, "y", "", "select filings filed in this year")
+	flags.StringVar(&cfg.taxonomy.year, "year", "", "select filings filed in this year")
+	flags.StringVar(&cfg.taxonomy.parsedDir, "d", cfg.taxonomy.parsedDir, "parsed filing directory")
+	flags.StringVar(&cfg.taxonomy.parsedDir, "parsed-dir", cfg.taxonomy.parsedDir, "parsed filing directory")
 	flags.StringVar(&cfg.taxonomy.taxonomy, "t", "", "taxonomy JSON file")
 	flags.StringVar(&cfg.taxonomy.taxonomy, "taxonomy", "", "taxonomy JSON file")
-	if err := flags.Parse(args); err != nil {
+	if len(args) == 0 || (args[0] != "lint" && args[0] != "coverage") {
+		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
+	}
+	cfg.taxonomy.operation = args[0]
+	if err := flags.Parse(args[1:]); err != nil {
 		return appConfig{}, flag.ErrHelp
 	}
-	if flags.NArg() != 1 || flags.Arg(0) != "lint" {
-		return subcommandError(flags, errors.New("use 'edgar taxonomy lint --file <path>'"))
+	if flags.NArg() != 0 {
+		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
 	}
-	if strings.TrimSpace(cfg.taxonomy.file) == "" {
-		return subcommandError(flags, errors.New("--file is required"))
+	if strings.TrimSpace(cfg.taxonomy.file) != "" &&
+		(cfg.taxonomy.filter.CIK != "" || cfg.taxonomy.setName != "" ||
+			len(cfg.taxonomy.formTypes) > 0 || strings.TrimSpace(cfg.taxonomy.year) != "") {
+		return subcommandError(flags, errors.New("--file cannot be combined with filters"))
+	}
+	if cfg.taxonomy.parsedDir == "" {
+		return subcommandError(flags, errors.New("--parsed-dir cannot be empty"))
+	}
+	cfg.taxonomy.filter.FormTypes = cfg.taxonomy.formTypes
+	if err := applyConstituentSet(&cfg.taxonomy.filter, cfg.taxonomy.setName); err != nil {
+		return subcommandError(flags, err)
+	}
+	if strings.TrimSpace(cfg.taxonomy.year) != "" {
+		parsedYear, err := strconv.Atoi(strings.TrimSpace(cfg.taxonomy.year))
+		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
+			return subcommandError(flags, errors.New("--year must be a four-digit year"))
+		}
+		cfg.taxonomy.filter.Year = parsedYear
 	}
 
 	return cfg, nil
 }
 
 //nolint:wsl_v5 // Loading, linting, and reporting form one boundary operation.
-func runTaxonomyLint(path, taxonomyPath string) error {
-	view, err := filingview.Load(path)
-	if err != nil {
-		return fmt.Errorf("load filing view: %w", err)
-	}
+func runTaxonomyCommand(operation, path, taxonomyPath, parsedDir string, filter edgar.IndexFilter) error {
 	taxonomy, err := filingview.LoadTaxonomy(taxonomyPath)
 	if err != nil {
 		return err
 	}
+	paths := []string{path}
+	if path == "" {
+		if operation == "coverage" {
+			paths, err = parsedFilingPaths(parsedDir, filter)
+		} else {
+			paths, err = filingViewPaths(parsedDir, filter)
+		}
+		if err != nil {
+			return err
+		}
+	}
 
-	_, err = fmt.Fprintln(os.Stdout, filingview.LintView(view, taxonomy))
+	failed := 0
+	findings := 0
+	for _, filingPath := range paths {
+		if operation == "coverage" {
+			filing, loadErr := edgar.LoadParsedFiling(filingPath)
+			if loadErr != nil {
+				fmt.Fprintf(os.Stdout, "%s error=%v\n", filingPath, loadErr)
+				failed++
 
-	return err
+				continue
+			}
+			report := filingview.Coverage(filing, taxonomy)
+			findings += len(report.Unmapped)
+			fmt.Fprintf(os.Stdout, "%s cik=%s form=%s %s\n", filingPath,
+				filing.Metadata.CIK, filing.Metadata.FormType, report)
+
+			continue
+		}
+		view, loadErr := filingview.Load(filingPath)
+		if loadErr != nil {
+			fmt.Fprintf(os.Stdout, "%s error=%v\n", filingPath, loadErr)
+			failed++
+
+			continue
+		}
+		report := filingview.LintView(view, taxonomy)
+		findings += len(report.Unmapped)
+		fmt.Fprintf(os.Stdout, "%s cik=%s form=%s %s\n", filingPath,
+			view.Metadata.CIK, view.Metadata.FormType, report)
+	}
+	fmt.Fprintf(os.Stdout, "taxonomy %s summary selected=%d findings=%d failed=%d\n",
+		operation, len(paths), findings, failed)
+	if failed > 0 {
+		return fmt.Errorf("%d filing view(s) failed linting", failed)
+	}
+
+	return nil
+}
+
+//nolint:wsl_v5 // Filesystem traversal keeps filtering and collection together.
+func filingViewPaths(directory string, filter edgar.IndexFilter) ([]string, error) {
+	paths := []string{}
+	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() != "filing-view.json" {
+			return nil
+		}
+		view, err := filingview.Load(path)
+		if err != nil {
+			return fmt.Errorf("inspect %s: %w", path, err)
+		}
+		dateFiled, _ := time.Parse("2006-01-02", view.Metadata.FilingDate)
+		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
+			CIK: view.Metadata.CIK, CompanyName: view.Metadata.Company,
+			FormType: view.Metadata.FormType, DateFiled: dateFiled,
+			FilingPath: "local", IndexPath: "",
+		}, filter) {
+			return nil
+		}
+		paths = append(paths, path)
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan parsed directory: %w", err)
+	}
+	sort.Strings(paths)
+
+	return paths, nil
+}
+
+//nolint:wsl_v5 // Parsed-file traversal mirrors filing-view traversal.
+func parsedFilingPaths(directory string, filter edgar.IndexFilter) ([]string, error) {
+	paths := []string{}
+	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() != "filing.json" {
+			return nil
+		}
+		filing, err := edgar.LoadParsedFiling(path)
+		if err != nil {
+			return fmt.Errorf("inspect %s: %w", path, err)
+		}
+		dateFiled, _ := time.Parse("2006-01-02", filing.Metadata.FilingDate)
+		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
+			CIK: filing.Metadata.CIK, CompanyName: "",
+			FormType: filing.Metadata.FormType, DateFiled: dateFiled,
+			FilingPath: "local", IndexPath: "",
+		}, filter) {
+			return nil
+		}
+		paths = append(paths, path)
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan parsed directory: %w", err)
+	}
+	sort.Strings(paths)
+
+	return paths, nil
 }
 
 func parseDownloadIndexConfig(args []string) (appConfig, error) {

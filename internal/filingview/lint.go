@@ -18,6 +18,7 @@ type LintReport struct {
 	Rows            int        `json:"rows"`
 	Mapped          int        `json:"mapped"`
 	Unmapped        []LintTerm `json:"unmapped"`
+	QualityIssues   []string   `json:"quality_issues"`
 }
 
 // LintView checks the compact model against the taxonomy. Unmapped terms are
@@ -27,6 +28,8 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 	rows := 0
 	mapped := 0
 	seenRows := make(map[string]struct{})
+	unitsByMetric := make(map[string]string)
+	qualityIssues := map[string]struct{}{}
 	visit := func(groups []SummaryGroup) {
 		for _, group := range groups {
 			for _, row := range group.Rows {
@@ -38,6 +41,20 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 				seenRows[rowKey] = struct{}{}
 
 				rows++
+				if len(row.Values) == 0 {
+					qualityIssues["row has no values: "+row.Concept] = struct{}{}
+				}
+				for period := range row.Values {
+					if !validPeriodKey(period) {
+						qualityIssues["invalid period "+period+": "+row.Concept] = struct{}{}
+					}
+				}
+				if row.Key != "" {
+					if previousUnit, ok := unitsByMetric[row.Key]; ok && previousUnit != row.Unit {
+						qualityIssues["metric has multiple units: "+row.Key] = struct{}{}
+					}
+					unitsByMetric[row.Key] = row.Unit
+				}
 				_, known := taxonomy.metricForConcept(row.Namespace, row.Concept)
 				if row.Key != "" || known {
 					mapped++
@@ -73,18 +90,33 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 
 		return result[i].Namespace < result[j].Namespace
 	})
+	quality := make([]string, 0, len(qualityIssues))
+	for issue := range qualityIssues {
+		quality = append(quality, issue)
+	}
+	sort.Strings(quality)
 
 	return LintReport{
 		TaxonomyVersion: taxonomy.TaxonomyVersion,
 		Rows:            rows, Mapped: mapped,
-		Unmapped: result,
+		Unmapped: result, QualityIssues: quality,
 	}
+}
+
+func validPeriodKey(value string) bool {
+	if strings.HasPrefix(value, "FY") || strings.HasPrefix(value, "Q") ||
+		strings.HasPrefix(value, "YTD") {
+		return true
+	}
+	_, err := parseDate(value)
+
+	return err == nil
 }
 
 func (r LintReport) String() string {
 	var result strings.Builder
-	fmt.Fprintf(&result, "taxonomy=%s rows=%d mapped=%d unmapped=%d",
-		r.TaxonomyVersion, r.Rows, r.Mapped, len(r.Unmapped))
+	fmt.Fprintf(&result, "taxonomy=%s rows=%d mapped=%d unmapped=%d quality_issues=%d",
+		r.TaxonomyVersion, r.Rows, r.Mapped, len(r.Unmapped), len(r.QualityIssues))
 	for _, term := range r.Unmapped {
 		fmt.Fprintf(&result, "\n  %s %s count=%d", term.Namespace, term.Concept, term.Count)
 	}

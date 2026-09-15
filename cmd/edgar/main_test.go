@@ -118,6 +118,37 @@ func TestParseServeConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestParseTaxonomyConfigFilters(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"taxonomy", "lint", "--cik", "789019", "--form-type", "10-K",
+		"--year", "2024", "--parsed-dir", "./parsed",
+	})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.taxonomy.filter.CIK != "789019" || cfg.taxonomy.filter.Year != 2024 {
+		t.Fatalf("unexpected taxonomy filters: %+v", cfg.taxonomy.filter)
+	}
+
+	if len(cfg.taxonomy.filter.FormTypes) != 1 || cfg.taxonomy.filter.FormTypes[0] != "10-K" {
+		t.Fatalf("unexpected form types: %v", cfg.taxonomy.filter.FormTypes)
+	}
+
+	if cfg.taxonomy.parsedDir != "./parsed" {
+		t.Fatalf("unexpected parsed directory %q", cfg.taxonomy.parsedDir)
+	}
+}
+
+func TestParseTaxonomyConfigFileCannotUseFilters(t *testing.T) {
+	_, err := parseConfig([]string{
+		"taxonomy", "lint", "--file", "filing-view.json", "--cik", "789019",
+	})
+	if !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("expected help for conflicting options, got %v", err)
+	}
+}
+
 func TestReprocessFlags(t *testing.T) {
 	const command = "filings"
 	for _, alias := range []string{"-r", "--reprocess"} {

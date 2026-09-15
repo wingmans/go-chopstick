@@ -171,6 +171,12 @@ func matchesIndexFilter(record EdgarIndex, filter IndexFilter) bool {
 	return slices.Contains(filter.FormTypes, record.FormType)
 }
 
+// MatchesIndexFilter applies the same selection rules used by IndexReader to
+// a record supplied by another local workflow.
+func MatchesIndexFilter(record EdgarIndex, filter IndexFilter) bool {
+	return matchesIndexFilter(record, filter)
+}
+
 // normalizeCIK compares the SEC's padded and unpadded representations equally.
 func normalizeCIK(value string) string {
 	value = strings.TrimSpace(value)

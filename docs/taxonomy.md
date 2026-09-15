@@ -16,6 +16,30 @@ The registry has a schema version and a taxonomy version. Taxonomy changes
 must be reviewed and committed like code because they can change displayed
 values and comparisons.
 
+## Storage Decision
+
+The default taxonomy is stored at
+`internal/filingview/taxonomy.json`. It is embedded in the binary so command
+behavior does not depend on the process working directory. This file is
+application configuration and is version-controlled with the code that
+interprets it.
+
+The taxonomy does not belong beside the golden filings. The `golden/`
+directory contains test inputs and expected results. Constituent memberships
+belong in `data/sets/`, while generated parsed data and downloaded filings
+belong in `data/parsed/` and `data/filings/` respectively.
+
+Experimental or manually trimmed registries can be stored elsewhere and
+selected explicitly with `--taxonomy`:
+
+```text
+edgar taxonomy lint --taxonomy ./my-taxonomy.json --file ./filing-view.json
+```
+
+If multiple maintained variants become necessary later, they can be added
+under `internal/filingview/taxonomies/`. A single embedded default plus
+explicit overrides is sufficient for now.
+
 ## Concept Mapping
 
 Each metric has a stable key, display label, statement section, and one or
@@ -46,6 +70,18 @@ Compact views can be inspected with:
 ```text
 edgar taxonomy lint --file data/parsed/.../filing-view.json
 ```
+
+Without `--file`, the linter scans the local parsed directory and supports the
+same selection filters as filing processing:
+
+```text
+edgar taxonomy lint --cik 789019 --form-type 10-K --year 2024
+edgar taxonomy lint --set golden --form-type 10-K
+```
+
+The batch linter uses view metadata and does not require `master.tsv`. Results
+are sorted by path. A load or schema error fails the command; unmapped terms
+are reported as findings and do not fail the command.
 
 The first linter reports the taxonomy version, projected row count, mapped
 rows, and unmapped terms with their source namespace and occurrence count.
