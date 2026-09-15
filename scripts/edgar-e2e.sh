@@ -26,30 +26,14 @@ echo "Step 1: downloading indexes from 2010 and stitching master.tsv"
 
 test -s data/indexes/master.tsv
 
-echo "Downloading 2026 filings for set $SET_NAME"
+echo "Downloading filings from 2010 onward for set $SET_NAME"
 "$CLI_PATH" filings \
   --set "$SET_NAME" \
-  --year 2026 \
-  --form-type 10-K 
-  
-  # --form-type 10-Q \
-  # --form-type 8-K
-
-echo "Reprocessing 2026 filings for set $SET_NAME"
-"$CLI_PATH" parse \
-  --set "$SET_NAME" \
-  --year 2026 \
-  --reprocess
-
-echo "Downloading historical 10-K filings for Microsoft"
-"$CLI_PATH" filings \
-  --cik 789019 \
   --form-type 10-K
 
-echo "Reprocessing historical Microsoft 10-K filings"
+echo "Reprocessing filings from 2010 onward for set $SET_NAME"
 "$CLI_PATH" parse \
-  --cik 789019 \
-  --form-type 10-K \
+  --set "$SET_NAME" \
   --reprocess
 
 if ! find data/parsed -type f -name filing.json -print -quit | grep -q .; then
@@ -59,12 +43,6 @@ fi
 
 if ! find data/parsed -type f -name filing-view.json -print -quit | grep -q .; then
   echo "error: no compact filing views were produced" >&2
-  exit 1
-fi
-
-msft_views="$(find data/parsed/0000789019 -type f -name filing-view.json 2>/dev/null | wc -l | tr -d ' ')"
-if [[ "$msft_views" -lt 2 ]]; then
-  echo "error: historical Microsoft filing views were not produced" >&2
   exit 1
 fi
 
