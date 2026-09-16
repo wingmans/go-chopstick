@@ -1,0 +1,2049 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-M2WXWY2P33"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-M2WXWY2P33');
+  </script>
+  
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <!-- Primary Meta Tags -->
+  <title>TickerFS — Free SEC EDGAR Historical Financials &amp; Valuation Dashboard</title>
+  <meta name="title" content="TickerFS — Free SEC EDGAR Historical Financials &amp; Valuation Dashboard" />
+  <meta name="description" content="Free, instant stock valuation dashboard. Look up any U.S. public stock by ticker symbol and analyze 20+ years of SEC EDGAR financials, key valuation multiples (EV/EBITDA, EV/Sales, FCF yield), growth CAGRs, and insider Form 4 open-market purchases." />
+  <meta name="keywords" content="stock financials, SEC EDGAR search, free quickfs alternative, stock valuation dashboard, EV/EBITDA history, FCF yield history, insider buying tracker, Form 4 tracker, financial statement analysis" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://tickerfs.com" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://tickerfs.com" />
+  <meta property="og:title" content="TickerFS — Free SEC EDGAR Historical Financials &amp; Valuation Dashboard" />
+  <meta property="og:description" content="Analyze 20+ years of official SEC EDGAR financials, valuation multiples, and insider purchases for any U.S. stock, completely free." />
+  <meta property="og:image" content="https://tickerfs.com/static/og-image.png" />
+  <meta property="og:site_name" content="TickerFS" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://tickerfs.com" />
+  <meta property="twitter:title" content="TickerFS — Free SEC EDGAR Historical Financials &amp; Valuation Dashboard" />
+  <meta property="twitter:description" content="Analyze 20+ years of official SEC EDGAR financials, valuation multiples, and insider purchases for any U.S. stock, completely free." />
+  <meta property="twitter:image" content="https://tickerfs.com/static/og-image.png" />
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
+
+  <!-- JSON-LD Structured Data for Search Engine Rich Snippets -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "TickerFS",
+    "alternateName": "Financials Explorer",
+    "url": "https://tickerfs.com",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "All",
+    "description": "Analyze 20+ years of official SEC EDGAR financials, valuation multiples, and insider purchases for any U.S. stock, completely free.",
+    "browserRequirements": "Requires JavaScript. Requires HTML5."
+  }
+  </script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0 20px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-ticker {
+      display: none;
+      align-items: center;
+      gap: 16px;
+      flex: 1;
+      padding-left: 20px;
+    }
+
+    .header-ticker.visible { display: flex; }
+
+    .header-ticker-symbol {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .header-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .header-stat-label {
+      font-size: 0.58rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #94a3b8;
+    }
+
+    .header-stat-value {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #0f172a;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .logo {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+    }
+
+    .logo span { color: #2563eb; }
+
+    form.search-bar {
+      display: flex;
+      gap: 6px;
+    }
+
+    .search-bar input {
+      padding: 5px 10px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      color: #0f172a;
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      width: 140px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .search-bar input::placeholder { text-transform: none; letter-spacing: normal; color: #94a3b8; font-weight: 400; }
+    .search-bar input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.1); background: #fff; }
+
+    .search-bar button {
+      padding: 5px 12px;
+      background: #2563eb;
+      border: none;
+      border-radius: 5px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .search-bar button:hover    { background: #1d4ed8; }
+    .search-bar button:disabled { background: #93c5fd; cursor: not-allowed; }
+
+    /* ── Page content ────────────────────────────────────────────────────── */
+    main {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 14px 16px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .ticker-heading { display: none; }
+
+    .section-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 10px;
+      margin-top: 4px;
+    }
+
+    /* ── Card groups ─────────────────────────────────────────────────────── */
+    .card-groups {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .card-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .card-group-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #64748b;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    /* ── Summary cards ───────────────────────────────────────────────────── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 6px;
+    }
+
+    .summary-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .card-label {
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #64748b;
+    }
+
+    .card-value {
+      font-size: 1rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.3px;
+    }
+
+    .card-value.positive { color: #16a34a; }
+    .card-value.negative { color: #dc2626; }
+    .card-value.neutral  { color: #0f172a; }
+
+    .card-sub {
+      font-size: 0.58rem;
+      color: #94a3b8;
+      margin-top: 1px;
+    }
+
+    .scale-note {
+      font-size: 0.6rem;
+      font-weight: 400;
+      color: #94a3b8;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .scale-toggle {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 2px;
+    }
+
+    .scale-toggle-label {
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #94a3b8;
+      padding: 0 4px;
+    }
+
+    .scale-btn {
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 2px 7px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: #64748b;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+
+    .scale-btn.active {
+      background: #fff;
+      color: #0f172a;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+
+    /* ── Tables ──────────────────────────────────────────────────────────── */
+    .table-wrapper {
+      overflow-x: auto;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      table-layout: fixed;
+    }
+
+    thead tr { background: #f8fafc; }
+
+    th {
+      padding: 6px 10px;
+      text-align: right;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 0.68rem;
+      white-space: nowrap;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    th:first-child {
+      text-align: left;
+      position: sticky;
+      left: 0;
+      background: #f8fafc;
+      z-index: 2;
+      border-right: 1px solid #e2e8f0;
+    }
+
+    tbody tr { transition: background 0.1s; }
+    tbody tr:hover { background: #fafbfc; }
+    tbody tr.separator-row { border-top: 1px solid #e2e8f0; }
+
+    td {
+      padding: 5px 10px;
+      text-align: right;
+      border-bottom: 1px solid #f1f5f9;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      color: #0f172a;
+    }
+
+    td:first-child {
+      text-align: left;
+      color: #475569;
+      font-weight: 500;
+      position: sticky;
+      left: 0;
+      background: #fff;
+      z-index: 1;
+      border-right: 1px solid #e2e8f0;
+    }
+
+    tbody tr:hover td:first-child { background: #fafbfc; }
+    tbody tr.separator-row td { font-weight: 600; color: #1e293b; }
+
+    .positive { color: inherit; }
+    .negative { color: inherit; }
+
+    /* ── TTM column ──────────────────────────────────────────────────────── */
+    th.ttm-col, td.ttm-col {
+      background: #f0f7ff;
+      border-right: 1px solid #bfdbfe;
+      font-weight: 600;
+    }
+
+    thead tr th.ttm-col {
+      color: #2563eb;
+    }
+
+    /* ── Valuation context table ─────────────────────────────────────────── */
+    .vc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      background: #fff;
+    }
+    .vc-table th {
+      background: #f8fafc;
+      padding: 6px 10px;
+      font-size: 0.66rem;
+      font-weight: 600;
+      color: #64748b;
+      text-align: right;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+    .vc-table th:first-child { text-align: left; }
+    .vc-table td {
+      padding: 5px 10px;
+      text-align: right;
+      border-bottom: 1px solid #f1f5f9;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      color: #0f172a;
+    }
+    .vc-table td:first-child { text-align: left; color: #475569; font-weight: 500; }
+    .vc-table tr:hover td { background: #fafbfc; }
+    .vc-signal {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .vc-signal.cheap    { background: #dcfce7; color: #15803d; }
+    .vc-signal.expensive { background: #fee2e2; color: #b91c1c; }
+    .vc-signal.neutral  { background: #f1f5f9; color: #64748b; }
+    .vc-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      justify-content: flex-end;
+    }
+    .vc-bar-track {
+      width: 80px;
+      height: 4px;
+      background: #e2e8f0;
+      border-radius: 2px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .vc-bar-avg  { position: absolute; top: -2px; width: 2px; height: 8px; background: #94a3b8; border-radius: 1px; }
+    .vc-bar-curr { position: absolute; top: -3px; width: 4px; height: 10px; border-radius: 1px; }
+
+    /* ── Spinner ─────────────────────────────────────────────────────────── */
+    .spinner-wrap {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 60px;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error ───────────────────────────────────────────────────────────── */
+    .error-msg {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 80px 24px;
+      color: #94a3b8;
+    }
+
+    .empty-state .icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.95rem; }
+
+    /* ── Tabbed Navigation ───────────────────────────────────────────────── */
+    .nav-tabs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      border-left: 1px solid #e2e8f0;
+      padding-left: 14px;
+      margin-right: auto;
+    }
+    .nav-tab {
+      padding: 5px 12px;
+      border-radius: 5px;
+      border: none;
+      background: transparent;
+      color: #64748b;
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .nav-tab:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    .nav-tab.active {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    /* ── Insider Buys Layout ──────────────────────────────────────────────── */
+    .ib-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 14px;
+      background: #fff;
+      padding: 14px 18px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      flex-wrap: wrap;
+    }
+    .ib-title-group h2 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 2px;
+    }
+    .ib-title-group p {
+      font-size: 0.7rem;
+      color: #64748b;
+    }
+    .ib-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .ib-status {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: #64748b;
+      background: #f1f5f9;
+      padding: 5px 10px;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+      max-width: 250px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ib-date-picker-group {
+      display: flex;
+      gap: 8px;
+    }
+    .date-picker-field {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .date-picker-field label {
+      font-size: 0.58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: #94a3b8;
+    }
+    .date-picker-field input {
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      outline: none;
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    .date-picker-field input:focus {
+      border-color: #2563eb;
+      background: #fff;
+    }
+    .ib-btn {
+      padding: 5px 12px;
+      border: none;
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ib-btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+    .ib-btn-primary:hover {
+      background: #1d4ed8;
+    }
+    .ib-btn-primary:disabled {
+      background: #93c5fd;
+      cursor: not-allowed;
+    }
+    .ib-btn-secondary {
+      background: #f1f5f9;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+      font-size: 0.7rem;
+      height: 24px;
+      padding: 2px 8px;
+    }
+    .ib-btn-secondary:hover {
+      background: #e2e8f0;
+    }
+    .ib-table {
+      table-layout: auto;
+    }
+    .ib-table th, .ib-table td {
+      border-bottom: 1px solid #e2e8f0;
+      border-right: none !important;
+    }
+    .ib-table th {
+      background: #f8fafc;
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: #64748b;
+      padding: 8px 10px;
+      text-align: right;
+    }
+    .ib-table th:first-child, .ib-table th:nth-child(2), .ib-table th:nth-child(5) {
+      text-align: left;
+    }
+    .ib-table th:nth-child(3), .ib-table th:nth-child(10), .ib-table th:nth-child(11) {
+      text-align: center;
+    }
+    .ib-table td {
+      padding: 8px 10px;
+      font-size: 0.74rem;
+      color: #0f172a;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ib-table td:first-child, .ib-table td:nth-child(2), .ib-table td:nth-child(5) {
+      text-align: left;
+    }
+    .ib-table td:nth-child(3), .ib-table td:nth-child(10), .ib-table td:nth-child(11) {
+      text-align: center;
+    }
+    .ib-table tbody tr:hover td {
+      background: #fafbfc;
+    }
+    .ib-grouped-row {
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s ease;
+    }
+    .ib-grouped-row:hover td {
+      background: #f8fafc !important;
+    }
+    .ib-grouped-row.is-expanded td {
+      background: #f1f5f9 !important;
+      border-bottom: none !important;
+    }
+    .ib-badge-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: #1e40af;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    .ib-badge-count:hover {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }
+    .ib-chevron {
+      display: inline-block;
+      font-size: 0.6rem;
+      transition: transform 0.2s ease;
+    }
+    .ib-chevron.open {
+      transform: rotate(180deg);
+    }
+    .ib-detail-row td {
+      white-space: normal !important;
+    }
+    .ib-subtable {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .ib-subtable th {
+      background: #f1f5f9 !important;
+      font-size: 0.65rem !important;
+      font-weight: 600 !important;
+      color: #475569 !important;
+      padding: 6px 10px !important;
+      border-bottom: 1px solid #cbd5e1 !important;
+      border-right: none !important;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+    .ib-subtable td {
+      padding: 6px 10px !important;
+      font-size: 0.72rem !important;
+      color: #1e293b !important;
+      border-bottom: 1px solid #f1f5f9 !important;
+      border-right: none !important;
+      white-space: nowrap !important;
+    }
+    .ib-subtable tbody tr:hover td {
+      background: #f8fafc !important;
+    }
+    .badge-ticker {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.7rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.1s;
+    }
+    .badge-ticker:hover {
+      background: #dbeafe;
+      color: #1d4ed8;
+      border-color: #93c5fd;
+    }
+    .link-sec {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .link-sec:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Mobile responsiveness overrides ─────────────────────────────────── */
+    @media (max-width: 768px) {
+      header {
+        height: auto !important;
+        flex-direction: column;
+        align-items: stretch !important;
+        padding: 12px 16px !important;
+        gap: 10px !important;
+        position: relative !important;
+      }
+      .logo {
+        text-align: center;
+      }
+      .nav-tabs {
+        justify-content: center;
+      }
+      .header-ticker {
+        padding-left: 0 !important;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+      }
+      .scale-toggle {
+        justify-content: center;
+      }
+      .summary-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+      }
+      .card-groups {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+      }
+      .ib-header-bar {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 16px !important;
+      }
+      .ib-actions {
+        flex-direction: column;
+        align-items: stretch !important;
+        width: 100% !important;
+      }
+      .ib-date-picker-group {
+        flex-direction: column;
+        width: 100% !important;
+        gap: 10px !important;
+      }
+      .date-picker-field {
+        width: 100% !important;
+      }
+      .date-picker-field input, .date-picker-field select {
+        width: 100% !important;
+        box-sizing: border-box;
+        height: 32px;
+      }
+      .ib-btn {
+        width: 100% !important;
+        height: 36px !important;
+      }
+      .ib-status {
+        max-width: 100% !important;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">Financials<span>.</span></div>
+    
+    <div class="header-ticker" id="header-ticker">
+      <div class="header-ticker-symbol" id="header-symbol"></div>
+      <div class="header-stat">
+        <div class="header-stat-label">Share Price</div>
+        <div class="header-stat-value" id="header-price">—</div>
+      </div>
+      <div class="header-stat">
+        <div class="header-stat-label">Market Cap</div>
+        <div class="header-stat-value" id="header-mktcap">—</div>
+      </div>
+      <div class="header-stat">
+        <div class="header-stat-label">Enterprise Value</div>
+        <div class="header-stat-value" id="header-ev">—</div>
+      </div>
+      <div class="header-stat">
+        <div class="header-stat-label">Beta</div>
+        <div class="header-stat-value" id="header-beta">—</div>
+      </div>
+      <div class="header-stat">
+        <div class="header-stat-label">Share Turnover</div>
+        <div class="header-stat-value" id="header-turnover">—</div>
+      </div>
+    </div>
+    <div class="scale-toggle" id="freq-toggle" style="display:none">
+      <button class="scale-btn active" data-freq="annual">Annual</button>
+      <button class="scale-btn" data-freq="quarterly">Quarterly</button>
+    </div>
+    <div class="scale-toggle" id="scale-toggle" style="display:none">
+      <span class="scale-toggle-label">$</span>
+      <button class="scale-btn active" data-unit="B">B</button>
+      <button class="scale-btn" data-unit="M">M</button>
+      <button class="scale-btn" data-unit="K">K</button>
+    </div>
+    <form class="search-bar" id="search-form">
+      <input id="ticker-input" type="text" placeholder="Ticker symbol" maxlength="10" autocomplete="off" />
+      <button type="submit" id="search-btn">Search</button>
+    </form>
+  </header>
+
+  <main>
+    <div id="recent-tickers-bar" style="display: none; align-items: center; gap: 10px; background: #fff; padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.72rem; margin-bottom: 10px;">
+      <span style="font-weight: 600; color: #64748b;">Recent View History:</span>
+      <div id="recent-tickers-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+    </div>
+
+    <!-- Tab 1: Historical Financials -->
+    <div id="tab-financials">
+      <div class="spinner-wrap" id="spinner-wrap"><div class="spinner"></div></div>
+      <div id="result">
+        <div class="empty-state">
+          <div class="icon">📊</div>
+          <p>Enter a ticker symbol to load historical financials from SEC EDGAR.</p>
+        </div>
+      </div>
+    </div>
+    
+    
+  </main>
+
+  <script>
+    // ── Metric definitions ───────────────────────────────────────────────────
+
+    const INCOME_METRICS = [
+      { key: "Revenue",               label: "Revenue",             fmt: "dollar" },
+      { key: "RevenueGrowth",         label: "Revenue Growth %",    fmt: "pct"    },
+      { key: "CostOfSales",           label: "Cost of Sales",       fmt: "dollar" },
+      { key: "GrossMargin",           label: "Gross Margin %",      fmt: "pct"    },
+      { key: "OperatingExpenses",     label: "Operating Expenses",  fmt: "dollar" },
+      { key: "DA",                    label: "D&A",                 fmt: "dollar" },
+      { key: "EBITDA",                label: "EBITDA",              fmt: "dollar" },
+      { key: "EBITDAMargin",          label: "EBITDA Margin %",     fmt: "pct"    },
+      { key: "OperatingIncome",       label: "Operating Income",    fmt: "dollar" },
+      { key: "OperatingIncomeGrowth", label: "Op. Income Growth %", fmt: "pct"    },
+      { key: "OperatingMargin",       label: "Operating Margin %",  fmt: "pct"    },
+      { key: "InterestExpense",       label: "Interest Expense",    fmt: "dollar" },
+      { key: "PreTaxIncome",          label: "Pre-tax Income",      fmt: "dollar" },
+      { key: "NetIncome",             label: "Net Income",          fmt: "dollar" },
+      { key: "DilutedShares",         label: "Diluted Shares",      fmt: "shares" },
+      { key: "EPSDiluted",            label: "EPS (Diluted)",       fmt: "eps"    },
+    ];
+
+    const BS_METRICS = [
+      { key: "Cash",               label: "Cash & Equivalents",   fmt: "dollar" },
+      { key: "CurrentAssets",      label: "Current Assets",       fmt: "dollar" },
+      { key: "TotalAssets",        label: "Total Assets",         fmt: "dollar" },
+      { key: "CurrentLiabilities", label: "Current Liabilities",  fmt: "dollar" },
+      { key: "CurrentDebt",        label: "Current Debt",         fmt: "dollar" },
+      { key: "LongTermDebt",       label: "Long-term Debt",       fmt: "dollar" },
+      { key: "TotalDebt",          label: "Total Debt",           fmt: "dollar" },
+      { key: "TotalLiabilities",   label: "Total Liabilities",    fmt: "dollar" },
+      { key: "NetDebt",            label: "Net Debt",             fmt: "dollar" },
+    ];
+
+    const CF_METRICS = [
+      { key: "StockBasedCompensation", label: "Stock-Based Compensation", fmt: "dollar" },
+      { key: "OperatingCF",            label: "Operating Cash Flow",      fmt: "dollar", sep: true },
+      { key: "CapEx",                  label: "Capital Expenditures",     fmt: "dollar" },
+      { key: "Acquisitions",           label: "Acquisitions",             fmt: "dollar" },
+      { key: "InvestingCF",            label: "Investing Cash Flow",      fmt: "dollar", sep: true },
+      { key: "ShareRepurchases",       label: "Share Repurchases",        fmt: "dollar" },
+      { key: "DividendsPaid",          label: "Dividends Paid",           fmt: "dollar" },
+      { key: "FinancingCF",            label: "Financing Cash Flow",      fmt: "dollar", sep: true },
+      { key: "FreeCashFlow",           label: "Free Cash Flow",           fmt: "dollar", sep: true },
+    ];
+
+    const VALUATION_METRICS = [
+      { key: "SharePrice",     label: "Share Price",        fmt: "eps"    },
+      { key: "DilutedShares",  label: "Shares Outstanding", fmt: "shares" },
+      { key: "MarketCap",      label: "Market Cap",         fmt: "dollar" },
+      { key: "EV",             label: "Enterprise Value",   fmt: "dollar" },
+      { key: "EVToSales",      label: "EV / Sales",         fmt: "ratio"  },
+      { key: "EVToEBITDA",     label: "EV / EBITDA",        fmt: "ratio"  },
+      { key: "FCFToEV",        label: "FCF / EV",           fmt: "pct"    },
+      { key: "FCFToMarketCap", label: "FCF / Mkt Cap",      fmt: "pct"    },
+      { key: "FCFPerShare",    label: "FCF / Share",        fmt: "eps"    },
+    ];
+
+    const RETURNS_METRICS = [
+      { key: "ROIC",                    label: "ROIC",               fmt: "pct"   },
+      { key: "ROE",                     label: "ROE",                fmt: "pct"   },
+      { key: "ROA",                     label: "ROA",                fmt: "pct"   },
+      { key: "NetDebtToEBITDA",         label: "Net Debt / EBITDA",  fmt: "ratio" },
+      { key: "InterestCoverage",        label: "Interest Coverage",  fmt: "ratio" },
+      { key: "CurrentAssetsToLiabilities", label: "Current Ratio",   fmt: "ratio" },
+    ];
+
+    const CARD_GROUPS = [
+      {
+        label: "Valuation",
+        cards: [
+          { key: "current_fcf_yield", label: "Current FCF Yield", fmt: "pct"   },
+          { key: "ev_to_ebitda",      label: "EV / EBITDA",       fmt: "ratio" },
+          { key: "ev_to_sales",       label: "EV / Sales",        fmt: "ratio" },
+          { key: "avg_fcf_yield",     label: "Avg FCF Yield",     fmt: "pct", nKey: "fcf_yield_n_years" },
+        ]
+      },
+      {
+        label: "Returns (Full History Avg)",
+        nKey: "returns_n_years",
+        cards: [
+          { key: "avg_roic", label: "Avg ROIC", fmt: "pct" },
+          { key: "avg_roe",  label: "Avg ROE",  fmt: "pct" },
+          { key: "avg_roa",  label: "Avg ROA",  fmt: "pct" },
+        ]
+      },
+      {
+        label: "Leverage",
+        cards: [
+          { key: "net_debt_to_ebitda", label: "Net Debt / EBITDA", fmt: "ratio" },
+          { key: "interest_coverage",  label: "Interest Coverage", fmt: "ratio" },
+        ]
+      },
+      {
+        label: "Growth (Full History CAGR)",
+        cards: [
+          { key: "revenue_cagr", label: "Revenue CAGR",     fmt: "pct", nKey: "revenue_cagr_n_years" },
+          { key: "fcf_cagr",     label: "FCF CAGR",         fmt: "pct", nKey: "fcf_cagr_n_years"     },
+          { key: "asset_cagr",   label: "Asset CAGR",       fmt: "pct", nKey: "asset_cagr_n_years"   },
+          { key: "share_cagr",   label: "Share Count CAGR", fmt: "pct", nKey: "share_cagr_n_years"   },
+        ]
+      },
+    ];
+
+    // ── Global state ────────────────────────────────────────────────────────
+    let G_SCALE = { div: 1e6, unit: "M", label: "millions" };
+    let G_FREQ  = "annual";
+    let _lastRenderArgs = null;
+
+    function computeScale(income) {
+      const revs = income.map(r => r.Revenue).filter(v => v != null && v > 0);
+      const max  = revs.length ? Math.max(...revs) : 0;
+      if (max >= 1e9) return { div: 1e9, unit: "B", label: "billions"  };
+      if (max >= 1e6) return { div: 1e6, unit: "M", label: "millions"  };
+      return              { div: 1e3, unit: "K", label: "thousands" };
+    }
+
+    // ── Formatters ───────────────────────────────────────────────────────────
+
+    function fmtTime(ts) {
+      if (ts == null) return "—";
+      const diff = Date.now() - ts;
+      const mins = Math.round(diff / 60000);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.round(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.round(hrs / 24);
+      return `${days}d ago`;
+    }
+
+    function fmtDollar(val) {
+      if (val == null || isNaN(val) || !isFinite(val)) return "—";
+      const scaled   = Math.abs(val) / G_SCALE.div;
+      const decimals = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+      const parts    = scaled.toFixed(decimals).split(".");
+      parts[0]       = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (val < 0 ? "-$" : "$") + parts.join(".") + G_SCALE.unit;
+    }
+
+    function fmtShares(val) {
+      if (val == null || isNaN(val)) return "—";
+      const abs = Math.abs(val);
+      if      (abs >= 1e9) return (val / 1e9).toFixed(2) + "B";
+      else if (abs >= 1e6) return (val / 1e6).toFixed(1) + "M";
+      else if (abs >= 1e3) return (val / 1e3).toFixed(1) + "K";
+      return val.toFixed(0);
+    }
+
+    function fmtEps(val) {
+      if (val == null || isNaN(val)) return "—";
+      return (val < 0 ? "-$" : "$") + Math.abs(val).toFixed(2);
+    }
+
+    function fmtPct(val, sign = false) {
+      if (val == null || isNaN(val)) return "—";
+      const prefix = sign ? (val < 0 ? "-" : "+") : (val < 0 ? "-" : "");
+      return prefix + Math.abs(val).toFixed(1) + "%";
+    }
+
+    function fmtRatio(val) {
+      if (val == null || isNaN(val)) return "—";
+      return val.toFixed(2) + "x";
+    }
+
+    function format(val, fmt) {
+      if (fmt === "dollar") return fmtDollar(val);
+      if (fmt === "shares") return fmtShares(val);
+      if (fmt === "eps")    return fmtEps(val);
+      if (fmt === "pct")    return fmtPct(val);
+      if (fmt === "ratio")  return fmtRatio(val);
+      return val;
+    }
+
+    function periodLabel(dateStr) { 
+      if (!dateStr) return "—";
+      if (G_FREQ === "annual" && /^\d{4}/.test(dateStr)) return dateStr.slice(0, 4);
+      // For quarterly or non-year labels, show a nicer date
+      if (!/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr; // TTM label
+      const d = new Date(dateStr);
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return months[d.getUTCMonth()] + " " + d.getUTCFullYear();
+    }
+
+    // ── Extract embedded TTM row (period_end is a label, not a date) ─────────
+    function extractTTMRow(rows) {
+      const ttmRow   = rows.find(r => !/^\d{4}/.test(String(r.period_end)));
+      const dateRows = rows.filter(r => /^\d{4}/.test(String(r.period_end)));
+      return {
+        ttmRow,
+        ttmLabel: ttmRow ? ttmRow.period_end : null,
+        dateRows,
+      };
+    }
+
+    // ── Table builder ────────────────────────────────────────────────────────
+
+    function buildTable(rows, metrics, ttmLabel = null, ttmRow = null) {
+      rows = [...rows].reverse();
+      const years = rows.map(r => r.period_end);
+      const hasTTM = ttmLabel && ttmRow;
+
+      const dataCols = (hasTTM ? 1 : 0) + years.length;
+      const colgroup = `<colgroup>
+        <col style="width:160px">
+        ${Array(dataCols).fill('<col style="width:85px">').join("")}
+      </colgroup>`;
+
+      let html = `<div class="table-wrapper"><table style="min-width: ${160 + dataCols * 85}px">
+        ${colgroup}
+        <thead><tr>
+          <th>Metric <span class="scale-note">($ ${G_SCALE.unit})</span></th>
+          ${hasTTM ? `<th class="ttm-col">${ttmLabel}</th>` : ""}
+          ${years.map(y => `<th>${periodLabel(y)}</th>`).join("")}
+        </tr></thead><tbody>`;
+
+      for (const m of metrics) {
+        html += `<tr${m.sep ? ' class="separator-row"' : ""}><td>${m.label}</td>`;
+        if (hasTTM) {
+          const val = ttmRow[m.key];
+          const cls = val > 0 ? "positive" : val < 0 ? "negative" : "";
+          html += `<td class="${cls} ttm-col">${format(val, m.fmt)}</td>`;
+        }
+        for (const row of rows) {
+          const val = row[m.key];
+          const cls = val > 0 ? "positive" : val < 0 ? "negative" : "";
+          html += `<td class="${cls}">${format(val, m.fmt)}</td>`;
+        }
+        html += `</tr>`;
+      }
+
+      return html + `</tbody></table></div>`;
+    }
+
+    // ── Card groups ──────────────────────────────────────────────────────────
+
+    function buildCardGroups(summary) {
+      return CARD_GROUPS.map(group => {
+        const groupN = group.nKey ? summary[group.nKey] : null;
+        const cards = group.cards.map(card => {
+          const val = summary[card.key];
+          const formatted = card.fmt === "pct" ? fmtPct(val) : fmtRatio(val);
+          const n = card.nKey ? summary[card.nKey] : groupN;
+          const sub = n != null ? `<div class="card-sub">${n} yr avg</div>` : "";
+          return `<div class="summary-card">
+            <div class="card-label">${card.label}</div>
+            <div class="card-value neutral">${formatted}</div>
+            ${sub}
+          </div>`;
+        }).join("");
+        return `<div class="card-group">
+          <div class="card-group-label">${group.label}</div>
+          <div class="summary-grid">${cards}</div>
+        </div>`;
+      }).join("");
+    }
+
+    // ── Valuation context ────────────────────────────────────────────────────
+
+    function buildValuationContext(rows) {
+      if (!rows || rows.length === 0) return "";
+
+      const fmtVal = (v, fmt) => {
+        if (v == null || isNaN(v)) return "—";
+        return fmt === "pct" ? fmtPct(v) : fmtRatio(v);
+      };
+
+      const signal = (vs) => {
+        if (vs == null || isNaN(vs)) return `<span class="vc-signal neutral">—</span>`;
+        const abs = Math.abs(vs).toFixed(1);
+        if (vs > 10)  return `<span class="vc-signal cheap">+${abs}% cheap</span>`;
+        if (vs < -10) return `<span class="vc-signal expensive">${abs}% exp.</span>`;
+        return `<span class="vc-signal neutral">~median</span>`;
+      };
+
+      // Mini range bar: lower = left = cheap for ratio metrics
+      const bar = (curr, lo, hi) => {
+        if (curr == null || lo == null || hi == null || hi === lo) return "";
+        const pct = Math.max(0, Math.min(100, (curr - lo) / (hi - lo) * 100));
+        // left (low multiple) = cheap = green; right (high multiple) = expensive = red
+        const color = pct < 35 ? "#16a34a" : pct > 65 ? "#dc2626" : "#f59e0b";
+        return `<div class="vc-bar-wrap">
+          <div class="vc-bar-track">
+            <div class="vc-bar-curr" style="left:${pct}%;background:${color};transform:translateX(-50%)"></div>
+          </div>
+        </div>`;
+      };
+
+      let html = `<div class="table-wrapper"><table class="vc-table" style="min-width: 660px">
+        <thead><tr>
+          <th>Metric</th>
+          <th>Current</th>
+          <th>Hist. Median</th>
+          <th>Hist. Avg</th>
+          <th>Range (min→max)</th>
+          <th>vs Median</th>
+        </tr></thead><tbody>`;
+
+      for (const r of rows) {
+        const rangeStr = `${fmtVal(r.hist_min, r.fmt)} → ${fmtVal(r.hist_max, r.fmt)}`;
+        html += `<tr>
+          <td>${r.label} <span style="color:#94a3b8;font-size:0.62rem">(${r.n_years}y)</span></td>
+          <td style="font-weight:600">${fmtVal(r.current, r.fmt)}</td>
+          <td>${fmtVal(r.hist_avg, r.fmt)}</td>
+          <td>${fmtVal(r.hist_median, r.fmt)}</td>
+          <td>${bar(r.current, r.hist_min, r.hist_max, r.lower_is_cheaper)}
+              <span style="font-size:0.65rem;color:#94a3b8">${rangeStr}</span></td>
+          <td>${signal(r.vs_median_pct)}</td>
+        </tr>`;
+      }
+
+      return html + `</tbody></table></div>`;
+    }
+
+    // ── Render ───────────────────────────────────────────────────────────────
+
+    function updateHeader(ticker, summary) {
+      const price  = summary.share_price;
+      const mktCap = summary.market_cap;
+      const ev     = summary.ev;
+      document.getElementById("header-symbol").textContent = ticker;
+      document.getElementById("header-price").textContent  = price  != null ? "$" + price.toFixed(2) : "—";
+      document.getElementById("header-mktcap").textContent = mktCap != null ? fmtDollar(mktCap)      : "—";
+      document.getElementById("header-ev").textContent       = ev                        != null ? fmtDollar(ev)                               : "—";
+      document.getElementById("header-beta").textContent     = summary.beta              != null ? summary.beta.toFixed(2) + "x"                 : "—";
+      document.getElementById("header-turnover").textContent = summary.share_turnover    != null ? summary.share_turnover.toFixed(2) + "x"          : "—";
+      document.getElementById("header-ticker").classList.add("visible");
+    }
+
+    function renderAll(ticker, summary, income, balanceSheet, cashFlow, annualMetrics, ttm, valCtx) {
+      // Only auto-compute scale on first render for this ticker; preserve user choice on re-render
+      if (!_lastRenderArgs || _lastRenderArgs[0] !== ticker) {
+        G_SCALE = computeScale(income);
+      }
+      setScaleToggle(G_SCALE.unit);
+      setFreqToggle(G_FREQ);
+      updateHeader(ticker, summary);
+      const ttmLabel = ttm ? ttm.period_label : null;
+      document.getElementById("result").innerHTML = `
+        <div>
+          <div class="section-label">Valuation vs History</div>
+          ${buildValuationContext(valCtx)}
+        </div>
+        <div>
+          <div class="section-label">Key Metrics</div>
+          <div class="card-groups">${buildCardGroups(summary)}</div>
+        </div>
+        <div>
+          <div class="section-label">Income Statement</div>
+          ${buildTable(income, INCOME_METRICS, ttmLabel, ttm ? ttm.income : null)}
+        </div>
+        <div>
+          <div class="section-label">Balance Sheet</div>
+          ${buildTable(balanceSheet, BS_METRICS, ttmLabel, ttm ? ttm.balance_sheet : null)}
+        </div>
+        <div>
+          <div class="section-label">Cash Flow Statement</div>
+          ${buildTable(cashFlow, CF_METRICS, ttmLabel, ttm ? ttm.cash_flow : null)}
+        </div>
+        <div>
+          <div class="section-label">Valuation by Year (Annual)</div>
+          ${(() => { const am = extractTTMRow(annualMetrics); return buildTable(am.dateRows, VALUATION_METRICS, am.ttmLabel, am.ttmRow); })()}
+        </div>
+        <div>
+          <div class="section-label">Returns &amp; Leverage by Year (Annual)</div>
+          ${(() => { const am = extractTTMRow(annualMetrics); return buildTable(am.dateRows, RETURNS_METRICS, am.ttmLabel, am.ttmRow); })()}
+        </div>`;
+    }
+
+    function renderError(msg) {
+      document.getElementById("result").innerHTML =
+        `<div class="error-msg">${msg}</div>`;
+    }
+
+    // ── Toggles ──────────────────────────────────────────────────────────────
+
+    const SCALES = {
+      B: { div: 1e9, unit: "B", label: "billions"  },
+      M: { div: 1e6, unit: "M", label: "millions"  },
+      K: { div: 1e3, unit: "K", label: "thousands" },
+    };
+
+    document.getElementById("scale-toggle").addEventListener("click", (e) => {
+      const btn = e.target.closest(".scale-btn");
+      if (!btn || !_lastRenderArgs) return;
+      const unit = btn.dataset.unit;
+      G_SCALE = SCALES[unit];
+      document.querySelectorAll("#scale-toggle .scale-btn").forEach(b => b.classList.toggle("active", b.dataset.unit === unit));
+      renderAll(..._lastRenderArgs);
+    });
+
+    function setScaleToggle(unit) {
+      const toggle = document.getElementById("scale-toggle");
+      toggle.style.display = "flex";
+      document.querySelectorAll("#scale-toggle .scale-btn").forEach(b => b.classList.toggle("active", b.dataset.unit === unit));
+    }
+
+    document.getElementById("freq-toggle").addEventListener("click", (e) => {
+      const btn = e.target.closest(".scale-btn");
+      if (!btn) return;
+      const freq = btn.dataset.freq;
+      if (freq === G_FREQ) return;
+      G_FREQ = freq;
+      document.querySelectorAll("#freq-toggle .scale-btn").forEach(b => b.classList.toggle("active", b.dataset.freq === freq));
+      
+      const ticker = document.getElementById("ticker-input").value.trim().toUpperCase() || (_lastRenderArgs ? _lastRenderArgs[0] : null);
+      if (ticker) {
+        fetchFinancials(ticker, G_FREQ);
+      }
+    });
+
+    function setFreqToggle(freq) {
+      const toggle = document.getElementById("freq-toggle");
+      toggle.style.display = "flex";
+      document.querySelectorAll("#freq-toggle .scale-btn").forEach(b => b.classList.toggle("active", b.dataset.freq === freq));
+    }
+
+    // ── Search & Fetch ───────────────────────────────────────────────────────
+
+    async function fetchFinancials(ticker, frequency) {
+      const btn         = document.getElementById("search-btn");
+      const spinnerWrap = document.getElementById("spinner-wrap");
+
+      btn.disabled = true;
+      spinnerWrap.style.display = "flex";
+      // Don't clear result if we are just toggling frequency, to avoid jumpiness
+      if (!_lastRenderArgs) document.getElementById("result").innerHTML = "";
+
+      try {
+        const res  = await fetch(`/api/financials?ticker=${encodeURIComponent(ticker)}&frequency=${frequency}`);
+        const data = await res.json();
+        if (!res.ok) { renderError(data.error || "An error occurred."); }
+        else {
+          _lastRenderArgs = [data.ticker, data.summary, data.income, data.balance_sheet, data.cash_flow, data.annual_metrics, data.ttm, data.valuation_context];
+          renderAll(..._lastRenderArgs);
+          addToHistory(data.ticker);
+        }
+      } catch (err) {
+        renderError("Network error — could not reach the server.");
+      } finally {
+        btn.disabled = false;
+        spinnerWrap.style.display = "none";
+      }
+    }
+
+    document.getElementById("search-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const ticker = document.getElementById("ticker-input").value.trim().toUpperCase();
+      if (!ticker) return;
+      _lastRenderArgs = null; // Reset on new search
+      fetchFinancials(ticker, G_FREQ);
+    });
+
+    // ── History & LocalStorage logic ─────────────────────────────────────────
+
+    function addToHistory(ticker) {
+      let history = [];
+      try {
+        history = JSON.parse(localStorage.getItem("financials_history") || "[]");
+      } catch(e) {}
+      
+      history = history.filter(item => item.ticker !== ticker);
+      history.unshift({ ticker: ticker, time: Date.now() });
+      
+      // Filter out items older than 30 days, cap at 100
+      history = history.filter(item => {
+        const ageInDays = (Date.now() - item.time) / (1000 * 60 * 60 * 24);
+        return ageInDays <= 30;
+      });
+      if (history.length > 100) history = history.slice(0, 100);
+      
+      localStorage.setItem("financials_history", JSON.stringify(history));
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const container = document.getElementById("recent-tickers-bar");
+      const list = document.getElementById("recent-tickers-list");
+      
+      let history = [];
+      try {
+        history = JSON.parse(localStorage.getItem("financials_history") || "[]");
+      } catch(e) {}
+      
+      if (history.length === 0) {
+        container.style.display = "none";
+        return;
+      }
+      
+      container.style.display = "flex";
+      
+      // Only show top 8 in the view history bar
+      list.innerHTML = history.slice(0, 8).map(item => {
+        return `<a class="badge-ticker" onclick="analyzeTicker('${item.ticker}')" style="font-weight:600">${item.ticker} <span style="font-weight:400;font-size:0.62rem;color:#64748b">${fmtTime(item.time)}</span></a>`;
+      }).join("");
+    }
+
+    // ── Tab switcher and Insider Buys logic ──────────────────────────────────
+    
+    const navTabs = document.getElementById("nav-tabs");
+    if (navTabs) {
+      navTabs.addEventListener("click", (e) => {
+        const tabBtn = e.target.closest(".nav-tab");
+        if (!tabBtn) return;
+        const tabId = tabBtn.dataset.tab;
+        switchTab(tabId);
+      });
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".nav-tab").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.tab === tabId);
+      });
+      
+      const tabFinancials = document.getElementById("tab-financials");
+      const tabInsiderBuys = document.getElementById("tab-insider-buys");
+      
+      if (tabId === "financials") {
+        if (tabFinancials) tabFinancials.style.display = "block";
+        if (tabInsiderBuys) tabInsiderBuys.style.display = "none";
+        if (_lastRenderArgs) {
+          const headerTicker = document.getElementById("header-ticker");
+          const freqToggle = document.getElementById("freq-toggle");
+          const scaleToggle = document.getElementById("scale-toggle");
+          if (headerTicker) headerTicker.style.display = "flex";
+          if (freqToggle) freqToggle.style.display = "flex";
+          if (scaleToggle) scaleToggle.style.display = "flex";
+        }
+        const searchForm = document.getElementById("search-form");
+        if (searchForm) searchForm.style.display = "flex";
+      } else {
+        if (tabFinancials) tabFinancials.style.display = "none";
+        if (tabInsiderBuys) tabInsiderBuys.style.display = "block";
+        const headerTicker = document.getElementById("header-ticker");
+        const freqToggle = document.getElementById("freq-toggle");
+        const scaleToggle = document.getElementById("scale-toggle");
+        const searchForm = document.getElementById("search-form");
+        if (headerTicker) headerTicker.style.display = "none";
+        if (freqToggle) freqToggle.style.display = "none";
+        if (scaleToggle) scaleToggle.style.display = "none";
+        if (searchForm) searchForm.style.display = "none";
+        
+        initIbDate();
+      }
+    }
+
+    function getLastChecked() {
+      let ts = null;
+      try {
+        ts = localStorage.getItem("insider_buys_last_checked");
+      } catch(e) {}
+      if (!ts) {
+        const match = document.cookie.match(/(?:^|; )insider_buys_last_checked=([^;]*)/);
+        if (match) ts = decodeURIComponent(match[1]);
+      }
+      return ts ? parseInt(ts, 10) : null;
+    }
+
+    function setLastChecked(ts) {
+      if (!ts) ts = Date.now();
+      try {
+        localStorage.setItem("insider_buys_last_checked", ts.toString());
+      } catch(e) {}
+      document.cookie = `insider_buys_last_checked=${ts}; path=/; max-age=31536000`;
+      updateLastCheckedUI();
+    }
+
+    function updateLastCheckedUI() {
+      const el = document.getElementById("ib-last-checked-text");
+      if (!el) return;
+      const ts = getLastChecked();
+      if (!ts) {
+        el.textContent = "Never";
+      } else {
+        const d = new Date(ts);
+        const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        el.textContent = `${dateStr} at ${timeStr} (${fmtTime(ts)})`;
+      }
+    }
+
+    function initIbDate() {
+      updateLastCheckedUI();
+      const dateInput = document.getElementById("ib-date");
+      const endDateInput = document.getElementById("ib-end-date");
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+
+      if (endDateInput && !endDateInput.value) {
+        endDateInput.value = todayStr;
+      }
+
+      if (dateInput && !dateInput.value) {
+        const yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+        
+        // If yesterday was Sunday (0) or Saturday (6), pick Friday
+        const day = yesterday.getDay();
+        if (day === 0) yesterday.setDate(yesterday.getDate() - 2); // Sun -> Fri
+        else if (day === 6) yesterday.setDate(yesterday.getDate() - 1); // Sat -> Fri
+        
+        dateInput.value = yesterday.toISOString().split('T')[0];
+      }
+    }
+
+    const dateModeSelect = document.getElementById("ib-date-mode");
+    if (dateModeSelect) {
+      dateModeSelect.addEventListener("change", (e) => {
+        const mode = e.target.value;
+        const fieldEnd = document.getElementById("field-end-date");
+        const lblStart = document.getElementById("lbl-start-date");
+        if (mode === "range") {
+          if (fieldEnd) fieldEnd.style.display = "flex";
+          if (lblStart) lblStart.textContent = "Start Date";
+        } else {
+          if (fieldEnd) fieldEnd.style.display = "none";
+          if (lblStart) lblStart.textContent = "Filing Date";
+        }
+      });
+    }
+
+    const sinceLastBtn = document.getElementById("ib-since-last-btn");
+    if (sinceLastBtn) {
+      sinceLastBtn.addEventListener("click", () => {
+        const lastTs = getLastChecked();
+        let startDate;
+        if (lastTs) {
+          startDate = new Date(lastTs).toISOString().split('T')[0];
+        } else {
+          const d = new Date();
+          d.setDate(d.getDate() - 7);
+          startDate = d.toISOString().split('T')[0];
+        }
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        const modeSelect = document.getElementById("ib-date-mode");
+        if (modeSelect) {
+          modeSelect.value = "range";
+          modeSelect.dispatchEvent(new Event("change"));
+        }
+        
+        const dateInput = document.getElementById("ib-date");
+        const endDateInput = document.getElementById("ib-end-date");
+        if (dateInput) dateInput.value = startDate;
+        if (endDateInput) endDateInput.value = todayStr;
+        
+        fetchInsiderBuys();
+      });
+    }
+
+    const markCheckedBtn = document.getElementById("ib-mark-checked-btn");
+    if (markCheckedBtn) {
+      markCheckedBtn.addEventListener("click", () => {
+        setLastChecked(Date.now());
+      });
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    let ibEventSource = null;
+    let currentInsiderTrades = [];
+    let expandedTickerRows = new Set();
+
+    function groupTradesByTicker(trades) {
+      const groups = {};
+      (trades || []).forEach(r => {
+        const ticker = (r.ticker || "UNKNOWN").toUpperCase();
+        if (!groups[ticker]) {
+          groups[ticker] = {
+            ticker: ticker,
+            company: r.issuer_name || r.company || "Unknown",
+            market_cap: r.market_cap,
+            trades: [],
+            total_value: 0,
+            total_shares: 0,
+            insidersMap: new Map(),
+            dates: []
+          };
+        }
+        const g = groups[ticker];
+        g.trades.push(r);
+        const price = r.price_per_share !== undefined ? r.price_per_share : (r.price !== undefined ? r.price : 0);
+        const shares = r.shares !== undefined ? r.shares : (r.amount !== undefined ? r.amount : 0);
+        const totalVal = r.total_value !== undefined ? r.total_value : (shares * price);
+        
+        g.total_value += totalVal;
+        g.total_shares += shares;
+        
+        const iName = r.insider_name || "Unknown";
+        const iTitle = r.insider_title || "Insider";
+        if (!g.insidersMap.has(iName)) {
+          g.insidersMap.set(iName, { name: iName, title: iTitle, total_val: 0, count: 0 });
+        }
+        const insInfo = g.insidersMap.get(iName);
+        insInfo.total_val += totalVal;
+        insInfo.count += 1;
+        
+        const dateStr = r.transaction_date || r.filing_date;
+        if (dateStr) g.dates.push(dateStr);
+      });
+
+      const list = Object.values(groups).map(g => {
+        g.avg_price = g.total_shares > 0 ? (g.total_value / g.total_shares) : 0;
+        g.dates.sort();
+        g.start_date = g.dates[0] || "—";
+        g.end_date = g.dates[g.dates.length - 1] || "—";
+        g.date_label = (g.start_date === g.end_date) ? g.start_date : `${g.start_date} → ${g.end_date}`;
+        // Sort trades within the company group by transaction date desc, then value desc
+        g.trades.sort((a, b) => {
+          const dateA = a.transaction_date || a.filing_date || "";
+          const dateB = b.transaction_date || b.filing_date || "";
+          if (dateB !== dateA) return dateB.localeCompare(dateA);
+          return (b.total_value || 0) - (a.total_value || 0);
+        });
+        g.insiders = Array.from(g.insidersMap.values()).sort((a, b) => b.total_val - a.total_val);
+        return g;
+      });
+
+      // Sort companies by total cumulative buy value descending
+      list.sort((a, b) => b.total_value - a.total_value);
+      return list;
+    }
+
+    function toggleTickerRow(ticker, event) {
+      if (event) event.stopPropagation();
+      const subrow = document.getElementById(`subrow-${ticker}`);
+      const chevron = document.getElementById(`chevron-${ticker}`);
+      const mainrow = document.getElementById(`mainrow-${ticker}`);
+      if (!subrow) return;
+
+      if (expandedTickerRows.has(ticker)) {
+        expandedTickerRows.delete(ticker);
+        subrow.style.display = "none";
+        if (chevron) chevron.classList.remove("open");
+        if (mainrow) mainrow.classList.remove("is-expanded");
+      } else {
+        expandedTickerRows.add(ticker);
+        subrow.style.display = "table-row";
+        if (chevron) chevron.classList.add("open");
+        if (mainrow) mainrow.classList.add("is-expanded");
+      }
+
+      updateExpandAllBtnText();
+    }
+
+    function updateExpandAllBtnText() {
+      const expandAllBtn = document.getElementById("ib-toggle-expand-all");
+      if (!expandAllBtn) return;
+      const groupedData = groupTradesByTicker(currentInsiderTrades);
+      const allExpanded = groupedData.length > 0 && groupedData.every(g => expandedTickerRows.has(g.ticker));
+      expandAllBtn.textContent = allExpanded ? "Collapse All" : "Expand All";
+    }
+
+    function toggleExpandAll() {
+      const groupedData = groupTradesByTicker(currentInsiderTrades);
+      const allExpanded = groupedData.length > 0 && groupedData.every(g => expandedTickerRows.has(g.ticker));
+      
+      if (allExpanded) {
+        expandedTickerRows.clear();
+      } else {
+        groupedData.forEach(g => expandedTickerRows.add(g.ticker));
+      }
+      renderInsiderBuysTable();
+    }
+
+    const expandAllBtn = document.getElementById("ib-toggle-expand-all");
+    if (expandAllBtn) {
+      expandAllBtn.addEventListener("click", toggleExpandAll);
+    }
+
+    const viewModeSelect = document.getElementById("ib-view-mode");
+    if (viewModeSelect) {
+      const savedMode = localStorage.getItem("insider_buys_view_mode") || "grouped";
+      viewModeSelect.value = savedMode;
+      viewModeSelect.addEventListener("change", (e) => {
+        localStorage.setItem("insider_buys_view_mode", e.target.value);
+        renderInsiderBuysTable();
+      });
+    }
+
+    function renderInsiderBuysTable() {
+      const thead = document.getElementById("ib-table-head");
+      const tbody = document.getElementById("ib-table-body");
+      const summaryBar = document.getElementById("ib-summary-bar");
+      const summaryText = document.getElementById("ib-summary-text");
+      const expandAllBtn = document.getElementById("ib-toggle-expand-all");
+      const viewModeSelect = document.getElementById("ib-view-mode");
+      if (!tbody) return;
+
+      const viewMode = viewModeSelect ? viewModeSelect.value : (localStorage.getItem("insider_buys_view_mode") || "grouped");
+
+      if (!currentInsiderTrades || currentInsiderTrades.length === 0) {
+        if (summaryBar) summaryBar.style.display = "none";
+        if (expandAllBtn) expandAllBtn.style.display = "none";
+        tbody.innerHTML = `<tr>
+          <td colspan="11" class="empty-state" style="text-align: center; padding: 40px; color: #94a3b8;">
+            No insider trades found matching your filters for this date/range.
+          </td>
+        </tr>`;
+        return;
+      }
+
+      let history = [];
+      try {
+        history = JSON.parse(localStorage.getItem("financials_history") || "[]");
+      } catch(e) {}
+
+      const totalValAll = currentInsiderTrades.reduce((acc, t) => acc + (t.total_value || 0), 0);
+      const totalTradesAll = currentInsiderTrades.length;
+      const groupedData = groupTradesByTicker(currentInsiderTrades);
+      const totalCompanies = groupedData.length;
+
+      // Update Summary Bar
+      if (summaryBar && summaryText) {
+        summaryBar.style.display = "flex";
+        summaryText.innerHTML = `<span>📊 Found <strong>${totalCompanies}</strong> ${totalCompanies === 1 ? 'company' : 'companies'} · <strong>${totalTradesAll}</strong> trade${totalTradesAll === 1 ? '' : 's'} · <strong style="color: #16a34a;">$${totalValAll.toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> total cumulative volume</span>`;
+      }
+
+      if (viewMode === "grouped") {
+        if (expandAllBtn) {
+          expandAllBtn.style.display = "inline-flex";
+          updateExpandAllBtnText();
+        }
+
+        if (thead) {
+          thead.innerHTML = `<tr>
+            <th style="width: 45px; text-align: center;">#</th>
+            <th style="text-align: left;">Company</th>
+            <th style="width: 90px; text-align: center;">Ticker</th>
+            <th style="width: 110px; text-align: right;">Market Cap</th>
+            <th style="text-align: left;">Insider(s)</th>
+            <th style="width: 140px; text-align: right;">Activity Window</th>
+            <th style="width: 110px; text-align: right;">Total Shares</th>
+            <th style="width: 95px; text-align: right;">Avg Price</th>
+            <th style="width: 130px; text-align: right;">Cumulative Value</th>
+            <th style="width: 100px; text-align: center;">Trades</th>
+            <th style="width: 100px; text-align: center;">Action</th>
+          </tr>`;
+        }
+
+        let html = "";
+        groupedData.forEach((g, idx) => {
+          const capStr = g.market_cap ? `$${(g.market_cap / 1e6).toFixed(0)}M` : "N/A";
+          const valStr = `$${g.total_value.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+          const avgPriceStr = `$${g.avg_price.toFixed(2)}`;
+          const sharesStr = g.total_shares.toLocaleString(undefined, {maximumFractionDigits: 0});
+          const historyItem = history.find(h => h.ticker === g.ticker);
+          const lastViewedHtml = historyItem 
+            ? `<div style="font-size: 0.58rem; color: #0284c7; margin-top: 4px; font-weight: 500; white-space: nowrap;">👁️ ${fmtTime(historyItem.time)}</div>` 
+            : "";
+          
+          let insidersHtml = "";
+          if (g.insiders.length === 1) {
+            const ins = g.insiders[0];
+            insidersHtml = `
+              <div style="font-weight: 600; color: #0f172a;">${escapeHtml(ins.name)}</div>
+              <div style="font-size: 0.65rem; color: #64748b;">${escapeHtml(ins.title || 'Insider')}</div>
+            `;
+          } else {
+            const namesSummary = g.insiders.map(i => `${i.name} (${i.title || 'Insider'})`).join(", ");
+            insidersHtml = `
+              <div style="font-weight: 600; color: #0f172a; display: flex; align-items: center; gap: 6px;">
+                <span>${g.insiders.length} Insiders</span>
+                <span style="font-size: 0.62rem; font-weight: 500; background: #e0f2fe; color: #0369a1; padding: 1px 6px; border-radius: 4px;">Multiple</span>
+              </div>
+              <div style="font-size: 0.65rem; color: #64748b; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(namesSummary)}">
+                ${escapeHtml(namesSummary)}
+              </div>
+            `;
+          }
+
+          const isExpanded = expandedTickerRows.has(g.ticker);
+          const chevronClass = isExpanded ? "ib-chevron open" : "ib-chevron";
+          const rowClass = isExpanded ? "ib-grouped-row is-expanded" : "ib-grouped-row";
+
+          // Subtable rows for individual trades
+          let subRowsHtml = "";
+          g.trades.forEach((t, tIdx) => {
+            const tPrice = t.price_per_share !== undefined ? t.price_per_share : (t.price !== undefined ? t.price : 0);
+            const tShares = t.shares !== undefined ? t.shares : (t.amount !== undefined ? t.amount : 0);
+            const tVal = t.total_value !== undefined ? t.total_value : (tShares * tPrice);
+            const tDate = t.transaction_date || t.filing_date || "—";
+            const tSource = t.filing_url ? `<a class="link-sec" href="${t.filing_url}" target="_blank" onclick="event.stopPropagation()">Form 4 ↗</a>` : "—";
+
+            subRowsHtml += `<tr>
+              <td style="text-align: center; color: #94a3b8; font-weight: 500;">${tIdx + 1}</td>
+              <td style="text-align: left;">
+                <div style="font-weight: 600; color: #0f172a;">${escapeHtml(t.insider_name || 'Unknown')}</div>
+                <div style="font-size: 0.62rem; color: #64748b;">${escapeHtml(t.insider_title || 'Insider')}</div>
+              </td>
+              <td style="text-align: right;">${tDate}</td>
+              <td style="text-align: right; font-variant-numeric: tabular-nums;">${tShares.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+              <td style="text-align: right; font-variant-numeric: tabular-nums;">$${tPrice.toFixed(2)}</td>
+              <td style="text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: #16a34a;">$${tVal.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+              <td style="text-align: center;">${tSource}</td>
+            </tr>`;
+          });
+
+          html += `
+            <tr class="${rowClass}" onclick="toggleTickerRow('${g.ticker}', event)" id="mainrow-${g.ticker}">
+              <td style="text-align: center; color: #94a3b8; font-weight: 500;">${idx + 1}</td>
+              <td style="text-align: left; font-weight: 600; color: #0f172a;">${escapeHtml(g.company)}</td>
+              <td style="text-align: center;">
+                <a class="badge-ticker" onclick="event.stopPropagation(); analyzeTicker('${g.ticker}')">${g.ticker}</a>
+                ${lastViewedHtml}
+              </td>
+              <td style="text-align: right; font-variant-numeric: tabular-nums;">${capStr}</td>
+              <td style="text-align: left;">${insidersHtml}</td>
+              <td style="text-align: right; font-size: 0.7rem; color: #475569;">${g.date_label}</td>
+              <td style="text-align: right; font-variant-numeric: tabular-nums;">${sharesStr}</td>
+              <td style="text-align: right; font-variant-numeric: tabular-nums;">${avgPriceStr}</td>
+              <td style="text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: #16a34a;">${valStr}</td>
+              <td style="text-align: center;">
+                <button class="ib-badge-count" onclick="event.stopPropagation(); toggleTickerRow('${g.ticker}', event)" title="Click to expand/collapse individual trades">
+                  <span>${g.trades.length} buy${g.trades.length > 1 ? 's' : ''}</span>
+                  <span class="${chevronClass}" id="chevron-${g.ticker}">▼</span>
+                </button>
+              </td>
+              <td style="text-align: center;">
+                <button class="ib-btn ib-btn-secondary" onclick="event.stopPropagation(); analyzeTicker('${g.ticker}')">Analyze</button>
+              </td>
+            </tr>
+            <tr id="subrow-${g.ticker}" class="ib-detail-row" style="display: ${isExpanded ? 'table-row' : 'none'};">
+              <td colspan="11" style="background: #f8fafc; padding: 10px 16px 14px 20px; border-bottom: 2px solid #cbd5e1; border-top: 1px dashed #cbd5e1;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <div style="font-size: 0.72rem; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 8px;">
+                    <span>Individual Form 4 Filings for <strong>${g.ticker}</strong> (${g.trades.length} transactions)</span>
+                  </div>
+                  <div style="font-size: 0.68rem; color: #64748b;">
+                    Cumulative Total: <strong style="color: #16a34a;">${valStr}</strong> · Weighted Avg Price: <strong>${avgPriceStr}</strong>
+                  </div>
+                </div>
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 5px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                  <table class="ib-subtable">
+                    <thead>
+                      <tr>
+                        <th style="width: 40px; text-align: center;">#</th>
+                        <th style="text-align: left;">Insider Name &amp; Title</th>
+                        <th style="width: 110px; text-align: right;">Trade Date</th>
+                        <th style="width: 110px; text-align: right;">Shares</th>
+                        <th style="width: 95px; text-align: right;">Price</th>
+                        <th style="width: 120px; text-align: right;">Total Value</th>
+                        <th style="width: 100px; text-align: center;">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${subRowsHtml}
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+        tbody.innerHTML = html;
+      } else {
+        // Flat individual trades view
+        if (expandAllBtn) {
+          expandAllBtn.style.display = "none";
+        }
+
+        if (thead) {
+          thead.innerHTML = `<tr>
+            <th style="width: 50px; text-align: center;">#</th>
+            <th style="text-align: left;">Company</th>
+            <th style="width: 90px; text-align: center;">Ticker</th>
+            <th style="width: 120px; text-align: right;">Market Cap</th>
+            <th style="text-align: left;">Insider Name &amp; Title</th>
+            <th style="width: 100px; text-align: right;">Trade Date</th>
+            <th style="width: 110px; text-align: right;">Shares</th>
+            <th style="width: 100px; text-align: right;">Price</th>
+            <th style="width: 130px; text-align: right;">Total Value</th>
+            <th style="width: 100px; text-align: center;">Source</th>
+            <th style="width: 120px; text-align: center;">Action</th>
+          </tr>`;
+        }
+
+        let html = "";
+        currentInsiderTrades.forEach((r, idx) => {
+          const issuerName = r.issuer_name || r.company || "Unknown";
+          const price = r.price_per_share !== undefined ? r.price_per_share : (r.price !== undefined ? r.price : 0);
+          const txnDate = r.transaction_date || r.filing_date || "—";
+          const shares = r.shares !== undefined ? r.shares : (r.amount !== undefined ? r.amount : 0);
+
+          const capStr = r.market_cap ? `$${(r.market_cap / 1e6).toFixed(0)}M` : "N/A";
+          const valStr = `$${r.total_value.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+          const priceStr = `$${price.toFixed(2)}`;
+          const sharesStr = shares.toLocaleString(undefined, {maximumFractionDigits: 0});
+          const sourceLink = r.filing_url ? `<a class="link-sec" href="${r.filing_url}" target="_blank">Form 4 ↗</a>` : "—";
+          const actionBtn = `<button class="ib-btn ib-btn-secondary" onclick="analyzeTicker('${r.ticker}')">Analyze</button>`;
+          
+          const historyItem = history.find(h => h.ticker === r.ticker);
+          const lastViewedHtml = historyItem 
+            ? `<div style="font-size: 0.58rem; color: #0284c7; margin-top: 4px; font-weight: 500; white-space: nowrap;">👁️ ${fmtTime(historyItem.time)}</div>` 
+            : "";
+
+          html += `<tr>
+            <td style="text-align: center; color: #94a3b8; font-weight: 500;">${idx + 1}</td>
+            <td style="text-align: left; font-weight: 500;">${escapeHtml(issuerName)}</td>
+            <td style="text-align: center;">
+              <a class="badge-ticker" onclick="analyzeTicker('${r.ticker}')">${r.ticker}</a>
+              ${lastViewedHtml}
+            </td>
+            <td style="text-align: right; font-variant-numeric: tabular-nums;">${capStr}</td>
+            <td style="text-align: left;">
+              <div style="font-weight: 600; color: #0f172a;">${escapeHtml(r.insider_name || 'Unknown')}</div>
+              <div style="font-size: 0.65rem; color: #64748b;">${escapeHtml(r.insider_title || 'Insider')}</div>
+            </td>
+            <td style="text-align: right;">${txnDate}</td>
+            <td style="text-align: right; font-variant-numeric: tabular-nums;">${sharesStr}</td>
+            <td style="text-align: right; font-variant-numeric: tabular-nums;">${priceStr}</td>
+            <td style="text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: #16a34a;">${valStr}</td>
+            <td style="text-align: center;">${sourceLink}</td>
+            <td style="text-align: center;">${actionBtn}</td>
+          </tr>`;
+        });
+        tbody.innerHTML = html;
+      }
+    }
+
+    function fetchInsiderBuys() {
+      if (ibEventSource) {
+        ibEventSource.close();
+        ibEventSource = null;
+      }
+
+      const spinner = document.getElementById("ib-spinner-wrap");
+      const progressText = document.getElementById("ib-progress-text");
+      const tbody = document.getElementById("ib-table-body");
+      const errorDiv = document.getElementById("ib-error");
+      const summaryBar = document.getElementById("ib-summary-bar");
+      const btn = document.getElementById("ib-refresh-btn");
+      if (!spinner || !tbody || !errorDiv || !btn) return;
+      
+      const dateInput = document.getElementById("ib-date");
+      const minInput = document.getElementById("ib-min-value");
+      const maxCapSelect = document.getElementById("ib-max-market-cap");
+      if (!dateInput || !minInput || !maxCapSelect) return;
+
+      const minVal = minInput.value;
+      const maxCapVal = maxCapSelect.value;
+      const modeSelect = document.getElementById("ib-date-mode");
+      const mode = modeSelect ? modeSelect.value : "single";
+      
+      let url = `/api/insider-buys?min_value=${minVal}&max_market_cap=${maxCapVal}`;
+      if (mode === "range") {
+        const startDateVal = dateInput.value;
+        const endDateInput = document.getElementById("ib-end-date");
+        const endDateVal = endDateInput ? endDateInput.value : startDateVal;
+        url += `&start_date=${startDateVal}&end_date=${endDateVal}`;
+      } else {
+        const dateVal = dateInput.value;
+        url += `&date=${dateVal}`;
+      }
+      
+      spinner.style.display = "flex";
+      if (progressText) {
+        progressText.textContent = "Checking cache / fetching daily index...";
+      }
+      errorDiv.style.display = "none";
+      if (summaryBar) summaryBar.style.display = "none";
+      btn.disabled = true;
+      
+      tbody.innerHTML = `<tr>
+        <td colspan="11" class="empty-state" style="text-align: center; padding: 40px; color: #94a3b8;">
+          Initiating request...
+        </td>
+      </tr>`;
+      
+      ibEventSource = new EventSource(url);
+      
+      ibEventSource.onmessage = function(event) {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === "progress") {
+            const msg = data.msg || (data.current ? `Processing filing ${data.current} of ${data.total}...` : "Processing SEC filings...");
+            if (progressText) {
+              progressText.textContent = msg;
+            }
+            tbody.innerHTML = `<tr>
+              <td colspan="11" class="empty-state" style="text-align: center; padding: 40px; color: #64748b;">
+                ${msg}
+              </td>
+            </tr>`;
+          } else if (data.type === "results") {
+            ibEventSource.close();
+            ibEventSource = null;
+            
+            spinner.style.display = "none";
+            btn.disabled = false;
+            setLastChecked(Date.now());
+            
+            currentInsiderTrades = data.data.results || [];
+            expandedTickerRows.clear();
+            renderInsiderBuysTable();
+          } else if (data.type === "error") {
+            ibEventSource.close();
+            ibEventSource = null;
+            
+            spinner.style.display = "none";
+            btn.disabled = false;
+            
+            errorDiv.textContent = data.error || "Failed to load insider buys.";
+            errorDiv.style.display = "block";
+            tbody.innerHTML = `<tr>
+              <td colspan="11" class="empty-state" style="text-align: center; padding: 40px; color: #dc2626;">
+                ${data.error || "Failed to load insider buys."}
+              </td>
+            </tr>`;
+          }
+        } catch (e) {
+          console.error("Error parsing SSE event", e);
+        }
+      };
+      
+      ibEventSource.onerror = function(err) {
+        ibEventSource.close();
+        ibEventSource = null;
+        
+        spinner.style.display = "none";
+        btn.disabled = false;
+        
+        errorDiv.textContent = "Connection lost or error reading progress.";
+        errorDiv.style.display = "block";
+        tbody.innerHTML = `<tr>
+          <td colspan="11" class="empty-state" style="text-align: center; padding: 40px; color: #dc2626;">
+            Error loading insider buys.
+          </td>
+        </tr>`;
+      };
+    }
+
+    function analyzeTicker(ticker) {
+      document.getElementById("ticker-input").value = ticker;
+      if (document.getElementById("nav-tabs")) {
+        switchTab("financials");
+      }
+      _lastRenderArgs = null; // reset to fetch fresh
+      fetchFinancials(ticker, G_FREQ);
+    }
+
+    const refreshBtn = document.getElementById("ib-refresh-btn");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", fetchInsiderBuys);
+    }
+
+    // Initial load
+    renderHistory();
+
+    // Check URL parameters on page load
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get("tab");
+    const dateParam = urlParams.get("date");
+    
+    if (tabParam === "insider-buys" && document.getElementById("nav-tabs")) {
+      const dateInput = document.getElementById("ib-date");
+      if (dateParam && dateInput) {
+        dateInput.value = dateParam;
+      }
+      switchTab("insider-buys");
+      fetchInsiderBuys();
+    }
+  </script>
+
+</body>
+</html>

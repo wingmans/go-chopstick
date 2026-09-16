@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"math/big"
 	"mime"
 	"net/http"
 	"os"
@@ -24,7 +25,7 @@ import (
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
-//go:embed index.html detail.html
+//go:embed index.html detail.html company.html
 var templateFiles embed.FS
 
 type Server struct {
@@ -59,6 +60,11 @@ type dashboardData struct {
 	Filings     []filingSummary `json:"filings"`
 }
 
+type companyPageData struct {
+	History filingview.CompanyHistory
+	Ticker  string
+}
+
 func NewServer(parsedDir string, logger *slog.Logger) *Server {
 	server, err := NewConfiguredServer(parsedDir, "", "", logger)
 	if err != nil {
@@ -74,9 +80,11 @@ func NewServer(parsedDir string, logger *slog.Logger) *Server {
 //nolint:wsl_v5 // Configuration keeps the optional set setup together.
 func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger) (*Server, error) {
 	server := &Server{
-		parsedDir:   parsedDir,
-		logger:      logger,
-		template:    template.Must(template.ParseFS(templateFiles, "*.html")),
+		parsedDir: parsedDir,
+		logger:    logger,
+		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
+			"formatFact": formatFactValue,
+		}).ParseFS(templateFiles, "*.html")),
 		setName:     setName,
 		setAsOf:     "",
 		memberByCIK: map[string]constituents.Member{},
@@ -104,6 +112,73 @@ func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger)
 	return server, nil
 }
 
+//nolint:wsl_v5 // Formatting keeps parsing, scaling, and unit decoration together.
+func formatFactValue(value filingview.FactValue, unit string) string {
+	if value.Nil || strings.TrimSpace(value.Value) == "" {
+		return "-"
+	}
+
+	number := strings.ReplaceAll(strings.TrimSpace(value.Value), ",", "")
+	rational, ok := new(big.Rat).SetString(number)
+	if !ok {
+		return value.Value
+	}
+
+	currency := strings.Contains(strings.ToLower(unit), "usd")
+	perShare := strings.Contains(strings.ToLower(unit), "pershare")
+	formatted := compactNumber(rational)
+	if !strings.ContainsAny(formatted, "KMBT") && (currency || perShare) {
+		formatted = trimDecimal(rational.FloatString(2))
+	}
+	if currency || perShare {
+		if trimmed, ok := strings.CutPrefix(formatted, "("); ok {
+			formatted = "($" + strings.TrimSuffix(trimmed, ")") + ")"
+		} else {
+			formatted = "$" + formatted
+		}
+	}
+
+	return formatted
+}
+
+//nolint:wsl_v5 // Scaling keeps threshold selection and rendering together.
+func compactNumber(value *big.Rat) string {
+	negative := value.Sign() < 0
+	abs := new(big.Rat).Abs(value)
+	suffix := ""
+	divisor := big.NewRat(1, 1)
+	for _, scale := range []struct {
+		threshold int64
+		suffix    string
+	}{
+		{1_000_000_000_000, "T"},
+		{1_000_000_000, "B"},
+		{1_000_000, "M"},
+		{1_000, "K"},
+	} {
+		if abs.Cmp(big.NewRat(scale.threshold, 1)) >= 0 {
+			divisor = big.NewRat(scale.threshold, 1)
+			suffix = scale.suffix
+
+			break
+		}
+	}
+
+	formatted := trimDecimal(new(big.Rat).Quo(abs, divisor).FloatString(1)) + suffix
+	if negative {
+		return "(" + formatted + ")"
+	}
+
+	return formatted
+}
+
+func trimDecimal(value string) string {
+	value = strings.TrimRight(value, "0")
+	value = strings.TrimRight(value, ".")
+
+	return value
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.logger != nil {
 		s.logger.Debug("local dashboard request", "method", r.Method, "url", r.URL.String())
@@ -112,6 +187,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/":
 		_ = s.template.ExecuteTemplate(w, "index.html", nil)
+	case strings.HasPrefix(r.URL.Path, "/companies/"):
+		s.company(w, r)
 	case strings.HasPrefix(r.URL.Path, "/filings/") && strings.Contains(r.URL.Path, "/documents/"):
 		s.document(w, r)
 	case strings.HasPrefix(r.URL.Path, "/filings/"):
@@ -123,6 +200,74 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+//nolint:wsl_v5 // Company rendering keeps route validation and loading together.
+func (s *Server) company(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/companies/"), "/")
+	if len(parts) != 1 {
+		http.NotFound(w, r)
+
+		return
+	}
+
+	cik := canonicalCIK(parts[0])
+	if cik == "" {
+		http.NotFound(w, r)
+
+		return
+	}
+
+	history, err := s.loadCompanyHistory(cik)
+	if errors.Is(err, os.ErrNotExist) || len(history.Years) == 0 {
+		http.NotFound(w, r)
+
+		return
+	}
+	if err != nil {
+		s.writeError(w, err)
+
+		return
+	}
+
+	member := s.memberByCIK[cik]
+	data := companyPageData{History: history, Ticker: member.Ticker}
+	if err := s.template.ExecuteTemplate(w, "company.html", data); err != nil {
+		s.writeError(w, err)
+	}
+}
+
+//nolint:wsl_v5 // Local history loading is one filesystem boundary.
+func (s *Server) loadCompanyHistory(cik string) (filingview.CompanyHistory, error) {
+	views := make([]filingview.View, 0)
+	err := filepath.Walk(s.parsedDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || info.Name() != "filing-view.json" {
+			return nil
+		}
+		view, err := filingview.Load(path)
+		if err != nil {
+			return fmt.Errorf("load %s: %w", path, err)
+		}
+		if canonicalCIK(view.Metadata.CIK) == cik {
+			views = append(views, view)
+		}
+
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return filingview.CompanyHistory{
+			CIK: "", Company: "", Years: []string{},
+			Statements: []filingview.HistoryStatement{},
+		}, nil
+	}
+	if err != nil {
+		return filingview.CompanyHistory{}, err
+	}
+
+	return filingview.BuildCompanyHistory(views, cik)
 }
 
 //nolint:wsl_v5 // Filtering keeps query parsing and matching together.

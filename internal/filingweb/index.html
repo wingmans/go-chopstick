@@ -22,6 +22,13 @@
     .context { display: flex; justify-content: space-between; gap: 12px;
       margin-bottom: 12px; color: #64748b; font-size: 12px; }
     .context strong { color: #334155; }
+    .recent { display: none; align-items: center; flex-wrap: wrap; gap: 6px;
+      margin-bottom: 14px; color: #64748b; font-size: 12px; }
+    .recent.visible { display: flex; }
+    .recent a, .recent button { padding: 4px 8px; border: 1px solid #cbd5e1;
+      border-radius: 4px; background: white; color: #2563eb; font: inherit;
+      font-weight: 600; text-decoration: none; cursor: pointer; }
+    .recent button { color: #64748b; font-size: 12px; }
     .summary { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr));
       gap: 10px; margin-bottom: 20px; }
     .card, .panel { background: white; border: 1px solid #dbe3ec; border-radius: 6px; }
@@ -70,6 +77,11 @@
       <span>Local parsed filings</span>
       <span id="set-context"></span>
     </div>
+    <nav class="recent" id="recent-filings" aria-label="Recent filings">
+      <span>Recent filings</span>
+      <span id="recent-links"></span>
+      <button id="clear-recent" type="button">Clear</button>
+    </nav>
     <section class="summary">
       <div class="card"><div class="label">Company</div>
         <div class="value" id="company">All</div></div>
@@ -96,6 +108,8 @@
     const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
       '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
     }[c]));
+    const recentKey = 'edgar.recent-filings.v1';
+    const recentLimit = 8;
     const params = new URLSearchParams();
     const initialParams = new URLSearchParams(window.location.search);
     document.getElementById('query').value = initialParams.get('q') || '';
@@ -125,8 +139,9 @@
           ? ' class="status-' + esc(f.status) + '"' : '';
         const returnTo = window.location.pathname + window.location.search;
         return `<tr><td>${esc(f.ticker || '-')}</td>` +
-          `<td>${esc(f.company || '-')}</td>` +
-          `<td><a href="/filings/${encodeURIComponent(f.cik)}/` +
+          `<td><a href="/companies/${encodeURIComponent(f.cik)}">` +
+          `${esc(f.company || '-')}</a></td>` +
+          `<td><a data-ticker="${esc(f.ticker || '')}" href="/filings/${encodeURIComponent(f.cik)}/` +
           `${encodeURIComponent(f.accession)}?return_to=${encodeURIComponent(returnTo)}">` +
           `${esc(f.form_type)}</a></td>` +
           `<td>${esc(f.accession)}</td><td>${esc(f.filing_date)}</td>` +
@@ -139,6 +154,46 @@
     document.getElementById('search').addEventListener('submit', event => {
       event.preventDefault(); load();
     });
+    function readRecent() {
+      try {
+        const entries = JSON.parse(localStorage.getItem(recentKey) || '[]');
+        return Array.isArray(entries) ? entries : [];
+      } catch (error) {
+        return [];
+      }
+    }
+    function writeRecent(entries) {
+      try { localStorage.setItem(recentKey, JSON.stringify(entries)); } catch (error) {}
+    }
+    function renderRecent() {
+      const container = document.getElementById('recent-links');
+      const navigation = document.getElementById('recent-filings');
+      container.replaceChildren();
+      const entries = readRecent().filter(entry => entry && entry.ticker &&
+        typeof entry.href === 'string' && entry.href.startsWith('/filings/'));
+      entries.forEach(entry => {
+        const link = document.createElement('a');
+        link.href = entry.href;
+        link.textContent = entry.ticker;
+        container.append(link);
+      });
+      navigation.classList.toggle('visible', entries.length > 0);
+    }
+    function rememberFiling(ticker, href) {
+      if (!ticker || !href) return;
+      const entries = readRecent().filter(entry => entry.href !== href);
+      entries.unshift({ticker, href});
+      writeRecent(entries.slice(0, recentLimit));
+      renderRecent();
+    }
+    document.getElementById('filings').addEventListener('click', event => {
+      const link = event.target.closest('a[data-ticker]');
+      if (link) rememberFiling(link.dataset.ticker, link.getAttribute('href'));
+    });
+    document.getElementById('clear-recent').addEventListener('click', () => {
+      writeRecent([]); renderRecent();
+    });
+    renderRecent();
     load().catch(error => {
       document.getElementById('filings').innerHTML =
         `<tr><td colspan="8" class="empty">${esc(error)}</td></tr>`;

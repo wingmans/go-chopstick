@@ -125,6 +125,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"href=\"/?q=MSFT\"",
 		"data-testid=\"metric-RevenueFromContractWithCustomerExcludingAssessedTax-FY2026\"",
 		"Revenue",
+		"$331.8B",
 		"331839000000",
 		"133749000000",
 		"758376000000",

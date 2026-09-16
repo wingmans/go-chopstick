@@ -37,7 +37,7 @@ run:
 	go run ./cmd/ecb
 
 serve:
-	LOGLEVEL=debug ./bin/edgar serve     
+	LOGLEVEL=debug ./bin/edgar serve --set us-gaap-coverage
 
 test:
 	go test ./...
