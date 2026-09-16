@@ -4,7 +4,6 @@ This is the current roadmap after the first end-to-end and taxonomy passes.
 
 ## Data Quality
 
-- Add expected-set coverage accounting for missing filings and values.
 - Implement deterministic duplicate-fact selection.
 - Normalize units and define sign handling.
 - Preserve or explicitly exclude dimensional facts.

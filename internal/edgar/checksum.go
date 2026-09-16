@@ -1,6 +1,7 @@
 package edgar
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -30,6 +31,14 @@ func ChecksumPath(indexPath string) string {
 }
 
 func writeChecksum(indexPath, source, sourceURL string) (string, error) {
+	return writeChecksumContext(context.Background(), indexPath, source, sourceURL)
+}
+
+func writeChecksumContext(ctx context.Context, indexPath, source, sourceURL string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	file, err := os.Open(indexPath)
 	if err != nil {
 		return "", fmt.Errorf("open index for checksum %s: %w", indexPath, err)
@@ -42,7 +51,7 @@ func writeChecksum(indexPath, source, sourceURL string) (string, error) {
 	}
 
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	if _, err := io.Copy(hash, newContextReader(ctx, file)); err != nil {
 		return "", fmt.Errorf("hash index %s: %w", indexPath, err)
 	}
 

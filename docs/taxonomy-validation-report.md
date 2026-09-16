@@ -19,6 +19,37 @@ The report should answer four questions:
 The parser remains deterministic. The tuner consumes reports and emits a
 reviewable taxonomy patch outside the `edgar` application.
 
+## Expected-Set Coverage
+
+The separate `edgar coverage` command compares selected master-index records
+with local downloaded filings and parsed views:
+
+```text
+edgar coverage --set us-gaap-coverage --form-type 10-K \
+  --from-year 2010 --to-year 2025
+```
+
+It writes `data/validation/coverage-report.json` by default. The report keeps
+these states separate:
+
+- `missing`: a master record has no local filing;
+- `downloaded`: the filing exists but has no usable parsed view;
+- `parsed`: both the filing and parsed view exist;
+- `parsed_error`: the parsed view exists but cannot be loaded;
+- `source_error`: the local filing path cannot be inspected.
+
+For parsed views, the report also records which canonical taxonomy metrics are
+present or missing. Missing quarterly index files and missing filings produce
+structured acquisition requests. These requests are suggestions for a later
+index, filings, or parse invocation; the coverage command never executes them.
+
+The expected population is deliberately conservative: it is made from records
+present in `master.tsv` after applying the set, CIK, form-type, and year
+filters.
+A company is not assumed to file every form in every calendar year. Missing
+master records therefore require index coverage to be repaired and the master
+file to be stitched before they can become expected filing records.
+
 ## Report Artifacts
 
 A validation run should write a directory containing:

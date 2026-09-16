@@ -142,14 +142,21 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 	}
 
 	for i, archive := range archives {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		started := time.Now()
 
-		network, sourcePath, err := downloadArchive(ctx, edgarClient, cfg.Directory, zipDirectory, archive, cfg.RefreshLatest && i == 0)
+		refresh := cfg.RefreshLatest && i == 0
+
+		network, sourcePath, err := downloadArchive(ctx, edgarClient,
+			cfg.Directory, zipDirectory, archive, refresh)
 		if err != nil {
 			return err
 		}
 
-		if _, err := writeChecksum(filepath.Join(cfg.Directory, archive.FileName),
+		if _, err := writeChecksumContext(ctx, filepath.Join(cfg.Directory, archive.FileName),
 			checksumSource(network), archive.URL); err != nil {
 			return err
 		}
@@ -174,11 +181,11 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 	}
 
 	if cfg.Stitch {
-		if err := StitchTo(cfg.Directory, masterPath); err != nil {
+		if err := StitchToContext(ctx, cfg.Directory, masterPath); err != nil {
 			return err
 		}
 
-		if _, err := writeChecksum(masterPath, "generated", ""); err != nil {
+		if _, err := writeChecksumContext(ctx, masterPath, "generated", ""); err != nil {
 			return err
 		}
 	}
@@ -194,6 +201,26 @@ func checksumSource(network bool) string {
 	return "cache"
 }
 
+type contextReader struct {
+	done   <-chan struct{}
+	err    func() error
+	reader io.Reader
+}
+
+func (r contextReader) Read(buffer []byte) (int, error) {
+	select {
+	case <-r.done:
+		return 0, r.err()
+	default:
+	}
+
+	return r.reader.Read(buffer)
+}
+
+func newContextReader(ctx context.Context, reader io.Reader) io.Reader {
+	return contextReader{done: ctx.Done(), err: ctx.Err, reader: reader}
+}
+
 // Stitch concatenates all quarterly TSV files in directory into master.tsv.
 func Stitch(directory string) error {
 	return StitchTo(directory, filepath.Join(directory, "master.tsv"))
@@ -201,6 +228,14 @@ func Stitch(directory string) error {
 
 // StitchTo concatenates all quarterly TSV files in directory into destination.
 func StitchTo(directory, destination string) error {
+	return StitchToContext(context.Background(), directory, destination)
+}
+
+func StitchToContext(ctx context.Context, directory, destination string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	paths, err := filepath.Glob(filepath.Join(directory, "*-QTR*.tsv"))
 	if err != nil {
 		return fmt.Errorf("find quarterly indexes: %w", err)
@@ -225,6 +260,12 @@ func StitchTo(directory, destination string) error {
 	defer func() { _ = os.Remove(temporaryName) }()
 
 	for _, path := range paths {
+		if err := ctx.Err(); err != nil {
+			_ = temporary.Close()
+
+			return err
+		}
+
 		file, err := os.Open(path)
 		if err != nil {
 			_ = temporary.Close()
@@ -232,7 +273,7 @@ func StitchTo(directory, destination string) error {
 			return fmt.Errorf("open quarterly index %s: %w", path, err)
 		}
 
-		_, copyErr := io.Copy(temporary, file)
+		_, copyErr := io.Copy(temporary, newContextReader(ctx, file))
 
 		closeErr := file.Close()
 		if copyErr != nil {
@@ -273,12 +314,12 @@ func downloadArchive(ctx context.Context, client edgarClient,
 
 	zipPath := filepath.Join(zipDirectory, strings.TrimSuffix(archive.FileName, ".tsv")+".zip")
 
-	zipPath, network, err := ensureZip(ctx, client, archive, zipPath)
+	zipPath, network, err := ensureZip(ctx, client, archive, zipPath, force)
 	if err != nil {
 		return false, "", err
 	}
 
-	if err := extractIndex(zipPath, indexPath); err != nil {
+	if err := extractIndexContext(ctx, zipPath, indexPath); err != nil {
 		return false, "", fmt.Errorf("extract %s: %w", archive.FileName, err)
 	}
 
@@ -358,10 +399,12 @@ func isZip(path string) bool {
 	return reader.Close() == nil
 }
 
-func ensureZip(ctx context.Context, client edgarClient, archive Archive, zipPath string) (string, bool, error) {
+func ensureZip(ctx context.Context, client edgarClient, archive Archive,
+	zipPath string, force bool,
+) (string, bool, error) {
 	_, err := os.Stat(zipPath)
 	switch {
-	case err == nil && isZip(zipPath):
+	case err == nil && isZip(zipPath) && !force:
 		return zipPath, false, nil
 	case err == nil:
 		if removeErr := os.Remove(zipPath); removeErr != nil {
@@ -372,8 +415,10 @@ func ensureZip(ctx context.Context, client edgarClient, archive Archive, zipPath
 		return "", false, fmt.Errorf("check %s: %w", zipPath, err)
 	}
 
-	if legacyPath := legacyZipPath(zipPath); legacyPath != "" && isZip(legacyPath) {
-		return legacyPath, false, nil
+	if !force {
+		if legacyPath := legacyZipPath(zipPath); legacyPath != "" && isZip(legacyPath) {
+			return legacyPath, false, nil
+		}
 	}
 
 	if err := downloadZip(ctx, client, archive.URL, zipPath); err != nil {
@@ -393,6 +438,14 @@ func legacyZipPath(zipPath string) string {
 }
 
 func extractIndex(zipPath, indexPath string) error {
+	return extractIndexContext(context.Background(), zipPath, indexPath)
+}
+
+func extractIndexContext(ctx context.Context, zipPath, indexPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
@@ -425,7 +478,7 @@ func extractIndex(zipPath, indexPath string) error {
 	}
 	defer func() { _ = output.Close() }()
 
-	scanner := bufio.NewScanner(source)
+	scanner := bufio.NewScanner(newContextReader(ctx, source))
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
 	for range headerLines {

@@ -76,7 +76,11 @@ func runServe(ctx context.Context, logger *slog.Logger, address, parsedDir, setN
 	go func() {
 		<-ctx.Done()
 
-		_ = httpServer.Shutdown(ctx)
+		shutdownContext, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+
+		_ = httpServer.Shutdown(shutdownContext)
 	}()
 
 	err = httpServer.ListenAndServe()

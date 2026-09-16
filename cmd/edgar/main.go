@@ -69,6 +69,18 @@ type appConfig struct {
 		setName   string
 		year      string
 	}
+	coverage struct {
+		masterPath string
+		indexesDir string
+		filingsDir string
+		parsedDir  string
+		out        string
+		filter     edgar.IndexFilter
+		formTypes  stringList
+		setName    string
+		fromYear   int
+		toYear     int
+	}
 }
 
 type stringList []string
@@ -104,6 +116,18 @@ func runMain() error {
 	ctx := ctxlog.WithLogger(context.Background(), logger)
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	done := make(chan struct{})
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			stop()
+		case <-done:
+		}
+	}()
+
+	defer close(done)
+
 	defer stop()
 
 	if err := run(ctx, os.Args[1:]); err != nil {
@@ -187,8 +211,10 @@ func run(ctx context.Context, args []string) error {
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir,
 			cfg.serve.setName)
 	case "taxonomy":
-		commandErr = runTaxonomyCommand(cfg.taxonomy.operation, cfg.taxonomy.file,
+		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
 			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter)
+	case "coverage":
+		commandErr = runCoverageCommand(ctx, cfg)
 	default:
 		printUsage()
 
@@ -265,6 +291,8 @@ func parseConfig(args []string) (appConfig, error) {
 		return parseServeConfig(args[1:])
 	case "taxonomy":
 		return parseTaxonomyConfig(args[1:])
+	case "coverage":
+		return parseCoverageConfig(args[1:])
 	default:
 		printUsage()
 
@@ -339,7 +367,9 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 }
 
 //nolint:wsl_v5 // Loading, linting, and reporting form one boundary operation.
-func runTaxonomyCommand(operation, path, taxonomyPath, parsedDir string, filter edgar.IndexFilter) error {
+func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
+	parsedDir string, filter edgar.IndexFilter,
+) error {
 	taxonomy, err := filingview.LoadTaxonomy(taxonomyPath)
 	if err != nil {
 		return err
@@ -347,9 +377,9 @@ func runTaxonomyCommand(operation, path, taxonomyPath, parsedDir string, filter 
 	paths := []string{path}
 	if path == "" {
 		if operation == "coverage" {
-			paths, err = parsedFilingPaths(parsedDir, filter)
+			paths, err = parsedFilingPaths(ctx, parsedDir, filter)
 		} else {
-			paths, err = filingViewPaths(parsedDir, filter)
+			paths, err = filingViewPaths(ctx, parsedDir, filter)
 		}
 		if err != nil {
 			return err
@@ -359,6 +389,10 @@ func runTaxonomyCommand(operation, path, taxonomyPath, parsedDir string, filter 
 	failed := 0
 	findings := 0
 	for _, filingPath := range paths {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		if operation == "coverage" {
 			filing, loadErr := edgar.LoadParsedFiling(filingPath)
 			if loadErr != nil {
@@ -396,9 +430,13 @@ func runTaxonomyCommand(operation, path, taxonomyPath, parsedDir string, filter 
 }
 
 //nolint:wsl_v5 // Filesystem traversal keeps filtering and collection together.
-func filingViewPaths(directory string, filter edgar.IndexFilter) ([]string, error) {
+func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFilter) ([]string, error) {
 	paths := []string{}
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		if walkErr != nil {
 			return walkErr
 		}
@@ -430,9 +468,13 @@ func filingViewPaths(directory string, filter edgar.IndexFilter) ([]string, erro
 }
 
 //nolint:wsl_v5 // Parsed-file traversal mirrors filing-view traversal.
-func parsedFilingPaths(directory string, filter edgar.IndexFilter) ([]string, error) {
+func parsedFilingPaths(ctx context.Context, directory string, filter edgar.IndexFilter) ([]string, error) {
 	paths := []string{}
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		if walkErr != nil {
 			return walkErr
 		}
@@ -630,6 +672,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
 	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
 	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
+	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")
 }
