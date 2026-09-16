@@ -200,6 +200,9 @@ func classifyCLIError(ctx context.Context, err error) error {
 		return nil
 	}
 
+	logger := ctxlog.FromContext(ctx)
+	logger.Debug("EDGAR command error detail", "error", err.Error())
+
 	if _, ok := errors.AsType[*xerr.Error](err); ok {
 		return err
 	}
@@ -212,8 +215,19 @@ func classifyCLIError(ctx context.Context, err error) error {
 	case errors.Is(err, os.ErrNotExist):
 		return xerr.Wrap(xerr.NotFound, "LOCAL_DATA_NOT_FOUND", "required local data was not found", err)
 	default:
-		if _, ok := errors.AsType[*edgar.HTTPError](err); ok {
-			return xerr.Wrap(xerr.Unavailable, "EDGAR_REJECTED_REQUEST", "EDGAR rejected the request", err)
+		if httpError, ok := errors.AsType[*edgar.HTTPError](err); ok {
+			logger.Debug("EDGAR HTTP error detail",
+				"url", httpError.URL,
+				"status_code", httpError.StatusCode,
+				"status", httpError.Status,
+			)
+
+			return xerr.Wrap(xerr.Unavailable, "EDGAR_REJECTED_REQUEST", "EDGAR rejected the request", err).
+				WithDetails(map[string]any{
+					"url":         httpError.URL,
+					"status_code": httpError.StatusCode,
+					"status":      httpError.Status,
+				})
 		}
 
 		if _, ok := errors.AsType[net.Error](err); ok {

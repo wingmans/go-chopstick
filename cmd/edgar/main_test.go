@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"testing"
+
+	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/xerr"
 )
 
 func TestParseDownloadIndexConfigDefaults(t *testing.T) {
@@ -146,6 +150,28 @@ func TestParseTaxonomyConfigFileCannotUseFilters(t *testing.T) {
 	})
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("expected help for conflicting options, got %v", err)
+	}
+}
+
+func TestClassifyCLIErrorPreservesHTTPDetails(t *testing.T) {
+	original := &edgar.HTTPError{
+		URL: "https://example.test/filing.txt", StatusCode: 429,
+		Status: "429 Too Many Requests",
+	}
+
+	result := classifyCLIError(context.Background(), original)
+
+	classified, ok := errors.AsType[*xerr.Error](result)
+	if !ok {
+		t.Fatalf("classified error is not structured: %v", result)
+	}
+
+	if classified.Details["status_code"] != 429 || classified.Details["url"] != original.URL {
+		t.Fatalf("missing HTTP details: %+v", classified.Details)
+	}
+
+	if classified.Message != "EDGAR rejected the request" {
+		t.Fatalf("unexpected user-facing message %q", classified.Message)
 	}
 }
 

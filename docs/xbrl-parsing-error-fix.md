@@ -28,32 +28,42 @@ These files are XBRL taxonomy support documents:
 - `_lab.xml` contains labels.
 - `_pre.xml` contains presentation linkbases.
 
-They are XML documents included in the filing inventory, but they are not the filing's XBRL instance
-document. The parser was attempting to decode every XML attachment as an instance. Some of these
-support files declare an encoding that Go's XML decoder does not handle without a configured
-character-set reader, causing extraction to fail before the useful filing data could be read.
+They are XML documents included in the filing inventory, but they are not the
+filing's XBRL instance document. The parser was attempting to decode every XML
+attachment as an instance. Some of these support files declare an encoding
+that Go's XML decoder does not handle without a configured character-set
+reader, causing extraction to fail before the useful filing data could be
+read.
 
 ## Fix
 
 Submission extraction now limits XBRL parsing to likely instance documents:
 
 1. Documents explicitly identified as `EX-101.INS` are selected.
-2. Documents whose filenames end in `_htm.xml` are selected as a conventional filing-instance fallback.
-3. Other XML attachments, including `_def.xml`, `_lab.xml`, and `_pre.xml`, remain part of the submission
-   inventory but are not parsed as filing instances.
+2. Documents whose filenames end in `_htm.xml` are selected as a conventional
+   filing-instance fallback.
+3. Other XML attachments, including `_def.xml`, `_lab.xml`, and `_pre.xml`,
+   remain part of the submission inventory but are not parsed as filing
+   instances.
 
-This keeps the inventory complete while preventing taxonomy linkbases from entering the instance parser.
+This keeps the inventory complete while preventing taxonomy linkbases from
+entering the instance parser.
 
 ## Diagnostic behavior
 
-The SEC-declared document count is compared with the number of documents found in the inventory.
-A mismatch is logged as a warning because incomplete or unusual inventories can still contain a usable filing. It does not, by itself, fail processing.
+The SEC-declared document count is compared with the number of documents found
+in the inventory. A mismatch is logged as a warning because incomplete or
+unusual inventories can still contain a usable filing. It does not, by
+itself, fail processing.
 
-Actual extraction failures, such as an unreadable or invalid instance document, continue to fail the filing and are recorded in the submission diagnostics.
+Actual extraction failures, such as an unreadable or invalid instance
+document, continue to fail the filing and are recorded in the submission
+diagnostics.
 
 ## Verification
 
-The change is covered by submission-reader tests using `_htm.xml` instance fixtures, and the full test suite passes with:
+The change is covered by submission-reader tests using `_htm.xml` instance
+fixtures, and the full test suite passes with:
 
 ```bash
 go test ./...
@@ -108,3 +118,46 @@ For each new issue, add a dated section containing:
 - **Cause:** what the filing structure or parser assumption exposed.
 - **Fix:** the parsing or diagnostic behavior that changed.
 - **Verification:** the test, fixture, or command used to confirm the fix.
+
+## Legacy malformed XML entities in 2010-2011 filings
+
+### Symptoms
+
+Nine filings in the broader US-GAAP validation set currently fail with
+diagnostics such as:
+
+```text
+XML syntax error: invalid character entity &lt (no semicolon)
+XML syntax error: invalid characters between closing tag and >
+```
+
+Examples include 2010 10-K filings for NVIDIA, Berkshire Hathaway,
+Caterpillar, NextEra, and Costco, plus several 2011 filings.
+
+### Cause
+
+The affected SEC XBRL instance documents contain malformed XML. Entity
+references such as `&lt` and `&gt` are missing their terminating semicolon,
+and some closing tags contain truncated or invalid names. Go's XML decoder
+correctly rejects these documents rather than silently changing their content.
+
+These are source-format errors in legacy filings, not taxonomy misses,
+network failures, or current pacing errors.
+
+### Current behavior
+
+The parser stores the filing with status `partial` and records the XBRL error
+in its diagnostics. The workflow treats `xbrl_error` as a processing failure.
+An existing partial result may still be reused, so rerunning the workflow
+repeats the diagnostic until parser behavior changes.
+
+The E2E script stops when the combined `filings` command returns these errors,
+so its later explicit `parse --reprocess` step is not reached.
+
+### Follow-up
+
+Do not mutate the pristine raw filing. The remaining-work list tracks a future
+compatibility path that creates a parser-only normalized copy of the affected
+XML, with the original bytes, normalization rules, and diagnostics retained
+for lineage. That work should be covered by fixtures before being enabled
+broadly.
