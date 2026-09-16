@@ -48,6 +48,8 @@ type IndexFilter struct {
 	CIKs      []string
 	FormTypes []string
 	Year      int
+	FromYear  int
+	ToYear    int
 }
 
 // IndexReader reads EDGAR index records one row at a time.
@@ -161,6 +163,14 @@ func matchesIndexFilter(record EdgarIndex, filter IndexFilter) bool {
 	}
 
 	if filter.Year != 0 && record.DateFiled.Year() != filter.Year {
+		return false
+	}
+
+	if filter.FromYear != 0 && record.DateFiled.Year() < filter.FromYear {
+		return false
+	}
+
+	if filter.ToYear != 0 && record.DateFiled.Year() > filter.ToYear {
 		return false
 	}
 

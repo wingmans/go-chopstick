@@ -6,7 +6,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
@@ -16,8 +15,6 @@ import (
 
 func parseSubmissionConfig(args []string) (appConfig, error) {
 	var cfg appConfig
-
-	year := ""
 
 	cfg.command = parseCommand
 	cfg.parse.masterPath = "./data/indexes/master.tsv"
@@ -29,6 +26,8 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 			{flags: "    --set <name>", description: "Select current members from data/sets/<name>.json."},
 			{flags: "-f, --form-type <type>", description: "Select this form type; may be repeated."},
 			{flags: "-y, --year <year>", description: "Select filings filed in this year; default is all years."},
+			{flags: "    --from-year <year>", description: "First filing year to include."},
+			{flags: "    --to-year <year>", description: "Last filing year to include."},
 			{flags: "    --file <path>", description: "Process this local submission; may be repeated."},
 			{flags: "-r, --reprocess", description: "Rebuild parsed results even when they are current."},
 			{flags: noopHelpFlags, description: "Show processing decisions without changing files."},
@@ -40,8 +39,10 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.parse.setName, "set", "", "select filings for this constituent set")
 	flags.Var(&cfg.parse.formTypes, "f", "select this form type; may be repeated")
 	flags.Var(&cfg.parse.formTypes, "form-type", "select this form type; may be repeated")
-	flags.StringVar(&year, "y", "", "select filings filed in this year")
-	flags.StringVar(&year, "year", "", "select filings filed in this year")
+	flags.StringVar(&cfg.parse.year, "y", "", "select filings filed in this year")
+	flags.StringVar(&cfg.parse.year, "year", "", "select filings filed in this year")
+	flags.IntVar(&cfg.parse.fromYear, "from-year", 0, "first filing year to include")
+	flags.IntVar(&cfg.parse.toYear, "to-year", 0, "last filing year to include")
 	flags.Var(&cfg.parse.files, "file", "local submission file")
 	flags.BoolVar(&cfg.parse.noop, "n", false, "parse without writing")
 	flags.BoolVar(&cfg.parse.noop, "noop", false, "parse without writing")
@@ -58,8 +59,9 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 
 	if len(cfg.parse.files) > 0 && (cfg.parse.filter.CIK != "" ||
 		cfg.parse.setName != "" || len(cfg.parse.formTypes) > 0 ||
-		strings.TrimSpace(year) != "") {
-		return subcommandError(flags, errors.New("--file cannot be combined with --cik, --set, --form-type, or --year"))
+		strings.TrimSpace(cfg.parse.year) != "" || cfg.parse.fromYear != 0 ||
+		cfg.parse.toYear != 0) {
+		return subcommandError(flags, errors.New("--file cannot be combined with --cik, --set, --form-type, --year, --from-year, or --to-year"))
 	}
 
 	for _, path := range cfg.parse.files {
@@ -73,13 +75,9 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, err)
 	}
 
-	if strings.TrimSpace(year) != "" {
-		parsedYear, err := strconv.Atoi(strings.TrimSpace(year))
-		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
-			return subcommandError(flags, errors.New("--year must be a four-digit year"))
-		}
-
-		cfg.parse.filter.Year = parsedYear
+	if err := applyYearSelection(flags, &cfg.parse.filter, cfg.parse.year,
+		cfg.parse.fromYear, cfg.parse.toYear); err != nil {
+		return subcommandError(flags, err)
 	}
 
 	return cfg, nil
@@ -94,6 +92,8 @@ func runParse(ctx context.Context, cfg appConfig) error {
 		"set_members", len(cfg.parse.filter.CIKs),
 		"form_types", cfg.parse.filter.FormTypes,
 		"year", cfg.parse.filter.Year,
+		"from_year", cfg.parse.filter.FromYear,
+		"to_year", cfg.parse.filter.ToYear,
 		"noop", cfg.parse.noop,
 		"reprocess", cfg.parse.reprocess,
 	)

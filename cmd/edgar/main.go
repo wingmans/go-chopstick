@@ -46,6 +46,9 @@ type appConfig struct {
 		masterPath string
 		filter     edgar.IndexFilter
 		setName    string
+		year       string
+		fromYear   int
+		toYear     int
 		noop       bool
 		reprocess  bool
 	}
@@ -54,6 +57,9 @@ type appConfig struct {
 		config     edgar.FilingDownloadConfig
 		filter     edgar.IndexFilter
 		setName    string
+		year       string
+		fromYear   int
+		toYear     int
 		reprocess  bool
 	}
 	serve struct {
@@ -197,6 +203,8 @@ func run(ctx context.Context, args []string) error {
 			"set_members", len(cfg.filings.filter.CIKs),
 			"form_types", cfg.filings.filter.FormTypes,
 			"year", cfg.filings.filter.Year,
+			"from_year", cfg.filings.filter.FromYear,
+			"to_year", cfg.filings.filter.ToYear,
 			"noop", cfg.filings.config.Noop,
 			"reprocess", cfg.filings.reprocess,
 		)
@@ -385,32 +393,9 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, err)
 	}
 
-	if cfg.taxonomy.fromYear != 0 && (cfg.taxonomy.fromYear < edgar.EarliestYear ||
-		cfg.taxonomy.fromYear > 9999) {
-		return subcommandError(flags, errors.New("--from-year must be a valid EDGAR year"))
-	}
-
-	if cfg.taxonomy.toYear != 0 && (cfg.taxonomy.toYear < edgar.EarliestYear ||
-		cfg.taxonomy.toYear > 9999) {
-		return subcommandError(flags, errors.New("--to-year must be a valid EDGAR year"))
-	}
-
-	if cfg.taxonomy.fromYear != 0 && cfg.taxonomy.toYear != 0 &&
-		cfg.taxonomy.fromYear > cfg.taxonomy.toYear {
-		return subcommandError(flags, errors.New("--from-year must not be after --to-year"))
-	}
-
-	if strings.TrimSpace(cfg.taxonomy.year) != "" {
-		if cfg.taxonomy.fromYear != 0 || cfg.taxonomy.toYear != 0 {
-			return subcommandError(flags, errors.New("--year cannot be combined with --from-year or --to-year"))
-		}
-
-		parsedYear, err := strconv.Atoi(strings.TrimSpace(cfg.taxonomy.year))
-		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
-			return subcommandError(flags, errors.New("--year must be a four-digit year"))
-		}
-
-		cfg.taxonomy.filter.Year = parsedYear
+	if err := applyYearSelection(flags, &cfg.taxonomy.filter, cfg.taxonomy.year,
+		cfg.taxonomy.fromYear, cfg.taxonomy.toYear); err != nil {
+		return subcommandError(flags, err)
 	}
 
 	return cfg, nil
@@ -603,7 +588,7 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 			return fmt.Errorf("inspect %s: %w", path, err)
 		}
 
-		dateFiled, _ := time.Parse("2006-01-02", view.Metadata.FilingDate)
+		dateFiled, _ := parseFilingDate(view.Metadata.FilingDate)
 		if !inYearRange(dateFiled.Year(), fromYear, toYear) {
 			return nil
 		}
@@ -652,7 +637,7 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 			return fmt.Errorf("inspect %s: %w", path, err)
 		}
 
-		dateFiled, _ := time.Parse("2006-01-02", filing.Metadata.FilingDate)
+		dateFiled, _ := parseFilingDate(filing.Metadata.FilingDate)
 		if !inYearRange(dateFiled.Year(), fromYear, toYear) {
 			return nil
 		}
@@ -732,6 +717,52 @@ func inYearRange(year, fromYear, toYear int) bool {
 	return (fromYear == 0 || year >= fromYear) && (toYear == 0 || year <= toYear)
 }
 
+func parseFilingDate(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	for _, layout := range []string{"2006-01-02", "20060102"} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("invalid filing date %q", value)
+}
+
+func applyYearSelection(flags *flag.FlagSet, filter *edgar.IndexFilter, year string, fromYear, toYear int) error {
+	if fromYear != 0 && (fromYear < edgar.EarliestYear || fromYear > 9999) {
+		return errors.New("--from-year must be a valid EDGAR year")
+	}
+
+	if toYear != 0 && (toYear < edgar.EarliestYear || toYear > 9999) {
+		return errors.New("--to-year must be a valid EDGAR year")
+	}
+
+	if fromYear != 0 && toYear != 0 && fromYear > toYear {
+		return errors.New("--from-year must not be after --to-year")
+	}
+
+	if strings.TrimSpace(year) != "" {
+		if fromYear != 0 || toYear != 0 {
+			return errors.New("--year cannot be combined with --from-year or --to-year")
+		}
+
+		parsedYear, err := strconv.Atoi(strings.TrimSpace(year))
+		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
+			return errors.New("--year must be a four-digit year")
+		}
+
+		filter.Year = parsedYear
+
+		return nil
+	}
+
+	filter.FromYear = fromYear
+	filter.ToYear = toYear
+
+	return nil
+}
+
 func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
@@ -795,8 +826,6 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 		BaseURL:   environmentValue(edgarBaseURLEnv, ""),
 		Noop:      false,
 	}
-	year := ""
-
 	flags := flag.NewFlagSet("filings", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
@@ -805,6 +834,8 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 			{"    --set <name>", "Select current members from data/sets/<name>.json."},
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"-y, --year <year>", "Select filings filed in this year; default is all years."},
+			{"    --from-year <year>", "First filing year to include."},
+			{"    --to-year <year>", "Last filing year to include."},
 			{"-r, --reprocess", "Rebuild parsed results without forcing a new download."},
 			{noopHelpFlags, "Show planned downloads and processing without changing files."},
 		})
@@ -816,8 +847,10 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	flags.Var(&formTypes, "f", "only download this form type; may be repeated")
 	flags.BoolVar(&cfg.filings.config.Noop, "noop", false, "show actions without downloading or writing files")
 	flags.BoolVar(&cfg.filings.config.Noop, "n", false, "show actions without downloading or writing files")
-	flags.StringVar(&year, "y", "", "only download filings filed in this year")
-	flags.StringVar(&year, "year", "", "only download filings filed in this year")
+	flags.StringVar(&cfg.filings.year, "y", "", "only download filings filed in this year")
+	flags.StringVar(&cfg.filings.year, "year", "", "only download filings filed in this year")
+	flags.IntVar(&cfg.filings.fromYear, "from-year", 0, "first filing year to include")
+	flags.IntVar(&cfg.filings.toYear, "to-year", 0, "last filing year to include")
 	flags.BoolVar(&cfg.filings.reprocess, "r", false, "rebuild parsed results")
 	flags.BoolVar(&cfg.filings.reprocess, "reprocess", false, "rebuild parsed results")
 
@@ -842,13 +875,9 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, err)
 	}
 
-	if strings.TrimSpace(year) != "" {
-		parsedYear, err := strconv.Atoi(strings.TrimSpace(year))
-		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
-			return subcommandError(flags, errors.New("--year must be a four-digit year"))
-		}
-
-		cfg.filings.filter.Year = parsedYear
+	if err := applyYearSelection(flags, &cfg.filings.filter, cfg.filings.year,
+		cfg.filings.fromYear, cfg.filings.toYear); err != nil {
+		return subcommandError(flags, err)
 	}
 
 	return cfg, nil

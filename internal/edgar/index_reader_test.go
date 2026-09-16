@@ -122,6 +122,36 @@ func TestIndexReaderFiltersByYear(t *testing.T) {
 	}
 }
 
+func TestIndexReaderFiltersByYearRange(t *testing.T) {
+	source := strings.NewReader(strings.Join([]string{
+		"123|Example|10-K|2014-12-31|filing-2014.txt",
+		"123|Example|10-K|2015-01-02|filing-2015.txt",
+		"123|Example|10-K|2026-01-02|filing-2026.txt",
+		"123|Example|10-K|2027-01-02|filing-2027.txt",
+	}, "\n"))
+	reader := NewIndexReader(source, IndexFilter{
+		CIK: "", CIKs: nil, FormTypes: nil, Year: 0, FromYear: 2015, ToYear: 2026,
+	})
+
+	first, err := reader.Next()
+	if err != nil {
+		t.Fatalf("Next returned error: %v", err)
+	}
+
+	second, err := reader.Next()
+	if err != nil {
+		t.Fatalf("Next returned error: %v", err)
+	}
+
+	if first.FilingPath != "filing-2015.txt" || second.FilingPath != "filing-2026.txt" {
+		t.Fatalf("unexpected range matches: %s, %s", first.FilingPath, second.FilingPath)
+	}
+
+	if _, err := reader.Next(); !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF, got %v", err)
+	}
+}
+
 func TestIndexReaderMatchesPaddedCIK(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("789019|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
 		CIK: "0000789019", CIKs: nil, FormTypes: nil, Year: 0,

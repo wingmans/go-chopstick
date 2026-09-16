@@ -23,6 +23,11 @@ func TestParseSubmissionFlags(t *testing.T) {
 		t.Fatalf("unexpected parse filters: %+v", cfg.parse)
 	}
 
+	cfg, err = parseConfig([]string{parseCommand, "--cik", "123", "--from-year", "2015", "--to-year", "2026"})
+	if err != nil || cfg.parse.filter.FromYear != 2015 || cfg.parse.filter.ToYear != 2026 {
+		t.Fatalf("unexpected parse year range: %+v", cfg.parse)
+	}
+
 	cfg, err = parseConfig([]string{parseCommand})
 	if err != nil || cfg.parse.noop || cfg.parse.filter.Year != 0 {
 		t.Fatal("unexpected parse defaults")
@@ -33,6 +38,8 @@ func TestParseSubmissionFlags(t *testing.T) {
 		{parseCommand, "-f"},
 		{parseCommand, "--file", "one.xml"},
 		{parseCommand, "--file", "one.txt", "--cik", "123"},
+		{parseCommand, "--file", "one.txt", "--from-year", "2015"},
+		{parseCommand, "--year", "2024", "--from-year", "2015"},
 		{parseCommand, "unexpected", "--unknown"},
 		{parseCommand, "--help"},
 	} {

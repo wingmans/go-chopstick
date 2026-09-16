@@ -182,6 +182,29 @@ func TestParseTaxonomyConfigYearRange(t *testing.T) {
 	}
 }
 
+func TestParseFilingsConfigYearRange(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"filings", "--cik", "789019", "--form-type", "10-K",
+		"--from-year", "2015", "--to-year", "2026",
+	})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.filings.filter.FromYear != 2015 || cfg.filings.filter.ToYear != 2026 {
+		t.Fatalf("unexpected filings year range: %+v", cfg.filings.filter)
+	}
+}
+
+func TestParseFilingsConfigYearCannotUseRange(t *testing.T) {
+	_, err := parseConfig([]string{
+		"filings", "--year", "2024", "--from-year", "2015",
+	})
+	if !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("expected help for conflicting year options, got %v", err)
+	}
+}
+
 func TestParseTaxonomyConfigFileCannotUseFilters(t *testing.T) {
 	_, err := parseConfig([]string{
 		"taxonomy", "lint", "--file", "filing-view.json", "--from-year", "2010",

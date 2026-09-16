@@ -3,24 +3,100 @@
   "as_of": "2026-09-14",
   "source": "curated S&P 500 US-GAAP validation fixture",
   "members": [
-    {"cik":"0000320193","ticker":"AAPL","name":"Apple Inc."},
-    {"cik":"0001018724","ticker":"AMZN","name":"Amazon.com, Inc."},
-    {"cik":"0001067983","ticker":"BRK-B","name":"Berkshire Hathaway Inc."},
-    {"cik":"0000789019","ticker":"MSFT","name":"Microsoft Corporation"},
-    {"cik":"0001045810","ticker":"NVDA","name":"NVIDIA Corporation"},
-    {"cik":"0001652044","ticker":"GOOGL","name":"Alphabet Inc."},
-    {"cik":"0000019617","ticker":"JPM","name":"JPMorgan Chase & Co."},
-    {"cik":"0000070858","ticker":"BAC","name":"Bank of America Corporation"},
-    {"cik":"0000200406","ticker":"JNJ","name":"Johnson & Johnson"},
-    {"cik":"0000731766","ticker":"UNH","name":"UnitedHealth Group Incorporated"},
-    {"cik":"0000034088","ticker":"XOM","name":"Exxon Mobil Corporation"},
-    {"cik":"0000093410","ticker":"CVX","name":"Chevron Corporation"},
-    {"cik":"0000104169","ticker":"WMT","name":"Walmart Inc."},
-    {"cik":"0000909832","ticker":"COST","name":"Costco Wholesale Corporation"},
-    {"cik":"0000018230","ticker":"CAT","name":"Caterpillar Inc."},
-    {"cik":"0000779152","ticker":"HON","name":"Honeywell International Inc."},
-    {"cik":"0001707925","ticker":"LIN","name":"Linde plc"},
-    {"cik":"0001045609","ticker":"PLD","name":"Prologis, Inc."},
-    {"cik":"0000753308","ticker":"NEE","name":"NextEra Energy, Inc."}
+    {
+      "cik": "0000320193",
+      "ticker": "AAPL",
+      "name": "Apple Inc."
+    },
+    {
+      "cik": "0001018724",
+      "ticker": "AMZN",
+      "name": "Amazon.com, Inc."
+    },
+    {
+      "cik": "0001067983",
+      "ticker": "BRK-B",
+      "name": "Berkshire Hathaway Inc."
+    },
+    {
+      "cik": "0000789019",
+      "ticker": "MSFT",
+      "name": "Microsoft Corporation"
+    },
+    {
+      "cik": "0001045810",
+      "ticker": "NVDA",
+      "name": "NVIDIA Corporation"
+    },
+    {
+      "cik": "0001652044",
+      "ticker": "GOOGL",
+      "name": "Alphabet Inc."
+    },
+    {
+      "cik": "0000019617",
+      "ticker": "JPM",
+      "name": "JPMorgan Chase & Co."
+    },
+    {
+      "cik": "0000070858",
+      "ticker": "BAC",
+      "name": "Bank of America Corporation"
+    },
+    {
+      "cik": "0000200406",
+      "ticker": "JNJ",
+      "name": "Johnson & Johnson"
+    },
+    {
+      "cik": "0000731766",
+      "ticker": "UNH",
+      "name": "UnitedHealth Group Incorporated"
+    },
+    {
+      "cik": "0000034088",
+      "ticker": "XOM",
+      "name": "Exxon Mobil Corporation"
+    },
+    {
+      "cik": "0000093410",
+      "ticker": "CVX",
+      "name": "Chevron Corporation"
+    },
+    {
+      "cik": "0000104169",
+      "ticker": "WMT",
+      "name": "Walmart Inc."
+    },
+    {
+      "cik": "0000909832",
+      "ticker": "COST",
+      "name": "Costco Wholesale Corporation"
+    },
+    {
+      "cik": "0000018230",
+      "ticker": "CAT",
+      "name": "Caterpillar Inc."
+    },
+    {
+      "cik": "0000773840",
+      "ticker": "HON",
+      "name": "Honeywell International Inc."
+    },
+    {
+      "cik": "0001707925",
+      "ticker": "LIN",
+      "name": "Linde plc"
+    },
+    {
+      "cik": "0001045609",
+      "ticker": "PLD",
+      "name": "Prologis, Inc."
+    },
+    {
+      "cik": "0000753308",
+      "ticker": "NEE",
+      "name": "NextEra Energy, Inc."
+    }
   ]
 }

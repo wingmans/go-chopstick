@@ -43,7 +43,7 @@ cat > "$RUN_DIR/summary.md" <<MARKDOWN
 - \`run.log\`
 
 Report artifacts are added after the download, parse, and validation steps
-complete.
+complete. JSON files are for tooling; text files are for quick review.
 MARKDOWN
 
 YEAR_ARGS=(--from-year "$FROM_YEAR")
@@ -101,12 +101,14 @@ test -s data/indexes/master.tsv
 run_step_allow_failure "download $FORM_TYPE filings for $SET_NAME" \
   "$CLI_PATH" filings \
     --set "$SET_NAME" \
-    --form-type "$FORM_TYPE"
+    --form-type "$FORM_TYPE" \
+    "${YEAR_ARGS[@]}"
 
 run_step_allow_failure "reprocess parsed filings and compact views" \
   "$CLI_PATH" parse \
     --set "$SET_NAME" \
     --form-type "$FORM_TYPE" \
+    "${YEAR_ARGS[@]}" \
     --reprocess
 
 if ! find data/parsed -type f -name filing.json -print -quit | grep -q .; then
@@ -134,6 +136,14 @@ run_step "source taxonomy coverage report" \
     --format json \
     --out "$RUN_DIR/taxonomy-coverage.json"
 
+run_step "source taxonomy coverage text report" \
+  "$CLI_PATH" taxonomy coverage \
+    --set "$SET_NAME" \
+    --form-type "$FORM_TYPE" \
+    "${YEAR_ARGS[@]}" \
+    --format text \
+    --out "$RUN_DIR/taxonomy-coverage.txt"
+
 run_step "compact taxonomy lint report" \
   "$CLI_PATH" taxonomy lint \
     --set "$SET_NAME" \
@@ -141,6 +151,14 @@ run_step "compact taxonomy lint report" \
     "${YEAR_ARGS[@]}" \
     --format json \
     --out "$RUN_DIR/lint-report.json"
+
+run_step "compact taxonomy lint text report" \
+  "$CLI_PATH" taxonomy lint \
+    --set "$SET_NAME" \
+    --form-type "$FORM_TYPE" \
+    "${YEAR_ARGS[@]}" \
+    --format text \
+    --out "$RUN_DIR/lint-report.txt"
 
 RUN_STATUS="complete"
 if [[ "${#SOFT_FAILURES[@]}" -gt 0 ]]; then
@@ -160,12 +178,15 @@ cat > "$RUN_DIR/summary.md" <<MARKDOWN
 
 - \`coverage-report.json\`
 - \`taxonomy-coverage.json\`
+- \`taxonomy-coverage.txt\`
 - \`lint-report.json\`
+- \`lint-report.txt\`
 - \`taxonomy.json\`
 - \`constituent-set.json\`
 - \`run.log\`
 
-This run captures review evidence only. It does not apply taxonomy changes.
+JSON files are for tooling; text files are for quick review. This run captures
+review evidence only. It does not apply taxonomy changes.
 MARKDOWN
 
 if [[ "${#SOFT_FAILURES[@]}" -gt 0 ]]; then

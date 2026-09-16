@@ -14,6 +14,9 @@ edgar taxonomy lint --cik 789019 --form-type 10-K --year 2024
 edgar taxonomy lint --set us-gaap-coverage --form-type 10-K \
   --from-year 2015 --format json \
   --out data/validation/runs/2026-09-16-taxonomy/lint-report.json
+edgar taxonomy lint --set us-gaap-coverage --form-type 10-K \
+  --from-year 2015 --format text \
+  --out data/validation/runs/2026-09-16-taxonomy/lint-report.txt
 edgar taxonomy lint --file data/parsed/.../filing-view.json
 ```
 
@@ -40,6 +43,22 @@ and one lint report per filing. Review findings such as unmapped concepts or
 identity-check warnings remain successful command output; malformed or
 unreadable input files are operational failures and produce a non-zero exit.
 
+The expected filing coverage report also contains per-filing metric presence.
+Useful review one-liners are:
+
+```bash
+jq -r '.filings[] | .missing_metrics[]?' \
+  data/validation/runs/<run-id>/coverage-report.json |
+  sort | uniq -c | sort -nr
+```
+
+```bash
+jq -r '.filings[] | .metrics | to_entries[] | [.key,.value] | @tsv' \
+  data/validation/runs/<run-id>/coverage-report.json |
+  awk -F '\t' '$2=="present"{present[$1]++} $2=="missing"{missing[$1]++}
+    END {for (m in present) print m, present[m]+0, missing[m]+0}'
+```
+
 ## Source Coverage
 
 `taxonomy coverage` reads `filing.json` before compact projection:
@@ -49,6 +68,9 @@ edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K
 edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K \
   --from-year 2015 --format json \
   --out data/validation/runs/2026-09-16-taxonomy/taxonomy-coverage.json
+edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K \
+  --from-year 2015 --format text \
+  --out data/validation/runs/2026-09-16-taxonomy/taxonomy-coverage.txt
 edgar taxonomy coverage --file data/parsed/.../filing.json
 ```
 
