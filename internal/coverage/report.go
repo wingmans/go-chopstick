@@ -1,6 +1,4 @@
 // Package coverage reports expected local EDGAR processing coverage.
-//
-//nolint:wsl_v5 // Report construction is intentionally kept readable by stage.
 package coverage
 
 import (
@@ -90,12 +88,15 @@ func Build(ctx context.Context, config Config) (Report, error) {
 	if config.MasterPath == "" {
 		return Report{}, errors.New("master index is required")
 	}
+
 	if config.FilingsDir == "" || config.ParsedDir == "" {
 		return Report{}, errors.New("filings and parsed directories are required")
 	}
+
 	if config.Taxonomy.TaxonomyVersion == "" {
 		return Report{}, errors.New("taxonomy is required")
 	}
+
 	if config.FromYear != 0 && config.ToYear != 0 && config.FromYear > config.ToYear {
 		return Report{}, errors.New("from year must not be after to year")
 	}
@@ -112,6 +113,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		FormTypes: append([]string(nil), config.Filter.FormTypes...),
 		FromYear:  config.FromYear, ToYear: config.ToYear,
 	}
+
 	report := Report{
 		SchemaVersion: SchemaVersion,
 		GeneratedAt:   config.GeneratedAt.UTC().Format(time.RFC3339),
@@ -129,6 +131,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 
 	reader := edgar.NewIndexReader(file, config.Filter)
 	seen := make(map[string]struct{})
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return Report{}, err
@@ -138,9 +141,11 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		if errors.Is(readErr, io.EOF) {
 			break
 		}
+
 		if readErr != nil {
 			return Report{}, fmt.Errorf("read master index: %w", readErr)
 		}
+
 		if !inYearRange(record.DateFiled.Year(), config.FromYear, config.ToYear) {
 			continue
 		}
@@ -149,14 +154,17 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		if _, exists := seen[key]; exists {
 			continue
 		}
+
 		seen[key] = struct{}{}
 
 		filing, inspectErr := inspectFiling(ctx, config, record)
 		if inspectErr != nil {
 			return Report{}, inspectErr
 		}
+
 		report.Filings = append(report.Filings, filing)
 		report.Summary.Expected++
+
 		switch filing.Status {
 		case "parsed":
 			report.Summary.Downloaded++
@@ -167,6 +175,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		default:
 			report.Summary.Missing++
 		}
+
 		if len(filing.MissingMetric) > 0 {
 			report.Summary.MissingMetrics++
 		}
@@ -187,17 +196,20 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 	accession := accessionFromPath(record.FilingPath)
 	sourcePath, sourceErr := edgar.LocalFilingPath(config.FilingsDir, record.FilingPath)
 	parsedPath := parsedViewPath(config.ParsedDir, record.CIK, accession)
+
 	result := Filing{
 		CIK: record.CIK, Company: record.CompanyName, Accession: accession,
 		FormType: record.FormType, DateFiled: record.DateFiled.Format("2006-01-02"),
 		FilingPath: record.FilingPath, SourcePath: sourcePath,
 		ParsedPath: parsedPath, Status: "missing", MissingMetric: nil, Metrics: nil,
 	}
+
 	if sourceErr != nil {
 		result.Status = "invalid_source_path"
 
 		return result, sourceErr
 	}
+
 	if _, err := os.Stat(sourcePath); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			result.Status = "source_error"
@@ -205,6 +217,7 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 
 		return result, nil
 	}
+
 	result.Status = "downloaded"
 
 	view, err := filingview.Load(parsedPath)
@@ -215,6 +228,7 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 
 		return result, nil
 	}
+
 	result.Status = "parsed"
 	result.Metrics, result.MissingMetric = metricPresence(view, config.Taxonomy)
 
@@ -223,6 +237,7 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 
 func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[string]string, []string) {
 	present := make(map[string]string)
+
 	for _, group := range view.Summary {
 		for _, row := range group.Rows {
 			if row.Key != "" {
@@ -230,6 +245,7 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 			}
 		}
 	}
+
 	for _, statement := range []filingview.StatementView{
 		view.Statements.Income, view.Statements.Balance, view.Statements.CashFlow,
 	} {
@@ -244,15 +260,18 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 
 	metrics := make(map[string]string, len(taxonomy.Metrics))
 	missing := make([]string, 0)
+
 	for _, metric := range taxonomy.Metrics {
 		if _, ok := present[metric.Key]; ok {
 			metrics[metric.Key] = "present"
 
 			continue
 		}
+
 		metrics[metric.Key] = "missing"
 		missing = append(missing, metric.Key)
 	}
+
 	sort.Strings(missing)
 
 	return metrics, missing
@@ -262,8 +281,10 @@ func addMissingIndexRequests(report *Report, config Config) {
 	if config.IndexesDir == "" || config.FromYear == 0 || config.ToYear == 0 {
 		return
 	}
+
 	for year := config.FromYear; year <= config.ToYear; year++ {
 		missing := make([]int, 0, 4)
+
 		for quarter := 1; quarter <= 4; quarter++ {
 			path := filepath.Join(config.IndexesDir,
 				fmt.Sprintf("%d-QTR%d.tsv", year, quarter))
@@ -271,9 +292,11 @@ func addMissingIndexRequests(report *Report, config Config) {
 				missing = append(missing, quarter)
 			}
 		}
+
 		if len(missing) == 0 {
 			continue
 		}
+
 		report.Acquisition = append(report.Acquisition, AcquisitionRequest{
 			Kind: "index", Year: year, Quarters: missing,
 			CIK: "", FormTypes: nil, Years: nil,
@@ -284,12 +307,15 @@ func addMissingIndexRequests(report *Report, config Config) {
 
 func addMissingFilingRequests(report *Report) {
 	grouped := make(map[string]*AcquisitionRequest)
+
 	for _, filing := range report.Filings {
 		if filing.Status != "missing" {
 			continue
 		}
+
 		key := filing.CIK + "\x00" + filing.FormType + "\x00" + filing.DateFiled[:4]
 		request := grouped[key]
+
 		if request == nil {
 			year := yearFromDate(filing.DateFiled)
 			request = &AcquisitionRequest{
@@ -301,6 +327,7 @@ func addMissingFilingRequests(report *Report) {
 			grouped[key] = request
 		}
 	}
+
 	for _, request := range grouped {
 		report.Acquisition = append(report.Acquisition, *request)
 	}
@@ -312,6 +339,7 @@ func sortReport(report *Report) {
 		if left.CIK != right.CIK {
 			return left.CIK < right.CIK
 		}
+
 		if left.DateFiled != right.DateFiled {
 			return left.DateFiled < right.DateFiled
 		}
@@ -323,6 +351,7 @@ func sortReport(report *Report) {
 		if left.Kind != right.Kind {
 			return left.Kind < right.Kind
 		}
+
 		if left.Year != right.Year {
 			return left.Year < right.Year
 		}
@@ -335,17 +364,21 @@ func WriteJSON(path string, report Report) error {
 	if path == "" {
 		return errors.New("coverage report path is required")
 	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("create coverage report directory: %w", err)
 	}
+
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create coverage report: %w", err)
 	}
+
 	defer func() { _ = file.Close() }()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
+
 	if err := encoder.Encode(report); err != nil {
 		return fmt.Errorf("write coverage report: %w", err)
 	}
@@ -376,6 +409,7 @@ func yearFromDate(date string) int {
 	if len(date) < 4 {
 		return 0
 	}
+
 	year := 0
 
 	_, _ = fmt.Sscanf(date[:4], "%d", &year)

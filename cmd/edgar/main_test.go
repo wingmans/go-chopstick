@@ -162,7 +162,6 @@ func TestParseTaxonomyConfigFileCannotUseFilters(t *testing.T) {
 	}
 }
 
-//nolint:wsl_v5 // Assertions are kept together for this configuration test.
 func TestParseCoverageConfigFilters(t *testing.T) {
 	cfg, err := parseConfig([]string{
 		"coverage", "--cik", "789019", "--form-type", "10-K",
@@ -171,15 +170,15 @@ func TestParseCoverageConfigFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
+
 	if cfg.coverage.filter.CIK != "789019" {
 		t.Fatalf("unexpected CIK %q", cfg.coverage.filter.CIK)
 	}
-	if cfg.coverage.filter.CIK != "789019" {
-		t.Fatalf("unexpected CIK filter %q", cfg.coverage.filter.CIK)
-	}
+
 	if cfg.coverage.fromYear != 2010 || cfg.coverage.toYear != 2025 {
 		t.Fatalf("unexpected year range: %d-%d", cfg.coverage.fromYear, cfg.coverage.toYear)
 	}
+
 	if cfg.coverage.out != "coverage.json" {
 		t.Fatalf("unexpected output path %q", cfg.coverage.out)
 	}

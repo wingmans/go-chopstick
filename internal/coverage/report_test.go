@@ -10,7 +10,6 @@ import (
 	"wingman.com/fetch-ecb/internal/filingview"
 )
 
-//nolint:wsl_v5 // Test setup is kept close to the report assertions.
 func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -18,6 +17,7 @@ func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {
 	contents := "789019|Microsoft Corporation|10-K|2024-07-30|" +
 		"edgar/data/789019/0001193125-24-123456.txt|" +
 		"edgar/data/789019/0001193125-24-123456-index.html\n"
+
 	if err := os.WriteFile(master, []byte(contents), 0o600); err != nil {
 		t.Fatalf("write master: %v", err)
 	}
@@ -48,20 +48,23 @@ func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {
 	if report.Summary.Expected != 1 || report.Summary.Missing != 1 {
 		t.Fatalf("unexpected summary: %+v", report.Summary)
 	}
+
 	if len(report.Filings) != 1 || report.Filings[0].Status != "missing" {
 		t.Fatalf("unexpected filing report: %+v", report.Filings)
 	}
+
 	if len(report.Acquisition) != 2 {
 		t.Fatalf("got %d acquisition requests, want index and filing", len(report.Acquisition))
 	}
+
 	if report.Acquisition[0].Kind != "filings" || report.Acquisition[1].Kind != "index" {
 		t.Fatalf("unexpected acquisition order: %+v", report.Acquisition)
 	}
 }
 
-//nolint:wsl_v5 // Test setup is kept close to the metric assertions.
 func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 	t.Parallel()
+
 	view := filingview.View{
 		SchemaVersion: 0, ParserVersion: "", TaxonomyVersion: "", SourcePath: "",
 		SourceSHA256: "", Metadata: filingview.Metadata{
@@ -99,6 +102,7 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 	if metrics["revenue"] != "present" || metrics["net_income"] != "missing" {
 		t.Fatalf("unexpected metric states: %+v", metrics)
 	}
+
 	if len(missing) != 1 || missing[0] != "net_income" {
 		t.Fatalf("unexpected missing metrics: %v", missing)
 	}
