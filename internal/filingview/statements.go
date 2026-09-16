@@ -29,7 +29,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 		}
 
 		for _, fact := range instance.Facts {
-			definition, ok := taxonomy.metricForConcept(fact.Concept.Namespace, fact.Concept.Local)
+			definition, reference, ok := taxonomy.metricReferenceForConcept(fact.Concept.Namespace, fact.Concept.Local)
 			if !ok {
 				continue
 			}
@@ -61,11 +61,12 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 				accumulator.Rows[group][key] = row
 			}
 
-			row.Values[periodKey] = FactValue{
-				Value: fact.Value, Nil: fact.Nil,
-				ContextRef: fact.ContextRef, Decimals: fact.Decimals,
-			}
-			row.Concept = fact.Concept.Local
+			selectedValue, selectedConcept := selectFact(row.Values[periodKey],
+				edgar.QName{Namespace: row.Namespace, Local: row.Concept},
+				selectedFact{Fact: fact, Priority: reference.Priority})
+			row.Values[periodKey] = selectedValue
+			row.Namespace = selectedConcept.Namespace
+			row.Concept = selectedConcept.Local
 			accumulator.Rows[group][key] = row
 			_ = periodLabel
 		}

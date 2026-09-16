@@ -67,6 +67,11 @@ type FactValue struct {
 	Nil        bool   `json:"nil"`
 	ContextRef string `json:"context_ref,omitempty"`
 	Decimals   string `json:"decimals,omitempty"`
+	priority   int
+	concept    edgar.QName
+	unitRef    string
+	id         string
+	precision  string
 }
 
 type Statements struct {
@@ -220,7 +225,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 		}
 
 		for _, fact := range instance.Facts {
-			definition, ok := taxonomy.metricForConcept(fact.Concept.Namespace, fact.Concept.Local)
+			definition, reference, ok := taxonomy.metricReferenceForConcept(fact.Concept.Namespace, fact.Concept.Local)
 			if !ok {
 				continue
 			}
@@ -235,7 +240,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 				continue
 			}
 
-			key := fact.Concept.Namespace + "\x00" + fact.Concept.Local + "\x00" + fact.UnitRef
+			key := definition.Key + "\x00" + fact.UnitRef
 
 			if periodsByGroup[group] == nil {
 				periodsByGroup[group] = map[string]string{}
@@ -253,10 +258,12 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 			}
 
 			periodsByGroup[group][periodKey] = periodLabel
-			row.Values[periodKey] = FactValue{
-				Value: fact.Value, Nil: fact.Nil,
-				ContextRef: fact.ContextRef, Decimals: fact.Decimals,
-			}
+			selectedValue, selectedConcept := selectFact(row.Values[periodKey],
+				edgar.QName{Namespace: row.Namespace, Local: row.Concept},
+				selectedFact{Fact: fact, Priority: reference.Priority})
+			row.Values[periodKey] = selectedValue
+			row.Namespace = selectedConcept.Namespace
+			row.Concept = selectedConcept.Local
 		}
 	}
 

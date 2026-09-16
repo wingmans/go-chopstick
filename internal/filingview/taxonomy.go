@@ -111,17 +111,23 @@ func defaultTaxonomy() Taxonomy {
 }
 
 func (t Taxonomy) metricForConcept(namespace, concept string) (MetricDefinition, bool) {
+	definition, _, ok := t.metricReferenceForConcept(namespace, concept)
+
+	return definition, ok
+}
+
+func (t Taxonomy) metricReferenceForConcept(namespace, concept string) (MetricDefinition, ConceptReference, bool) {
 	for _, definition := range t.Metrics {
 		for _, reference := range definition.Concepts {
 			if reference.Name == concept && namespaceMatches(reference.NamespaceFamily, namespace) {
-				return definition, true
+				return definition, reference, true
 			}
 		}
 	}
 
 	return MetricDefinition{
 		Key: "", Label: "", Statement: "", Concepts: nil,
-	}, false
+	}, ConceptReference{}, false
 }
 
 func namespaceMatches(family, namespace string) bool {

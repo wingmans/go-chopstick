@@ -4,7 +4,7 @@ This is the current roadmap after the first end-to-end and taxonomy passes.
 
 ## Data Quality
 
-- Implement deterministic duplicate-fact selection.
+- [x] Implement deterministic duplicate-fact selection.
 - Normalize units and define sign handling.
 - Preserve or explicitly exclude dimensional facts.
 - Add accounting identity checks.
