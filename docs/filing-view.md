@@ -27,6 +27,7 @@ SEC submission or the verbose parsed result.
 | `summary` | Selected financial facts grouped by period type. |
 | `statements` | Compact income, balance-sheet, and cash-flow sections. |
 | `ratios` | Derived ratios with their formulas and source periods. |
+| `quality` | Data-quality findings produced during compact-view build. |
 | `counts` | Document, instance, fact, context, and projection-exclusion counts. |
 | `diagnostics` | Parser diagnostics retained for the UI and debugging. |
 
@@ -83,6 +84,12 @@ Ratios are explicitly derived values. They are only emitted when both source
 values exist for the same period and can be parsed exactly. Examples include
 gross margin, operating margin, net margin, current ratio, and liabilities to
 equity. They are not XBRL facts and must not be mistaken for reported values.
+
+`quality.identity_checks` records accounting identity checks evaluated during
+the compact-view build. These findings compare selected rows, such as
+`gross_profit = revenue - cost_of_revenue`, using normalized units and
+rounding tolerances from source decimals. They are warnings only and do not
+change reported values.
 
 ## Taxonomy
 

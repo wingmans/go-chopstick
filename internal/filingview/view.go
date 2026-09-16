@@ -26,6 +26,7 @@ type View struct {
 	Summary         []SummaryGroup             `json:"summary"`
 	Statements      Statements                 `json:"statements"`
 	Ratios          []RatioSeries              `json:"ratios"`
+	Quality         Quality                    `json:"quality"`
 	Counts          Counts                     `json:"counts"`
 	Diagnostics     []edgar.ParseDiagnostic    `json:"diagnostics"`
 }
@@ -46,6 +47,22 @@ type Counts struct {
 	Contexts                 int    `json:"contexts"`
 	DimensionalFactsExcluded int    `json:"dimensional_facts_excluded"`
 	Status                   string `json:"status"`
+}
+
+type Quality struct {
+	IdentityChecks []IdentityCheck `json:"identity_checks"`
+}
+
+type IdentityCheck struct {
+	Name      string   `json:"name"`
+	Period    string   `json:"period,omitempty"`
+	Unit      string   `json:"unit,omitempty"`
+	Status    string   `json:"status"`
+	Expected  string   `json:"expected,omitempty"`
+	Actual    string   `json:"actual,omitempty"`
+	Tolerance string   `json:"tolerance,omitempty"`
+	Metrics   []string `json:"metrics,omitempty"`
+	Message   string   `json:"message,omitempty"`
 }
 
 type SummaryGroup struct {
@@ -117,7 +134,7 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 	statements, ratios := buildStatements(filing)
 	taxonomy := defaultTaxonomy()
 
-	return View{
+	view := View{
 		SchemaVersion:   SchemaVersion,
 		ParserVersion:   filing.ParserVersion,
 		TaxonomyVersion: taxonomy.TaxonomyVersion,
@@ -139,7 +156,10 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 			Status:                   filing.Status,
 		},
 		Diagnostics: filing.Diagnostics,
-	}, nil
+	}
+	view.Quality = Quality{IdentityChecks: CheckAccountingIdentities(view)}
+
+	return view, nil
 }
 
 func countDimensionalFacts(instance edgar.XBRLInstance) int {

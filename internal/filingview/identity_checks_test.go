@@ -1,0 +1,105 @@
+package filingview
+
+import "testing"
+
+func TestCheckAccountingIdentitiesReportsFailure(t *testing.T) {
+	view := identityTestView("100", "40", "50", "0")
+
+	checks := CheckAccountingIdentities(view)
+	failure := identityCheckByName(checks, "gross_profit = revenue - cost_of_revenue")
+	if failure == nil {
+		t.Fatalf("missing identity check: %+v", checks)
+	}
+
+	if failure.Status != identityFail || failure.Expected != "60.00" || failure.Actual != "50.00" {
+		t.Fatalf("unexpected identity failure: %+v", failure)
+	}
+}
+
+func TestCheckAccountingIdentitiesAllowsRoundingTolerance(t *testing.T) {
+	view := identityTestView("1000", "400", "601", "-3")
+
+	checks := CheckAccountingIdentities(view)
+	check := identityCheckByName(checks, "gross_profit = revenue - cost_of_revenue")
+	if check == nil {
+		t.Fatalf("missing identity check: %+v", checks)
+	}
+
+	if check.Status != identityPass {
+		t.Fatalf("rounded values should pass within tolerance: %+v", check)
+	}
+}
+
+func TestCheckAccountingIdentitiesSupportsAddition(t *testing.T) {
+	view := View{Statements: Statements{
+		Balance: StatementView{Groups: []SummaryGroup{{
+			Title:   "Instant",
+			Periods: []string{"2026-06-30"},
+			Rows: []FactSeries{
+				identityRow("assets", "USD", "2026-06-30", "150", "0"),
+				identityRow("liabilities", "USD", "2026-06-30", "75", "0"),
+				identityRow("equity", "USD", "2026-06-30", "75", "0"),
+			},
+		}}},
+	}}
+
+	check := identityCheckByName(CheckAccountingIdentities(view), "assets = liabilities + equity")
+	if check == nil || check.Status != identityPass {
+		t.Fatalf("unexpected balance identity check: %+v", check)
+	}
+}
+
+func TestLintViewReportsIdentityFailures(t *testing.T) {
+	report := LintView(identityTestView("100", "40", "50", "0"), Taxonomy{
+		SchemaVersion: 1, TaxonomyVersion: "test",
+		Metrics: []MetricDefinition{
+			{Key: "revenue", Label: "Revenue", Statement: "income", Concepts: []ConceptReference{{Name: "Revenue", NamespaceFamily: "any"}}},
+			{Key: "cost_of_revenue", Label: "Cost", Statement: "income", Concepts: []ConceptReference{{Name: "Cost", NamespaceFamily: "any"}}},
+			{Key: "gross_profit", Label: "Gross profit", Statement: "income", Concepts: []ConceptReference{{Name: "GrossProfit", NamespaceFamily: "any"}}},
+		},
+	})
+
+	found := false
+	for _, issue := range report.QualityIssues {
+		if issue == "identity check failed: gross_profit = revenue - cost_of_revenue period=FY2026 unit=USD" {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("missing identity quality issue: %+v", report.QualityIssues)
+	}
+}
+
+func identityTestView(revenue, cost, grossProfit, decimals string) View {
+	return View{Statements: Statements{
+		Income: StatementView{Groups: []SummaryGroup{{
+			Title:   "Fiscal year",
+			Periods: []string{"FY2026"},
+			Rows: []FactSeries{
+				identityRow("revenue", "USD", "FY2026", revenue, decimals),
+				identityRow("cost_of_revenue", "USD", "FY2026", cost, decimals),
+				identityRow("gross_profit", "USD", "FY2026", grossProfit, decimals),
+			},
+		}}},
+	}}
+}
+
+func identityRow(key, unit, period, value, decimals string) FactSeries {
+	return FactSeries{
+		Key: key, Label: key, Namespace: "test", Concept: key, Unit: unit,
+		Values: map[string]FactValue{
+			period: {Value: value, Decimals: decimals},
+		},
+	}
+}
+
+func identityCheckByName(checks []IdentityCheck, name string) *IdentityCheck {
+	for index := range checks {
+		if checks[index].Name == name {
+			return &checks[index]
+		}
+	}
+
+	return nil
+}

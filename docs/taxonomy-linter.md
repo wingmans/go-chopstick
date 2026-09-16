@@ -20,7 +20,9 @@ It reports:
 - concepts that did not roll up into a canonical metric;
 - rows without values;
 - invalid period keys;
-- canonical metrics appearing with multiple units.
+- canonical metrics appearing with multiple units;
+- accounting identity failures, such as gross profit or balance-sheet
+  equation mismatches.
 
 Unmapped terms are findings rather than command failures. A filing can contain
 valid facts that are outside the current dashboard model.
@@ -52,24 +54,23 @@ must use explicit rules, such as:
 3. prefer the appropriate filing document and canonical alias priority;
 4. reject conflicting values instead of silently overwriting them.
 
-The current implementation reports duplicates. It does not yet select a
-canonical winner, which is safer until the rules are validated against more
-companies.
+The compact view now selects a deterministic winner for statement projection.
+Coverage reports still expose duplicate source candidates for review.
 
 ### Unit normalization and sign handling
 
 Facts may use different unit identifiers, scaling, or sign conventions. The
-next layer should normalize units into a typed representation such as USD,
-shares, or USD-per-share, preserve the original unit, and apply sign rules
-only when they are explicitly defined. Reported values must never be silently
-changed.
+compact view normalizes common units into stable names such as `USD`, `shares`,
+`pure`, and `USD/shares`, while preserving the original unit reference on each
+value. Sign rules are only applied in explicit derived formulas or identity
+checks. Reported values must never be silently changed.
 
 ### Explicit dimensional facts
 
 Dimensional facts describe segments, products, geographies, or other slices.
-They should not compete with consolidated statement rows. The model should
-retain their dimensions and expose them through a separate segment view or
-exclude them explicitly from primary-statement selection.
+They do not compete with consolidated statement rows. The parsed filing retains
+their dimensions, while the compact view excludes them from primary-statement
+selection and reports `counts.dimensional_facts_excluded`.
 
 ### Accounting identity checks
 
@@ -80,9 +81,10 @@ Examples include:
 - gross profit versus revenue minus cost of revenue;
 - ending cash versus beginning cash plus cash-flow components.
 
-Failures should be warnings with the involved concepts, periods, units, and
-tolerance. They can reveal parser or taxonomy mistakes, but may also reflect
-presentation choices, rounding, or restatements.
+Identity checks now run during compact-view build and taxonomy lint. Failures
+are warnings with the involved metrics, periods, units, actual value, expected
+value, and tolerance. They can reveal parser or taxonomy mistakes, but may also
+reflect presentation choices, rounding, or restatements.
 
 ## Interpretation
 

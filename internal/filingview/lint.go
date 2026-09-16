@@ -87,6 +87,13 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 	visit(view.Statements.Balance.Groups)
 	visit(view.Statements.CashFlow.Groups)
 
+	for _, check := range CheckAccountingIdentities(view) {
+		if check.Status == identityFail {
+			qualityIssues["identity check failed: "+check.Name+
+				" period="+check.Period+" unit="+check.Unit] = struct{}{}
+		}
+	}
+
 	result := make([]LintTerm, 0, len(counts))
 	for _, term := range counts {
 		result = append(result, *term)
