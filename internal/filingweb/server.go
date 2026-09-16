@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
 	"wingman.com/fetch-ecb/internal/xerr"
@@ -27,13 +28,18 @@ import (
 var templateFiles embed.FS
 
 type Server struct {
-	parsedDir string
-	template  *template.Template
-	logger    *slog.Logger
+	parsedDir   string
+	template    *template.Template
+	logger      *slog.Logger
+	setName     string
+	setAsOf     string
+	memberByCIK map[string]constituents.Member
+	memberByKey map[string][]string
 }
 
 type filingSummary struct {
 	CIK        string `json:"cik"`
+	Ticker     string `json:"ticker"`
 	Company    string `json:"company"`
 	Accession  string `json:"accession"`
 	FormType   string `json:"form_type"`
@@ -47,11 +53,55 @@ type dashboardData struct {
 	FilingCount int             `json:"filing_count"`
 	Company     string          `json:"company"`
 	CIK         string          `json:"cik"`
+	Query       string          `json:"query"`
+	SetName     string          `json:"set_name"`
+	SetAsOf     string          `json:"set_as_of"`
 	Filings     []filingSummary `json:"filings"`
 }
 
 func NewServer(parsedDir string, logger *slog.Logger) *Server {
-	return &Server{parsedDir: parsedDir, logger: logger, template: template.Must(template.ParseFS(templateFiles, "*.html"))}
+	server, err := NewConfiguredServer(parsedDir, "", "", logger)
+	if err != nil {
+		panic(err)
+	}
+
+	return server
+}
+
+// NewConfiguredServer creates a dashboard with an optional constituent set.
+// The set is only a human-name lookup; CIK and accession remain filing keys.
+//
+//nolint:wsl_v5 // Configuration keeps the optional set setup together.
+func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger) (*Server, error) {
+	server := &Server{
+		parsedDir:   parsedDir,
+		logger:      logger,
+		template:    template.Must(template.ParseFS(templateFiles, "*.html")),
+		setName:     setName,
+		setAsOf:     "",
+		memberByCIK: map[string]constituents.Member{},
+		memberByKey: map[string][]string{},
+	}
+
+	if setName == "" {
+		return server, nil
+	}
+
+	set, err := constituents.LoadJSON(filepath.Join(setDir, setName+".json"))
+	if err != nil {
+		return nil, err
+	}
+	server.setAsOf = set.AsOf
+	for _, member := range set.Members {
+		cik := canonicalCIK(member.CIK)
+		server.memberByCIK[cik] = member
+		server.memberByKey[strings.ToLower(member.Ticker)] = append(
+			server.memberByKey[strings.ToLower(member.Ticker)], cik)
+		server.memberByKey[strings.ToLower(member.Name)] = append(
+			server.memberByKey[strings.ToLower(member.Name)], cik)
+	}
+
+	return server, nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +125,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+//nolint:wsl_v5 // Filtering keeps query parsing and matching together.
 func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 	filings, err := s.loadSummaries()
 	if err != nil {
@@ -84,12 +135,43 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cik := strings.TrimSpace(r.URL.Query().Get("cik"))
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	formType := strings.TrimSpace(r.URL.Query().Get("form_type"))
+	year := strings.TrimSpace(r.URL.Query().Get("year"))
+	if cik == "" && query == "" && formType == "" && year == "" {
+		s.writeJSON(w, dashboardData{
+			FilingCount: 0, Company: "", CIK: "", Query: "",
+			SetName: s.setName, SetAsOf: s.setAsOf,
+			Filings: []filingSummary{},
+		})
+
+		return
+	}
+
+	queryCIKs := s.resolveQuery(query)
 	filtered := make([]filingSummary, 0, len(filings))
 	company := ""
+	selectedCIK := canonicalCIK(cik)
+	if selectedCIK == "" && len(queryCIKs) == 1 {
+		for match := range queryCIKs {
+			selectedCIK = match
+		}
+	}
 
 	for _, filing := range filings {
-		if cik != "" && canonicalCIK(filing.CIK) != canonicalCIK(cik) || formType != "" && filing.FormType != formType {
+		if cik != "" && canonicalCIK(filing.CIK) != canonicalCIK(cik) {
+			continue
+		}
+		if query != "" && len(queryCIKs) == 0 {
+			continue
+		}
+		if len(queryCIKs) > 0 && !queryCIKs[canonicalCIK(filing.CIK)] {
+			continue
+		}
+		if formType != "" && !strings.EqualFold(filing.FormType, formType) {
+			continue
+		}
+		if year != "" && !strings.HasPrefix(filing.FilingDate, year) {
 			continue
 		}
 
@@ -100,7 +182,32 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 		filtered = append(filtered, filing)
 	}
 
-	s.writeJSON(w, dashboardData{FilingCount: len(filtered), Company: company, CIK: cik, Filings: filtered})
+	s.writeJSON(w, dashboardData{
+		FilingCount: len(filtered), Company: company, CIK: selectedCIK,
+		Query: query, SetName: s.setName, SetAsOf: s.setAsOf, Filings: filtered,
+	})
+}
+
+//nolint:wsl_v5 // Lookup intentionally follows the small search decision tree.
+func (s *Server) resolveQuery(query string) map[string]bool {
+	if query == "" {
+		return nil
+	}
+	if cik := canonicalCIK(query); cik != "" {
+		return map[string]bool{cik: true}
+	}
+
+	matches := map[string]bool{}
+	lowerQuery := strings.ToLower(query)
+	for key, ciks := range s.memberByKey {
+		if key == lowerQuery || strings.Contains(key, lowerQuery) {
+			for _, cik := range ciks {
+				matches[cik] = true
+			}
+		}
+	}
+
+	return matches
 }
 
 func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +245,11 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	backURL := "/"
+	if candidate := r.URL.Query().Get("return_to"); validReturnURL(candidate) {
+		backURL = candidate
+	}
+
 	filing := &edgar.ParsedFiling{
 		SchemaVersion: edgar.ParsedSchemaVersion,
 		ParserVersion: view.ParserVersion,
@@ -162,6 +274,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		Ratios: view.Ratios, Facts: view.Counts.Facts,
 		DocumentCount: view.Counts.Documents, InstanceCount: view.Counts.Instances,
 		ContextCount: view.Counts.Contexts, Diagnostics: len(view.Diagnostics),
+		BackURL: backURL,
 	}
 
 	if err := s.template.ExecuteTemplate(w, "detail.html", data); err != nil {
@@ -171,6 +284,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 
 type detailData struct {
 	Filing        *edgar.ParsedFiling
+	BackURL       string
 	Summary       []filingview.SummaryGroup
 	Statements    []filingview.StatementView
 	Ratios        []filingview.RatioSeries
@@ -179,6 +293,11 @@ type detailData struct {
 	InstanceCount int
 	ContextCount  int
 	Diagnostics   int
+}
+
+func validReturnURL(value string) bool {
+	return strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "//") &&
+		!strings.ContainsAny(value, "\r\n")
 }
 
 func (s *Server) document(w http.ResponseWriter, r *http.Request) {
@@ -316,6 +435,7 @@ func (s *Server) loadSummaries() ([]filingSummary, error) {
 		result = append(result,
 			filingSummary{
 				CIK:        view.Metadata.CIK,
+				Ticker:     s.memberByCIK[canonicalCIK(view.Metadata.CIK)].Ticker,
 				Company:    view.Metadata.Company,
 				Accession:  view.Metadata.Accession,
 				FormType:   view.Metadata.FormType,

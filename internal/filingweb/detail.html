@@ -24,7 +24,7 @@
   </style>
 </head>
 <body>
-  <header><a class="back" href="/">&larr; All filings</a></header>
+  <header><a class="back" href="{{.BackURL}}">&larr; All filings</a></header>
   <main id="filing-detail" data-cik="{{.Filing.Metadata.CIK}}" data-accession="{{.Filing.Metadata.Accession}}">
     <section class="heading">
       <h1 id="filing-company">{{if .Filing.Metadata.Filers}}{{(index .Filing.Metadata.Filers 0).Name}}{{else}}Unknown company{{end}}</h1>

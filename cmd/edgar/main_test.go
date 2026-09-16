@@ -120,6 +120,15 @@ func TestParseServeConfigDefaults(t *testing.T) {
 	if cfg.serve.parsedDir != "./data/parsed" {
 		t.Fatalf("unexpected parsed directory %q", cfg.serve.parsedDir)
 	}
+
+	cfg, err = parseConfig([]string{"serve", "--set", "golden"})
+	if err != nil {
+		t.Fatalf("parseConfig with set returned error: %v", err)
+	}
+
+	if cfg.serve.setName != "golden" {
+		t.Fatalf("unexpected serve set %q", cfg.serve.setName)
+	}
 }
 
 func TestParseTaxonomyConfigFilters(t *testing.T) {

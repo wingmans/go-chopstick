@@ -57,6 +57,7 @@ type appConfig struct {
 	serve struct {
 		address   string
 		parsedDir string
+		setName   string
 	}
 	taxonomy struct {
 		operation string
@@ -180,9 +181,11 @@ func run(ctx context.Context, args []string) error {
 
 		commandErr = err
 	case "serve":
-		logger.Info("starting EDGAR local dashboard", "address", cfg.serve.address, "parsed_directory", cfg.serve.parsedDir)
+		logger.Info("starting EDGAR local dashboard", "address", cfg.serve.address,
+			"parsed_directory", cfg.serve.parsedDir, "set", cfg.serve.setName)
 
-		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir)
+		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir,
+			cfg.serve.setName)
 	case "taxonomy":
 		commandErr = runTaxonomyCommand(cfg.taxonomy.operation, cfg.taxonomy.file,
 			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter)

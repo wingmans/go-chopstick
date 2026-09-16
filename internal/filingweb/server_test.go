@@ -1,6 +1,7 @@
 package filingweb
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
 )
@@ -101,7 +103,8 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 	server := NewServer(parsedDir, nil)
 	record := httptest.NewRecorder()
 	request := httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/filings/789019/"+expected.Accession, nil)
+		http.MethodGet, "/filings/789019/"+expected.Accession+
+			"?return_to=%2F%3Fq%3DMSFT", nil)
 	server.ServeHTTP(record, request)
 
 	if record.Code != http.StatusOK {
@@ -119,6 +122,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"id=\"key-ratios\"",
 		"id=\"filing-documents\"",
 		"id=\"financial-summary\"",
+		"href=\"/?q=MSFT\"",
 		"data-testid=\"metric-RevenueFromContractWithCustomerExcludingAssessedTax-FY2026\"",
 		"Revenue",
 		"331839000000",
@@ -153,6 +157,7 @@ func summaryRowByConcept(rows []filingview.FactSeries, concept string) *filingvi
 	return nil
 }
 
+//nolint:wsl_v5 // Test setup stays close to the behavior it exercises.
 func TestServerNormalizesCIKPadding(t *testing.T) {
 	parsedDir := t.TempDir()
 
@@ -178,10 +183,38 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 		t.Fatalf("filingview.Save returned error: %v", err)
 	}
 
-	server := NewServer(parsedDir, nil)
+	setDir := t.TempDir()
+	var setData bytes.Buffer
+	set := constituents.Set{
+		Name: "golden", AsOf: "2026-09-14", Source: "test",
+		Members: []constituents.Member{{
+			CIK: "0000789019", Ticker: "MSFT", Name: "Microsoft Corporation",
+		}},
+	}
+	if err := set.WriteJSON(&setData); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(setDir, "golden.json"),
+		setData.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	server, err := NewConfiguredServer(parsedDir, setDir, "golden", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	record := httptest.NewRecorder()
+	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/api/filings", nil))
+	if record.Code != http.StatusOK ||
+		strings.Contains(record.Body.String(), "0001193125-26-027207") {
+		t.Fatalf("unfiltered request returned filings: status=%d body=%s",
+			record.Code, record.Body.String())
+	}
 
 	for _, cik := range []string{"789019", "0000789019"} {
-		record := httptest.NewRecorder()
+		record = httptest.NewRecorder()
 		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/filings?cik="+cik, nil)
 		server.ServeHTTP(record, request)
 
@@ -190,7 +223,16 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 		}
 	}
 
-	record := httptest.NewRecorder()
+	record = httptest.NewRecorder()
+	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/api/filings?q=MSFT", nil))
+	if record.Code != http.StatusOK ||
+		!strings.Contains(record.Body.String(), "\"ticker\":\"MSFT\"") {
+		t.Fatalf("ticker lookup failed: status=%d body=%s", record.Code,
+			record.Body.String())
+	}
+
+	record = httptest.NewRecorder()
 	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/filings/789019/0001193125-26-027207", nil))
 
 	if record.Code != 200 || !strings.Contains(record.Body.String(), "XBRL facts") {
