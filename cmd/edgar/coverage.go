@@ -94,6 +94,8 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 	return cfg, nil
 }
 
+// runCoverageCommand executes the coverage analysis based on the provided application configuration.
+// It generates a coverage report and writes it to the specified output path.
 func runCoverageCommand(ctx context.Context, cfg appConfig) error {
 	taxonomy, err := filingview.LoadTaxonomy("")
 	if err != nil {

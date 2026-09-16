@@ -11,6 +11,9 @@ application consumes:
 
 ```text
 edgar taxonomy lint --cik 789019 --form-type 10-K --year 2024
+edgar taxonomy lint --set us-gaap-coverage --form-type 10-K \
+  --from-year 2015 --format json \
+  --out data/validation/runs/2026-09-16-taxonomy/lint-report.json
 edgar taxonomy lint --file data/parsed/.../filing-view.json
 ```
 
@@ -27,12 +30,25 @@ It reports:
 Unmapped terms are findings rather than command failures. A filing can contain
 valid facts that are outside the current dashboard model.
 
+When `--file` is omitted, the command walks the parsed directory and scans all
+matching `filing-view.json` files. The `--from-year` and `--to-year` filters
+are intended for validation-set runs where a full filing history is useful,
+for example the 19-company `us-gaap-coverage` set.
+
+`--format json` writes a batch report with selection metadata, summary counts,
+and one lint report per filing. Review findings such as unmapped concepts or
+identity-check warnings remain successful command output; malformed or
+unreadable input files are operational failures and produce a non-zero exit.
+
 ## Source Coverage
 
 `taxonomy coverage` reads `filing.json` before compact projection:
 
 ```text
 edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K
+edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K \
+  --from-year 2015 --format json \
+  --out data/validation/runs/2026-09-16-taxonomy/taxonomy-coverage.json
 edgar taxonomy coverage --file data/parsed/.../filing.json
 ```
 

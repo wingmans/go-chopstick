@@ -84,6 +84,7 @@ type AcquisitionRequest struct {
 	Description string   `json:"description"`
 }
 
+// Build generates a coverage report based on the provided configuration.
 func Build(ctx context.Context, config Config) (Report, error) {
 	if config.MasterPath == "" {
 		return Report{}, errors.New("master index is required")
@@ -188,6 +189,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 	return report, nil
 }
 
+// inspectFiling inspects a single filing and returns its status and metrics.
 func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) (Filing, error) {
 	if err := ctx.Err(); err != nil {
 		return Filing{}, err
@@ -235,6 +237,7 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 	return result, nil
 }
 
+// metricPresence checks which metrics are present in the filing view and which are missing according to the taxonomy.
 func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[string]string, []string) {
 	present := make(map[string]string)
 
@@ -277,6 +280,7 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 	return metrics, missing
 }
 
+// addMissingIndexRequests adds acquisition requests for any missing quarterly index files within the specified range of years.
 func addMissingIndexRequests(report *Report, config Config) {
 	if config.IndexesDir == "" || config.FromYear == 0 || config.ToYear == 0 {
 		return
@@ -305,6 +309,7 @@ func addMissingIndexRequests(report *Report, config Config) {
 	}
 }
 
+// addMissingFilingRequests adds acquisition requests for any missing filings in the report.
 func addMissingFilingRequests(report *Report) {
 	grouped := make(map[string]*AcquisitionRequest)
 
@@ -396,6 +401,7 @@ func accessionFromPath(path string) string {
 	return strings.TrimSuffix(name, filepath.Ext(name))
 }
 
+// parsedViewPath constructs the path to the parsed filing view JSON file based on the directory, CIK, and accession.
 func parsedViewPath(directory, cik, accession string) string {
 	normalized, err := constituents.NormalizeCIK(cik)
 	if err != nil {
@@ -405,6 +411,7 @@ func parsedViewPath(directory, cik, accession string) string {
 	return filepath.Join(directory, normalized, accession, "filing-view.json")
 }
 
+// yearFromDate extracts the year from a date string in the format "YYYY-MM-DD".
 func yearFromDate(date string) int {
 	if len(date) < 4 {
 		return 0

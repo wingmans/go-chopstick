@@ -161,3 +161,9 @@ compatibility path that creates a parser-only normalized copy of the affected
 XML, with the original bytes, normalization rules, and diagnostics retained
 for lineage. That work should be covered by fixtures before being enabled
 broadly.
+
+Tiny malformed fixtures now live in
+`internal/edgar/testdata/malformed-xbrl/`. They preserve the failure patterns
+without copying full SEC filings into the test suite. Current tests assert
+that these inputs fail as malformed XBRL; future normalization work can flip
+or extend those tests when repair behavior is explicit.

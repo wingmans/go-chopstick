@@ -3,9 +3,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -64,10 +66,14 @@ type appConfig struct {
 		file      string
 		taxonomy  string
 		parsedDir string
+		format    string
+		out       string
 		filter    edgar.IndexFilter
 		formTypes stringList
 		setName   string
 		year      string
+		fromYear  int
+		toYear    int
 	}
 	coverage struct {
 		masterPath string
@@ -212,7 +218,9 @@ func run(ctx context.Context, args []string) error {
 			cfg.serve.setName)
 	case "taxonomy":
 		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
-			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter)
+			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter,
+			cfg.taxonomy.setName, cfg.taxonomy.fromYear, cfg.taxonomy.toYear,
+			cfg.taxonomy.format, cfg.taxonomy.out)
 	case "coverage":
 		commandErr = runCoverageCommand(ctx, cfg)
 	default:
@@ -313,12 +321,17 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 			{"-s, --set <name>", "Select current members from data/sets/<name>.json."},
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"-y, --year <year>", "Select filings filed in this year."},
+			{"    --from-year <year>", "First filing year to include."},
+			{"    --to-year <year>", "Last filing year to include."},
 			{"-d, --parsed-dir <path>", "Parsed filing directory; default ./data/parsed."},
 			{"-t, --taxonomy <path>", "Use a taxonomy JSON file instead of the embedded default."},
+			{"    --format <text|json>", "Output format; default text."},
+			{"-o, --out <path>", "Write output to this file instead of stdout."},
 			{"-h, --help", "Show command help."},
 		})
 	}
 	cfg.taxonomy.parsedDir = edgar.DefaultParsedDirectory
+	cfg.taxonomy.format = "text"
 	flags.StringVar(&cfg.taxonomy.file, "i", "", "lint one compact filing-view.json")
 	flags.StringVar(&cfg.taxonomy.file, "file", "", "lint one compact filing-view.json")
 	flags.StringVar(&cfg.taxonomy.filter.CIK, "c", "", "select locally parsed filings for this CIK")
@@ -329,10 +342,15 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	flags.Var(&cfg.taxonomy.formTypes, "form-type", "select this form type; may be repeated")
 	flags.StringVar(&cfg.taxonomy.year, "y", "", "select filings filed in this year")
 	flags.StringVar(&cfg.taxonomy.year, "year", "", "select filings filed in this year")
+	flags.IntVar(&cfg.taxonomy.fromYear, "from-year", 0, "first filing year to include")
+	flags.IntVar(&cfg.taxonomy.toYear, "to-year", 0, "last filing year to include")
 	flags.StringVar(&cfg.taxonomy.parsedDir, "d", cfg.taxonomy.parsedDir, "parsed filing directory")
 	flags.StringVar(&cfg.taxonomy.parsedDir, "parsed-dir", cfg.taxonomy.parsedDir, "parsed filing directory")
 	flags.StringVar(&cfg.taxonomy.taxonomy, "t", "", "taxonomy JSON file")
 	flags.StringVar(&cfg.taxonomy.taxonomy, "taxonomy", "", "taxonomy JSON file")
+	flags.StringVar(&cfg.taxonomy.format, "format", cfg.taxonomy.format, "output format")
+	flags.StringVar(&cfg.taxonomy.out, "o", "", "output path")
+	flags.StringVar(&cfg.taxonomy.out, "out", "", "output path")
 
 	if len(args) == 0 || (args[0] != "lint" && args[0] != "coverage") {
 		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
@@ -349,7 +367,8 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 
 	if strings.TrimSpace(cfg.taxonomy.file) != "" &&
 		(cfg.taxonomy.filter.CIK != "" || cfg.taxonomy.setName != "" ||
-			len(cfg.taxonomy.formTypes) > 0 || strings.TrimSpace(cfg.taxonomy.year) != "") {
+			len(cfg.taxonomy.formTypes) > 0 || strings.TrimSpace(cfg.taxonomy.year) != "" ||
+			cfg.taxonomy.fromYear != 0 || cfg.taxonomy.toYear != 0) {
 		return subcommandError(flags, errors.New("--file cannot be combined with filters"))
 	}
 
@@ -357,12 +376,35 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, errors.New("--parsed-dir cannot be empty"))
 	}
 
+	if cfg.taxonomy.format != "text" && cfg.taxonomy.format != "json" {
+		return subcommandError(flags, errors.New("--format must be text or json"))
+	}
+
 	cfg.taxonomy.filter.FormTypes = cfg.taxonomy.formTypes
 	if err := applyConstituentSet(&cfg.taxonomy.filter, cfg.taxonomy.setName); err != nil {
 		return subcommandError(flags, err)
 	}
 
+	if cfg.taxonomy.fromYear != 0 && (cfg.taxonomy.fromYear < edgar.EarliestYear ||
+		cfg.taxonomy.fromYear > 9999) {
+		return subcommandError(flags, errors.New("--from-year must be a valid EDGAR year"))
+	}
+
+	if cfg.taxonomy.toYear != 0 && (cfg.taxonomy.toYear < edgar.EarliestYear ||
+		cfg.taxonomy.toYear > 9999) {
+		return subcommandError(flags, errors.New("--to-year must be a valid EDGAR year"))
+	}
+
+	if cfg.taxonomy.fromYear != 0 && cfg.taxonomy.toYear != 0 &&
+		cfg.taxonomy.fromYear > cfg.taxonomy.toYear {
+		return subcommandError(flags, errors.New("--from-year must not be after --to-year"))
+	}
+
 	if strings.TrimSpace(cfg.taxonomy.year) != "" {
+		if cfg.taxonomy.fromYear != 0 || cfg.taxonomy.toYear != 0 {
+			return subcommandError(flags, errors.New("--year cannot be combined with --from-year or --to-year"))
+		}
+
 		parsedYear, err := strconv.Atoi(strings.TrimSpace(cfg.taxonomy.year))
 		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
 			return subcommandError(flags, errors.New("--year must be a four-digit year"))
@@ -374,8 +416,48 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	return cfg, nil
 }
 
+type taxonomyBatchReport struct {
+	SchemaVersion   int                    `json:"schema_version"`
+	Operation       string                 `json:"operation"`
+	TaxonomyVersion string                 `json:"taxonomy_version"`
+	GeneratedAt     string                 `json:"generated_at"`
+	Selection       taxonomySelection      `json:"selection"`
+	Summary         taxonomyBatchSummary   `json:"summary"`
+	Filings         []taxonomyFilingReport `json:"filings"`
+}
+
+type taxonomySelection struct {
+	File      string   `json:"file,omitempty"`
+	Set       string   `json:"set,omitempty"`
+	CIK       string   `json:"cik,omitempty"`
+	CIKs      []string `json:"ciks,omitempty"`
+	FormTypes []string `json:"form_types,omitempty"`
+	Year      int      `json:"year,omitempty"`
+	FromYear  int      `json:"from_year,omitempty"`
+	ToYear    int      `json:"to_year,omitempty"`
+}
+
+type taxonomyBatchSummary struct {
+	Selected      int `json:"selected"`
+	Failed        int `json:"failed"`
+	Findings      int `json:"findings"`
+	QualityIssues int `json:"quality_issues,omitempty"`
+}
+
+type taxonomyFilingReport struct {
+	Path       string                     `json:"path"`
+	CIK        string                     `json:"cik,omitempty"`
+	Accession  string                     `json:"accession,omitempty"`
+	FormType   string                     `json:"form_type,omitempty"`
+	FilingDate string                     `json:"filing_date,omitempty"`
+	Lint       *filingview.LintReport     `json:"lint,omitempty"`
+	Coverage   *filingview.CoverageReport `json:"coverage,omitempty"`
+	Error      string                     `json:"error,omitempty"`
+}
+
 func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
-	parsedDir string, filter edgar.IndexFilter,
+	parsedDir string, filter edgar.IndexFilter, setName string, fromYear,
+	toYear int, format, out string,
 ) error {
 	taxonomy, err := filingview.LoadTaxonomy(taxonomyPath)
 	if err != nil {
@@ -385,9 +467,9 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 	paths := []string{path}
 	if path == "" {
 		if operation == "coverage" {
-			paths, err = parsedFilingPaths(ctx, parsedDir, filter)
+			paths, err = parsedFilingPaths(ctx, parsedDir, filter, fromYear, toYear)
 		} else {
-			paths, err = filingViewPaths(ctx, parsedDir, filter)
+			paths, err = filingViewPaths(ctx, parsedDir, filter, fromYear, toYear)
 		}
 
 		if err != nil {
@@ -397,16 +479,35 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 
 	failed := 0
 	findings := 0
+	qualityIssues := 0
+	batch := taxonomyBatchReport{
+		SchemaVersion:   1,
+		Operation:       operation,
+		TaxonomyVersion: taxonomy.TaxonomyVersion,
+		GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
+		Selection: taxonomySelection{
+			File: path, Set: setName, CIK: filter.CIK, CIKs: filter.CIKs,
+			FormTypes: filter.FormTypes, Year: filter.Year,
+			FromYear: fromYear, ToYear: toYear,
+		},
+		Summary: taxonomyBatchSummary{},
+		Filings: nil,
+	}
+	var text strings.Builder
 
 	for _, filingPath := range paths {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
+		entry := taxonomyFilingReport{Path: filingPath}
+
 		if operation == "coverage" {
 			filing, loadErr := edgar.LoadParsedFiling(filingPath)
 			if loadErr != nil {
-				fmt.Fprintf(os.Stdout, "%s error=%v\n", filingPath, loadErr)
+				fmt.Fprintf(&text, "%s error=%v\n", filingPath, loadErr)
+				entry.Error = loadErr.Error()
+				batch.Filings = append(batch.Filings, entry)
 
 				failed++
 
@@ -415,7 +516,14 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 
 			report := filingview.Coverage(filing, taxonomy)
 			findings += len(report.Unmapped)
-			fmt.Fprintf(os.Stdout, "%s cik=%s form=%s %s\n", filingPath,
+			entry.CIK = filing.Metadata.CIK
+			entry.Accession = filing.Metadata.Accession
+			entry.FormType = filing.Metadata.FormType
+			entry.FilingDate = filing.Metadata.FilingDate
+			entry.Coverage = &report
+			batch.Filings = append(batch.Filings, entry)
+
+			fmt.Fprintf(&text, "%s cik=%s form=%s %s\n", filingPath,
 				filing.Metadata.CIK, filing.Metadata.FormType, report)
 
 			continue
@@ -423,7 +531,9 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 
 		view, loadErr := filingview.Load(filingPath)
 		if loadErr != nil {
-			fmt.Fprintf(os.Stdout, "%s error=%v\n", filingPath, loadErr)
+			fmt.Fprintf(&text, "%s error=%v\n", filingPath, loadErr)
+			entry.Error = loadErr.Error()
+			batch.Filings = append(batch.Filings, entry)
 
 			failed++
 
@@ -432,12 +542,36 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 
 		report := filingview.LintView(view, taxonomy)
 		findings += len(report.Unmapped)
-		fmt.Fprintf(os.Stdout, "%s cik=%s form=%s %s\n", filingPath,
+		qualityIssues += len(report.QualityIssues)
+		entry.CIK = view.Metadata.CIK
+		entry.Accession = view.Metadata.Accession
+		entry.FormType = view.Metadata.FormType
+		entry.FilingDate = view.Metadata.FilingDate
+		entry.Lint = &report
+		batch.Filings = append(batch.Filings, entry)
+
+		fmt.Fprintf(&text, "%s cik=%s form=%s %s\n", filingPath,
 			view.Metadata.CIK, view.Metadata.FormType, report)
 	}
 
-	fmt.Fprintf(os.Stdout, "taxonomy %s summary selected=%d findings=%d failed=%d\n",
+	// Lint findings are review evidence for taxonomy work, not operational
+	// failures. Only unreadable or malformed inputs increment failed and
+	// produce a non-zero exit.
+	batch.Summary = taxonomyBatchSummary{
+		Selected: len(paths), Failed: failed, Findings: findings,
+		QualityIssues: qualityIssues,
+	}
+
+	fmt.Fprintf(&text, "taxonomy %s summary selected=%d findings=%d failed=%d\n",
 		operation, len(paths), findings, failed)
+
+	if format == "json" {
+		if err := writeTaxonomyJSON(out, batch); err != nil {
+			return err
+		}
+	} else if err := writeTaxonomyText(out, text.String()); err != nil {
+		return err
+	}
 
 	if failed > 0 {
 		return fmt.Errorf("%d filing view(s) failed linting", failed)
@@ -446,7 +580,9 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 	return nil
 }
 
-func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFilter) ([]string, error) {
+// filingViewPaths returns the paths to all filing-view.json files in the given directory that match the filter.
+// The returned paths are sorted in lexicographical order.
+func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFilter, fromYear, toYear int) ([]string, error) {
 	paths := []string{}
 
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
@@ -468,6 +604,10 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 		}
 
 		dateFiled, _ := time.Parse("2006-01-02", view.Metadata.FilingDate)
+		if !inYearRange(dateFiled.Year(), fromYear, toYear) {
+			return nil
+		}
+
 		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
 			CIK: view.Metadata.CIK, CompanyName: view.Metadata.Company,
 			FormType: view.Metadata.FormType, DateFiled: dateFiled,
@@ -489,7 +629,9 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 	return paths, nil
 }
 
-func parsedFilingPaths(ctx context.Context, directory string, filter edgar.IndexFilter) ([]string, error) {
+// parsedFilingPaths returns the paths to all filing.json files in the given directory that match the filter.
+// The returned paths are sorted in lexicographical order.
+func parsedFilingPaths(ctx context.Context, directory string, filter edgar.IndexFilter, fromYear, toYear int) ([]string, error) {
 	paths := []string{}
 
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
@@ -511,6 +653,10 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 		}
 
 		dateFiled, _ := time.Parse("2006-01-02", filing.Metadata.FilingDate)
+		if !inYearRange(dateFiled.Year(), fromYear, toYear) {
+			return nil
+		}
+
 		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
 			CIK: filing.Metadata.CIK, CompanyName: "",
 			FormType: filing.Metadata.FormType, DateFiled: dateFiled,
@@ -530,6 +676,60 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 	sort.Strings(paths)
 
 	return paths, nil
+}
+
+func writeTaxonomyJSON(path string, report taxonomyBatchReport) error {
+	var writer io.Writer = os.Stdout
+	var file *os.File
+
+	if path != "" {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			return fmt.Errorf("create taxonomy report directory: %w", err)
+		}
+
+		created, err := os.Create(path)
+		if err != nil {
+			return fmt.Errorf("create taxonomy report: %w", err)
+		}
+
+		file = created
+		writer = file
+	}
+
+	if file != nil {
+		defer func() { _ = file.Close() }()
+	}
+
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(report); err != nil {
+		return fmt.Errorf("write taxonomy report: %w", err)
+	}
+
+	return nil
+}
+
+func writeTaxonomyText(path, text string) error {
+	if path == "" {
+		fmt.Fprint(os.Stdout, text)
+
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("create taxonomy report directory: %w", err)
+	}
+
+	if err := os.WriteFile(path, []byte(text), 0o640); err != nil {
+		return fmt.Errorf("write taxonomy report: %w", err)
+	}
+
+	return nil
+}
+
+func inYearRange(year, fromYear, toYear int) bool {
+	return (fromYear == 0 || year >= fromYear) && (toYear == 0 || year <= toYear)
 }
 
 func parseDownloadIndexConfig(args []string) (appConfig, error) {

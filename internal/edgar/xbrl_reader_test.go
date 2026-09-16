@@ -1,6 +1,7 @@
 package edgar
 
 import (
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -124,4 +125,32 @@ func TestXBRLRejectsMalformedInstances(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestXBRLRejectsLegacyMalformedFixtures(t *testing.T) {
+	for _, path := range []string{
+		"testdata/malformed-xbrl/missing-lt-semicolon.xml",
+		"testdata/malformed-xbrl/missing-gt-semicolon.xml",
+		"testdata/malformed-xbrl/truncated-closing-tag.xml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			source := openTestFile(t, path)
+			defer func() { _ = source.Close() }()
+
+			if _, recognized, err := readXBRL(t.Context(), source); err == nil || !recognized {
+				t.Fatalf("recognized=%v error=%v, want recognized malformed XBRL error", recognized, err)
+			}
+		})
+	}
+}
+
+func openTestFile(t *testing.T, path string) *os.File {
+	t.Helper()
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open fixture %s: %v", path, err)
+	}
+
+	return file
 }

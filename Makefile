@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run integration release test clean
+.PHONY: help build constituents lint run integration taxonomy-validation release test clean
 
 .DEFAULT_GOAL := help
 
@@ -12,6 +12,7 @@ help:
 		'  make constituents Download the current S&P 500 constituent set' \
 		'  make lint         Run golangci-lint' \
 		'  make integration  Run the EDGAR end-to-end test' \
+		'  make taxonomy-validation  Run the 19-company taxonomy validation pass' \
 		'  make run          Run the ECB command' \
 		'  make serve        Serve locally parsed EDGAR filings' \
 		'  make test         Run the Go test suite' \
@@ -33,6 +34,9 @@ lint:
 integration: build
 	bash scripts/edgar-e2e.sh
 
+taxonomy-validation: build
+	bash scripts/taxonomy-validation.sh
+
 run:
 	go run ./cmd/ecb
 
@@ -44,4 +48,3 @@ test:
 
 clean:
 	rm -rf $(BIN_DIR) dist
- 
