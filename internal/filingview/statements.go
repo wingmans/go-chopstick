@@ -21,6 +21,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 	}
 
 	for _, instance := range filing.Instances {
+		units := unitMap(instance)
 		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			if len(context.Dimensions) == 0 {
@@ -49,14 +50,15 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 				accumulator.Rows[group] = map[string]*FactSeries{}
 			}
 
-			key := definition.Key + "\x00" + fact.UnitRef
+			unit := normalizedUnit(fact, units)
+			key := definition.Key + "\x00" + unit
 
 			row := accumulator.Rows[group][key]
 			if row == nil {
 				row = &FactSeries{
 					Key: definition.Key, Label: definition.Label,
 					Namespace: fact.Concept.Namespace, Concept: fact.Concept.Local,
-					Unit: fact.UnitRef, Values: map[string]FactValue{},
+					Unit: unit, Values: map[string]FactValue{},
 				}
 				accumulator.Rows[group][key] = row
 			}

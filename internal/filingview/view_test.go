@@ -39,7 +39,10 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 			Contexts: []edgar.FactContext{{
 				ID: "fy", StartDate: "2025-07-01", EndDate: "2026-06-30",
 			}},
-			Units: []edgar.FactUnit{{ID: "usd"}},
+			Units: []edgar.FactUnit{{
+				ID:       "usd",
+				Measures: []edgar.QName{{Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD"}},
+			}},
 		}},
 		Status: edgar.ParseComplete,
 	}
@@ -102,8 +105,12 @@ func assertRevenueSelection(t *testing.T, row FactSeries) {
 		t.Fatalf("unexpected selected row identity: %+v", row)
 	}
 
+	if row.Unit != "USD" {
+		t.Fatalf("unexpected normalized unit: %q", row.Unit)
+	}
+
 	value := row.Values["FY2026"]
-	if value.Value != "100" || value.ContextRef != "fy" {
+	if value.Value != "100" || value.ContextRef != "fy" || value.UnitRef != "usd" {
 		t.Fatalf("unexpected selected value: %+v", value)
 	}
 }

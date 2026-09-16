@@ -124,7 +124,8 @@ func formatFactValue(value filingview.FactValue, unit string) string {
 	}
 
 	currency := strings.Contains(strings.ToLower(unit), "usd")
-	perShare := strings.Contains(strings.ToLower(unit), "pershare")
+	perShare := strings.Contains(strings.ToLower(unit), "pershare") ||
+		strings.Contains(strings.ToLower(unit), "/shares")
 
 	formatted := compactNumber(rational)
 	if !strings.ContainsAny(formatted, "KMBT") && (currency || perShare) {

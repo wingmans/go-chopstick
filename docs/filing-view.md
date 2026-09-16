@@ -42,11 +42,12 @@ SEC submission or the verbose parsed result.
     {
       "label": "Revenue",
       "concept": "RevenueFromContractWithCustomerExcludingAssessedTax",
-      "unit": "U_USD",
+      "unit": "USD",
       "values": {
         "FY2026": {
           "value": "331839000000",
-          "nil": false
+          "nil": false,
+          "unit_ref": "U_USD"
         }
       }
     }
@@ -55,8 +56,9 @@ SEC submission or the verbose parsed result.
 ```
 
 Values remain strings. This avoids floating-point loss and preserves the
-source value exactly. The concept and unit remain attached so later taxonomy
-work can be audited back to the original XBRL fact.
+source value exactly. The concept and normalized unit remain attached for
+comparison, while each value retains the source unit reference so later
+taxonomy work can be audited back to the original XBRL fact.
 
 ## Target Shape
 
@@ -69,8 +71,9 @@ The view now contains explicit sections for:
 
 Each statement contains the same period groups used by the summary, such as
 `Fiscal year`, `Quarterly`, `Year to date`, and `Instant`. Each row retains its
-source concept and unit. Each value also retains its context reference and
-decimals so displayed values can be traced back to the verbose parsed filing.
+source concept and normalized unit. Each value also retains its context
+reference, source unit reference, and decimals so displayed values can be
+traced back to the verbose parsed filing.
 
 Ratios are explicitly derived values. They are only emitted when both source
 values exist for the same period and can be parsed exactly. Examples include

@@ -67,9 +67,9 @@ type FactValue struct {
 	Nil        bool   `json:"nil"`
 	ContextRef string `json:"context_ref,omitempty"`
 	Decimals   string `json:"decimals,omitempty"`
+	UnitRef    string `json:"unit_ref,omitempty"`
 	priority   int
 	concept    edgar.QName
-	unitRef    string
 	id         string
 	precision  string
 }
@@ -217,6 +217,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 	seriesByGroup := map[string]map[string]*FactSeries{}
 
 	for _, instance := range filing.Instances {
+		units := unitMap(instance)
 		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			if len(context.Dimensions) == 0 {
@@ -240,7 +241,8 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 				continue
 			}
 
-			key := definition.Key + "\x00" + fact.UnitRef
+			unit := normalizedUnit(fact, units)
+			key := definition.Key + "\x00" + unit
 
 			if periodsByGroup[group] == nil {
 				periodsByGroup[group] = map[string]string{}
@@ -252,7 +254,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 				row = &FactSeries{
 					Key: definition.Key, Label: definition.Label,
 					Namespace: fact.Concept.Namespace, Concept: fact.Concept.Local,
-					Unit: fact.UnitRef, Values: map[string]FactValue{},
+					Unit: unit, Values: map[string]FactValue{},
 				}
 				seriesByGroup[group][key] = row
 			}
