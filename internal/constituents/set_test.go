@@ -1,4 +1,3 @@
-//nolint:wsl_v5 // Test setup is kept close to the assertion it supports.
 package constituents
 
 import (
@@ -16,13 +15,16 @@ func TestSetWriteJSONNormalizesAndSortsMembers(t *testing.T) {
 			{CIK: "320193", Ticker: "aapl", Name: "Apple Inc."},
 		},
 	}
+
 	var output strings.Builder
 	if err := set.WriteJSON(&output); err != nil {
 		t.Fatalf("WriteJSON returned error: %v", err)
 	}
+
 	if !strings.Contains(output.String(), `"cik": "0000320193"`) {
 		t.Fatal("expected normalized CIK")
 	}
+
 	if strings.Index(output.String(), `"ticker": "AAPL"`) > strings.Index(output.String(), `"ticker": "MSFT"`) {
 		t.Fatal("expected members sorted by ticker")
 	}

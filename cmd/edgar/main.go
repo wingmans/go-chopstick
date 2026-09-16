@@ -300,9 +300,9 @@ func parseConfig(args []string) (appConfig, error) {
 	}
 }
 
-//nolint:wsl_v5 // Command parsing is kept in one readable validation block.
 func parseTaxonomyConfig(args []string) (appConfig, error) {
 	var cfg appConfig
+
 	cfg.command = "taxonomy"
 	flags := flag.NewFlagSet("taxonomy", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
@@ -333,40 +333,47 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.taxonomy.parsedDir, "parsed-dir", cfg.taxonomy.parsedDir, "parsed filing directory")
 	flags.StringVar(&cfg.taxonomy.taxonomy, "t", "", "taxonomy JSON file")
 	flags.StringVar(&cfg.taxonomy.taxonomy, "taxonomy", "", "taxonomy JSON file")
+
 	if len(args) == 0 || (args[0] != "lint" && args[0] != "coverage") {
 		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
 	}
+
 	cfg.taxonomy.operation = args[0]
 	if err := flags.Parse(args[1:]); err != nil {
 		return appConfig{}, flag.ErrHelp
 	}
+
 	if flags.NArg() != 0 {
 		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
 	}
+
 	if strings.TrimSpace(cfg.taxonomy.file) != "" &&
 		(cfg.taxonomy.filter.CIK != "" || cfg.taxonomy.setName != "" ||
 			len(cfg.taxonomy.formTypes) > 0 || strings.TrimSpace(cfg.taxonomy.year) != "") {
 		return subcommandError(flags, errors.New("--file cannot be combined with filters"))
 	}
+
 	if cfg.taxonomy.parsedDir == "" {
 		return subcommandError(flags, errors.New("--parsed-dir cannot be empty"))
 	}
+
 	cfg.taxonomy.filter.FormTypes = cfg.taxonomy.formTypes
 	if err := applyConstituentSet(&cfg.taxonomy.filter, cfg.taxonomy.setName); err != nil {
 		return subcommandError(flags, err)
 	}
+
 	if strings.TrimSpace(cfg.taxonomy.year) != "" {
 		parsedYear, err := strconv.Atoi(strings.TrimSpace(cfg.taxonomy.year))
 		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
 			return subcommandError(flags, errors.New("--year must be a four-digit year"))
 		}
+
 		cfg.taxonomy.filter.Year = parsedYear
 	}
 
 	return cfg, nil
 }
 
-//nolint:wsl_v5 // Loading, linting, and reporting form one boundary operation.
 func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 	parsedDir string, filter edgar.IndexFilter,
 ) error {
@@ -374,6 +381,7 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 	if err != nil {
 		return err
 	}
+
 	paths := []string{path}
 	if path == "" {
 		if operation == "coverage" {
@@ -381,6 +389,7 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 		} else {
 			paths, err = filingViewPaths(ctx, parsedDir, filter)
 		}
+
 		if err != nil {
 			return err
 		}
@@ -388,6 +397,7 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 
 	failed := 0
 	findings := 0
+
 	for _, filingPath := range paths {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -397,10 +407,12 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 			filing, loadErr := edgar.LoadParsedFiling(filingPath)
 			if loadErr != nil {
 				fmt.Fprintf(os.Stdout, "%s error=%v\n", filingPath, loadErr)
+
 				failed++
 
 				continue
 			}
+
 			report := filingview.Coverage(filing, taxonomy)
 			findings += len(report.Unmapped)
 			fmt.Fprintf(os.Stdout, "%s cik=%s form=%s %s\n", filingPath,
@@ -408,20 +420,25 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 
 			continue
 		}
+
 		view, loadErr := filingview.Load(filingPath)
 		if loadErr != nil {
 			fmt.Fprintf(os.Stdout, "%s error=%v\n", filingPath, loadErr)
+
 			failed++
 
 			continue
 		}
+
 		report := filingview.LintView(view, taxonomy)
 		findings += len(report.Unmapped)
 		fmt.Fprintf(os.Stdout, "%s cik=%s form=%s %s\n", filingPath,
 			view.Metadata.CIK, view.Metadata.FormType, report)
 	}
+
 	fmt.Fprintf(os.Stdout, "taxonomy %s summary selected=%d findings=%d failed=%d\n",
 		operation, len(paths), findings, failed)
+
 	if failed > 0 {
 		return fmt.Errorf("%d filing view(s) failed linting", failed)
 	}
@@ -429,9 +446,9 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 	return nil
 }
 
-//nolint:wsl_v5 // Filesystem traversal keeps filtering and collection together.
 func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFilter) ([]string, error) {
 	paths := []string{}
+
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -440,13 +457,16 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 		if walkErr != nil {
 			return walkErr
 		}
+
 		if entry.IsDir() || entry.Name() != "filing-view.json" {
 			return nil
 		}
+
 		view, err := filingview.Load(path)
 		if err != nil {
 			return fmt.Errorf("inspect %s: %w", path, err)
 		}
+
 		dateFiled, _ := time.Parse("2006-01-02", view.Metadata.FilingDate)
 		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
 			CIK: view.Metadata.CIK, CompanyName: view.Metadata.Company,
@@ -455,6 +475,7 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 		}, filter) {
 			return nil
 		}
+
 		paths = append(paths, path)
 
 		return nil
@@ -462,14 +483,15 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 	if err != nil {
 		return nil, fmt.Errorf("scan parsed directory: %w", err)
 	}
+
 	sort.Strings(paths)
 
 	return paths, nil
 }
 
-//nolint:wsl_v5 // Parsed-file traversal mirrors filing-view traversal.
 func parsedFilingPaths(ctx context.Context, directory string, filter edgar.IndexFilter) ([]string, error) {
 	paths := []string{}
+
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -478,13 +500,16 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 		if walkErr != nil {
 			return walkErr
 		}
+
 		if entry.IsDir() || entry.Name() != "filing.json" {
 			return nil
 		}
+
 		filing, err := edgar.LoadParsedFiling(path)
 		if err != nil {
 			return fmt.Errorf("inspect %s: %w", path, err)
 		}
+
 		dateFiled, _ := time.Parse("2006-01-02", filing.Metadata.FilingDate)
 		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
 			CIK: filing.Metadata.CIK, CompanyName: "",
@@ -493,6 +518,7 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 		}, filter) {
 			return nil
 		}
+
 		paths = append(paths, path)
 
 		return nil
@@ -500,6 +526,7 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 	if err != nil {
 		return nil, fmt.Errorf("scan parsed directory: %w", err)
 	}
+
 	sort.Strings(paths)
 
 	return paths, nil

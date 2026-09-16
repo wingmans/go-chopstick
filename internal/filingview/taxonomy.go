@@ -43,12 +43,12 @@ type RatioDefinition struct {
 
 // LoadTaxonomy reads a taxonomy file. An empty path loads the checked-in
 // default, which keeps command behavior independent of the working directory.
-//
-//nolint:wsl_v5 // Loading and validating the registry is one boundary.
 func LoadTaxonomy(path string) (Taxonomy, error) {
 	data := defaultTaxonomyJSON
+
 	if strings.TrimSpace(path) != "" {
 		var err error
+
 		data, err = os.ReadFile(path)
 		if err != nil {
 			return Taxonomy{}, fmt.Errorf("read taxonomy %s: %w", path, err)
@@ -59,6 +59,7 @@ func LoadTaxonomy(path string) (Taxonomy, error) {
 	if err := json.Unmarshal(data, &taxonomy); err != nil {
 		return Taxonomy{}, fmt.Errorf("decode taxonomy: %w", err)
 	}
+
 	if err := taxonomy.Validate(); err != nil {
 		return Taxonomy{}, fmt.Errorf("validate taxonomy: %w", err)
 	}
@@ -66,26 +67,30 @@ func LoadTaxonomy(path string) (Taxonomy, error) {
 	return taxonomy, nil
 }
 
-//nolint:wsl_v5 // Registry validation is intentionally explicit.
 func (t Taxonomy) Validate() error {
 	if t.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported taxonomy schema %d", t.SchemaVersion)
 	}
+
 	if strings.TrimSpace(t.TaxonomyVersion) == "" {
 		return errors.New("taxonomy version is empty")
 	}
+
 	seen := make(map[string]struct{}, len(t.Metrics))
 	for _, metric := range t.Metrics {
 		if metric.Key == "" || metric.Label == "" || metric.Statement == "" {
 			return errors.New("metric has an empty key, label, or statement")
 		}
+
 		if _, ok := seen[metric.Key]; ok {
 			return fmt.Errorf("duplicate metric key %q", metric.Key)
 		}
+
 		seen[metric.Key] = struct{}{}
 		if len(metric.Concepts) == 0 {
 			return fmt.Errorf("metric %q has no concepts", metric.Key)
 		}
+
 		for _, concept := range metric.Concepts {
 			if concept.Name == "" {
 				return fmt.Errorf("metric %q has an empty concept name", metric.Key)
@@ -119,11 +124,11 @@ func (t Taxonomy) metricForConcept(namespace, concept string) (MetricDefinition,
 	}, false
 }
 
-//nolint:wsl_v5 // Namespace matching keeps the small policy together.
 func namespaceMatches(family, namespace string) bool {
 	if family == "" || family == "any" {
 		return true
 	}
+
 	if family == "us-gaap" {
 		return strings.Contains(namespace, "/us-gaap/") ||
 			strings.Contains(namespace, "/us-gaap:")

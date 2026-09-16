@@ -1,4 +1,3 @@
-//nolint:wsl_v5 // Tests keep related assertions together.
 package filingview
 
 import "testing"
@@ -8,13 +7,16 @@ func TestLoadTaxonomyDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTaxonomy returned error: %v", err)
 	}
+
 	if taxonomy.TaxonomyVersion == "" || len(taxonomy.Metrics) == 0 {
 		t.Fatalf("default taxonomy is incomplete: %+v", taxonomy)
 	}
+
 	if _, ok := taxonomy.metricForConcept(
 		"http://fasb.org/us-gaap/2013-01-31", "Revenues"); !ok {
 		t.Fatal("expected versioned US-GAAP revenue concept to resolve")
 	}
+
 	if _, ok := taxonomy.metricForConcept(
 		"http://example.test/company/2026", "Revenues"); ok {
 		t.Fatal("company extension must not resolve as US-GAAP")
@@ -26,6 +28,7 @@ func TestLintViewReportsOnlyUnmappedTerms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTaxonomy returned error: %v", err)
 	}
+
 	view := View{
 		SchemaVersion: 1, ParserVersion: "test", TaxonomyVersion: "test",
 		SourcePath: "", SourceSHA256: "", Metadata: Metadata{
@@ -52,6 +55,7 @@ func TestLintViewReportsOnlyUnmappedTerms(t *testing.T) {
 	if report.Rows != 2 || report.Mapped != 1 || len(report.Unmapped) != 1 {
 		t.Fatalf("unexpected report: %+v", report)
 	}
+
 	if report.Unmapped[0].Concept != "AdjustedFoo" {
 		t.Fatalf("unexpected unmapped term: %+v", report.Unmapped[0])
 	}

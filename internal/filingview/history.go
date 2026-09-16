@@ -40,8 +40,6 @@ type historyRows map[string]map[string]*historyCandidate
 
 // BuildCompanyHistory combines annual values from local filing views.
 // The newest filing wins when a period is present more than once.
-//
-//nolint:wsl_v5 // History construction is one transformation boundary.
 func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 	if strings.TrimSpace(cik) == "" {
 		return CompanyHistory{}, errors.New("company history CIK is empty")
@@ -50,14 +48,17 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 	cik = historyCIK(cik)
 	rowsByStatement := map[string]historyRows{}
 	company := ""
+
 	for _, view := range views {
 		if historyCIK(view.Metadata.CIK) != cik ||
 			(view.Metadata.FormType != "10-K" && view.Metadata.FormType != "10-K/A") {
 			continue
 		}
+
 		if company == "" {
 			company = view.Metadata.Company
 		}
+
 		for _, statement := range []StatementView{
 			view.Statements.Income, view.Statements.Balance, view.Statements.CashFlow,
 		} {
@@ -65,23 +66,28 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 				if group.Title != "Fiscal year" {
 					continue
 				}
+
 				if rowsByStatement[statement.Title] == nil {
 					rowsByStatement[statement.Title] = historyRows{}
 				}
+
 				for _, row := range group.Rows {
 					rowKey := row.Key + "\x00" + row.Unit
 					if rowsByStatement[statement.Title][rowKey] == nil {
 						rowsByStatement[statement.Title][rowKey] = map[string]*historyCandidate{}
 					}
+
 					for period, value := range row.Values {
 						year := historyYear(period)
 						if year == "" {
 							continue
 						}
+
 						candidate := &historyCandidate{
 							Value: value, Accession: view.Metadata.Accession,
 							FilingDate: view.Metadata.FilingDate, Concept: row.Concept,
 						}
+
 						current := rowsByStatement[statement.Title][rowKey][year]
 						if current == nil || newerHistoryCandidate(candidate, current) {
 							rowsByStatement[statement.Title][rowKey][year] = candidate
@@ -100,14 +106,17 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 	result := CompanyHistory{
 		CIK: cik, Company: company, Years: years, Statements: []HistoryStatement{},
 	}
+
 	for _, title := range []string{"Income statement", "Balance sheet", "Cash flow"} {
 		statement, ok := rowsByStatement[title]
 		if !ok {
 			continue
 		}
+
 		rows := make([]HistoryRow, 0, len(statement))
 		for key, values := range statement {
 			parts := strings.SplitN(key, "\x00", 2)
+
 			row := HistoryRow{
 				Key: parts[0], Label: historyMetricLabel(parts[0]), Unit: "",
 				Values: map[string]FactValue{}, Sources: map[string]string{},
@@ -115,16 +124,20 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 			if len(parts) == 2 {
 				row.Unit = parts[1]
 			}
+
 			for _, year := range years {
 				candidate := values[year]
 				if candidate == nil {
 					continue
 				}
+
 				row.Values[year] = candidate.Value
 				row.Sources[year] = candidate.Accession
 			}
+
 			rows = append(rows, row)
 		}
+
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Label < rows[j].Label })
 		result.Statements = append(result.Statements,
 			HistoryStatement{Title: title, Rows: rows})
@@ -160,9 +173,9 @@ func historyYear(period string) string {
 	return period[2:]
 }
 
-//nolint:wsl_v5 // Year collection is a small, self-contained reduction.
 func historyYears(rows map[string]historyRows) []string {
 	seen := map[string]struct{}{}
+
 	for _, statement := range rows {
 		for _, row := range statement {
 			for year := range row {
@@ -170,20 +183,22 @@ func historyYears(rows map[string]historyRows) []string {
 			}
 		}
 	}
+
 	years := make([]string, 0, len(seen))
 	for year := range seen {
 		years = append(years, year)
 	}
+
 	sort.Sort(sort.Reverse(sort.StringSlice(years)))
 
 	return years
 }
 
-//nolint:wsl_v5 // Candidate ordering is one deterministic decision tree.
 func newerHistoryCandidate(candidate, current *historyCandidate) bool {
 	if candidate.FilingDate != current.FilingDate {
 		return candidate.FilingDate > current.FilingDate
 	}
+
 	if candidate.Accession != current.Accession {
 		return candidate.Accession > current.Accession
 	}

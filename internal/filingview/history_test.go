@@ -6,7 +6,6 @@ import (
 	"wingman.com/fetch-ecb/internal/edgar"
 )
 
-//nolint:wsl_v5 // Test setup stays close to the history behavior it covers.
 func TestBuildCompanyHistorySelectsNewestAnnualFact(t *testing.T) {
 	views := []View{
 		historyTestView("789019", "0000000001", "2025-08-01", "2024", "100"),
@@ -18,9 +17,11 @@ func TestBuildCompanyHistorySelectsNewestAnnualFact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := history.Years, []string{"2024", "2023"}; !equalStrings(got, want) {
 		t.Fatalf("years = %v, want %v", got, want)
 	}
+
 	if len(history.Statements) != 1 || len(history.Statements[0].Rows) != 1 {
 		t.Fatalf("unexpected statements: %+v", history.Statements)
 	}
@@ -29,6 +30,7 @@ func TestBuildCompanyHistorySelectsNewestAnnualFact(t *testing.T) {
 	if row.Label != "Revenue" || row.Values["2024"].Value != "110" {
 		t.Fatalf("unexpected 2024 history row: %+v", row)
 	}
+
 	if row.Sources["2024"] != "0000000002" {
 		t.Fatalf("unexpected source: %+v", row.Sources)
 	}
@@ -58,11 +60,11 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 	}
 }
 
-//nolint:wsl_v5 // The test helper is intentionally explicit.
 func equalStrings(left, right []string) bool {
 	if len(left) != len(right) {
 		return false
 	}
+
 	for index := range left {
 		if left[index] != right[index] {
 			return false

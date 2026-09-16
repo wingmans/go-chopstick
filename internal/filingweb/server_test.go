@@ -158,7 +158,6 @@ func summaryRowByConcept(rows []filingview.FactSeries, concept string) *filingvi
 	return nil
 }
 
-//nolint:wsl_v5 // Test setup stays close to the behavior it exercises.
 func TestServerNormalizesCIKPadding(t *testing.T) {
 	parsedDir := t.TempDir()
 
@@ -185,7 +184,9 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 	}
 
 	setDir := t.TempDir()
+
 	var setData bytes.Buffer
+
 	set := constituents.Set{
 		Name: "golden", AsOf: "2026-09-14", Source: "test",
 		Members: []constituents.Member{{
@@ -195,6 +196,7 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 	if err := set.WriteJSON(&setData); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := os.WriteFile(filepath.Join(setDir, "golden.json"),
 		setData.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
@@ -208,6 +210,7 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 	record := httptest.NewRecorder()
 	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
 		http.MethodGet, "/api/filings", nil))
+
 	if record.Code != http.StatusOK ||
 		strings.Contains(record.Body.String(), "0001193125-26-027207") {
 		t.Fatalf("unfiltered request returned filings: status=%d body=%s",
@@ -227,6 +230,7 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 	record = httptest.NewRecorder()
 	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
 		http.MethodGet, "/api/filings?q=MSFT", nil))
+
 	if record.Code != http.StatusOK ||
 		!strings.Contains(record.Body.String(), "\"ticker\":\"MSFT\"") {
 		t.Fatalf("ticker lookup failed: status=%d body=%s", record.Code,

@@ -1,4 +1,3 @@
-//nolint:wsl_v5 // Statement projection groups related transformation stages.
 package filingview
 
 import (
@@ -34,10 +33,12 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 			if !ok {
 				continue
 			}
+
 			context, ok := contexts[fact.ContextRef]
 			if !ok {
 				continue
 			}
+
 			group, periodKey, periodLabel := classifyPeriod(context, filing.Metadata.ReportDate)
 			if !statementPeriod(definition.Statement, group) {
 				continue
@@ -47,7 +48,9 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 			if accumulator.Rows[group] == nil {
 				accumulator.Rows[group] = map[string]*FactSeries{}
 			}
+
 			key := definition.Key + "\x00" + fact.UnitRef
+
 			row := accumulator.Rows[group][key]
 			if row == nil {
 				row = &FactSeries{
@@ -57,6 +60,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 				}
 				accumulator.Rows[group][key] = row
 			}
+
 			row.Values[periodKey] = FactValue{
 				Value: fact.Value, Nil: fact.Nil,
 				ContextRef: fact.ContextRef, Decimals: fact.Decimals,
@@ -86,13 +90,16 @@ func statementPeriod(statement, group string) bool {
 
 func statementGroups(accumulator *statementAccumulator) []SummaryGroup {
 	order := []string{"Fiscal year", "Quarterly", "Year to date", "Instant"}
+
 	groups := make([]SummaryGroup, 0, len(accumulator.Rows))
 	for _, title := range order {
 		rowsByKey, ok := accumulator.Rows[title]
 		if !ok {
 			continue
 		}
+
 		periods := map[string]struct{}{}
+
 		rows := make([]FactSeries, 0, len(rowsByKey))
 		for _, row := range rowsByKey {
 			rows = append(rows, *row)
@@ -100,10 +107,12 @@ func statementGroups(accumulator *statementAccumulator) []SummaryGroup {
 				periods[period] = struct{}{}
 			}
 		}
+
 		periodKeys := make([]string, 0, len(periods))
 		for period := range periods {
 			periodKeys = append(periodKeys, period)
 		}
+
 		sort.Sort(sort.Reverse(sort.StringSlice(periodKeys)))
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Label < rows[j].Label })
 		groups = append(groups, SummaryGroup{Title: title, Periods: periodKeys, Rows: rows})
@@ -119,10 +128,12 @@ func buildRatios(accumulators map[string]*statementAccumulator, taxonomy Taxonom
 		if definition.Key == "current_ratio" || definition.Key == "debt_to_equity" {
 			statement = "balance"
 		}
+
 		values := ratioValues(accumulators[statement], definition)
 		if len(values) == 0 {
 			continue
 		}
+
 		result = append(result, RatioSeries{
 			Key: definition.Key, Label: definition.Label,
 			Derived: true, Formula: definition.Formula, Values: values,
@@ -134,21 +145,26 @@ func buildRatios(accumulators map[string]*statementAccumulator, taxonomy Taxonom
 
 func ratioValues(accumulator *statementAccumulator, definition RatioDefinition) map[string]string {
 	result := map[string]string{}
+
 	for group, rows := range accumulator.Rows {
 		for key, numerator := range rows {
 			if !strings.HasPrefix(key, definition.Numerator+"\x00") {
 				continue
 			}
+
 			unit := strings.TrimPrefix(key, definition.Numerator+"\x00")
+
 			denominator := rows[definition.Denominator+"\x00"+unit]
 			if denominator == nil {
 				continue
 			}
+
 			for period, numeratorValue := range numerator.Values {
 				denominatorValue, ok := denominator.Values[period]
 				if !ok || numeratorValue.Nil || denominatorValue.Nil {
 					continue
 				}
+
 				ratio, ok := ratioString(numeratorValue.Value,
 					denominatorValue.Value, definition.Format)
 				if ok {
@@ -164,14 +180,17 @@ func ratioValues(accumulator *statementAccumulator, definition RatioDefinition) 
 func ratioString(numerator, denominator, format string) (string, bool) {
 	numerator = strings.ReplaceAll(strings.TrimSpace(numerator), ",", "")
 	denominator = strings.ReplaceAll(strings.TrimSpace(denominator), ",", "")
+
 	n, ok := new(big.Rat).SetString(numerator)
 	if !ok {
 		return "", false
 	}
+
 	d, ok := new(big.Rat).SetString(denominator)
 	if !ok || d.Sign() == 0 {
 		return "", false
 	}
+
 	ratio := new(big.Rat).Quo(n, d)
 	if format == "percent" {
 		ratio.Mul(ratio, big.NewRat(100, 1))

@@ -18,13 +18,15 @@ linters:
   # explicitly disabled linters
   disable:
     # - containedctx
+    # Complexity and function-size checks are deferred while boundaries settle.
     - cyclop
     - depguard
     - err113   # Enable incrementally after caller-visible sentinels are defined.
     - exhaustruct #deprecated, replaced by exhaustruct_v2
     - forbidigo
-    - funlen  # Revisit after workflow boundaries stabilize.
-    - gocognit  # Revisit after workflow boundaries stabilize.
+    - funlen
+    - gocognit
+    - nestif
     - goconst  # Revisit after workflow boundaries stabilize.
     - godox
     - godoclint

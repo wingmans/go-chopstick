@@ -23,8 +23,6 @@ type CoverageReport struct {
 
 // Coverage inspects source-level facts before compact projection. It reports
 // findings without changing the parsed filing or taxonomy.
-//
-//nolint:wsl_v5 // Coverage keeps source scanning and report aggregation together.
 func Coverage(filing *edgar.ParsedFiling, taxonomy Taxonomy) CoverageReport {
 	report := CoverageReport{
 		TaxonomyVersion: taxonomy.TaxonomyVersion,
@@ -44,6 +42,7 @@ func Coverage(filing *edgar.ParsedFiling, taxonomy Taxonomy) CoverageReport {
 
 		for _, fact := range instance.Facts {
 			report.Facts++
+
 			_, mapped := taxonomy.metricForConcept(
 				fact.Concept.Namespace, fact.Concept.Local)
 			if mapped {
@@ -53,6 +52,7 @@ func Coverage(filing *edgar.ParsedFiling, taxonomy Taxonomy) CoverageReport {
 				}
 			} else {
 				addLintTerm(unmapped, fact.Concept.Namespace, fact.Concept.Local)
+
 				if companyExtension(fact.Concept.Namespace) {
 					addLintTerm(extensions, fact.Concept.Namespace, fact.Concept.Local)
 				}
@@ -65,6 +65,7 @@ func Coverage(filing *edgar.ParsedFiling, taxonomy Taxonomy) CoverageReport {
 				if len(context.Dimensions) > 0 {
 					report.Dimensional++
 				}
+
 				if !validContextPeriod(context) {
 					report.InvalidPeriods++
 				}
@@ -86,23 +87,24 @@ func Coverage(filing *edgar.ParsedFiling, taxonomy Taxonomy) CoverageReport {
 	return report
 }
 
-//nolint:wsl_v5 // Term aggregation is intentionally kept together.
 func addLintTerm(terms map[string]*LintTerm, namespace, concept string) {
 	key := namespace + "\x00" + concept
+
 	term := terms[key]
 	if term == nil {
 		term = &LintTerm{Namespace: namespace, Concept: concept, Count: 0}
 		terms[key] = term
 	}
+
 	term.Count++
 }
 
-//nolint:wsl_v5 // Sorting is the final stage of report construction.
 func sortedLintTerms(terms map[string]*LintTerm) []LintTerm {
 	result := make([]LintTerm, 0, len(terms))
 	for _, term := range terms {
 		result = append(result, *term)
 	}
+
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Concept != result[j].Concept {
 			return result[i].Concept < result[j].Concept
@@ -114,16 +116,17 @@ func sortedLintTerms(terms map[string]*LintTerm) []LintTerm {
 	return result
 }
 
-//nolint:wsl_v5 // Context validation is one small decision tree.
 func validContextPeriod(context edgar.FactContext) bool {
 	if context.Instant != "" {
 		_, err := parseDate(context.Instant)
 
 		return err == nil
 	}
+
 	if context.StartDate == "" || context.EndDate == "" {
 		return false
 	}
+
 	start, startErr := parseDate(context.StartDate)
 	end, endErr := parseDate(context.EndDate)
 

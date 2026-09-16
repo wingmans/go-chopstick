@@ -1,4 +1,3 @@
-//nolint:wsl_v5 // The report builder keeps the scan and aggregation together.
 package filingview
 
 import (
@@ -38,23 +37,29 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 				if _, seen := seenRows[rowKey]; seen {
 					continue
 				}
+
 				seenRows[rowKey] = struct{}{}
 
 				rows++
+
 				if len(row.Values) == 0 {
 					qualityIssues["row has no values: "+row.Concept] = struct{}{}
 				}
+
 				for period := range row.Values {
 					if !validPeriodKey(period) {
 						qualityIssues["invalid period "+period+": "+row.Concept] = struct{}{}
 					}
 				}
+
 				if row.Key != "" {
 					if previousUnit, ok := unitsByMetric[row.Key]; ok && previousUnit != row.Unit {
 						qualityIssues["metric has multiple units: "+row.Key] = struct{}{}
 					}
+
 					unitsByMetric[row.Key] = row.Unit
 				}
+
 				_, known := taxonomy.metricForConcept(row.Namespace, row.Concept)
 				if row.Key != "" || known {
 					mapped++
@@ -63,6 +68,7 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 				}
 
 				key := row.Namespace + "\x00" + row.Concept
+
 				term := counts[key]
 				if term == nil {
 					term = &LintTerm{
@@ -70,6 +76,7 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 					}
 					counts[key] = term
 				}
+
 				term.Count++
 			}
 		}
@@ -79,10 +86,12 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 	visit(view.Statements.Income.Groups)
 	visit(view.Statements.Balance.Groups)
 	visit(view.Statements.CashFlow.Groups)
+
 	result := make([]LintTerm, 0, len(counts))
 	for _, term := range counts {
 		result = append(result, *term)
 	}
+
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Concept != result[j].Concept {
 			return result[i].Concept < result[j].Concept
@@ -90,10 +99,12 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 
 		return result[i].Namespace < result[j].Namespace
 	})
+
 	quality := make([]string, 0, len(qualityIssues))
 	for issue := range qualityIssues {
 		quality = append(quality, issue)
 	}
+
 	sort.Strings(quality)
 
 	return LintReport{
@@ -108,6 +119,7 @@ func validPeriodKey(value string) bool {
 		strings.HasPrefix(value, "YTD") {
 		return true
 	}
+
 	_, err := parseDate(value)
 
 	return err == nil
@@ -117,6 +129,7 @@ func (r LintReport) String() string {
 	var result strings.Builder
 	fmt.Fprintf(&result, "taxonomy=%s rows=%d mapped=%d unmapped=%d quality_issues=%d",
 		r.TaxonomyVersion, r.Rows, r.Mapped, len(r.Unmapped), len(r.QualityIssues))
+
 	for _, term := range r.Unmapped {
 		fmt.Fprintf(&result, "\n  %s %s count=%d", term.Namespace, term.Concept, term.Count)
 	}

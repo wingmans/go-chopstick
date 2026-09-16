@@ -1,6 +1,4 @@
 // Package filingview builds the compact read model used by the local dashboard.
-//
-//nolint:wsl_v5 // The read-model builder groups transformation stages together.
 package filingview
 
 import (
@@ -102,6 +100,7 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 
 	facts := 0
 	contexts := 0
+
 	for _, instance := range filing.Instances {
 		facts += len(instance.Facts)
 		contexts += len(instance.Contexts)
@@ -153,6 +152,7 @@ func Save(directory string, filing *edgar.ParsedFiling) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return "", fmt.Errorf("create filing view directory: %w", err)
 	}
@@ -161,20 +161,25 @@ func Save(directory string, filing *edgar.ParsedFiling) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create filing view temporary file: %w", err)
 	}
+
 	temporaryName := temporary.Name()
 	defer func() { _ = temporary.Close(); _ = os.Remove(temporaryName) }()
 
 	encoder := json.NewEncoder(temporary)
 	encoder.SetIndent("", "  ")
+
 	if err := encoder.Encode(view); err != nil {
 		return "", fmt.Errorf("encode filing view: %w", err)
 	}
+
 	if err := temporary.Sync(); err != nil {
 		return "", fmt.Errorf("sync filing view: %w", err)
 	}
+
 	if err := temporary.Close(); err != nil {
 		return "", fmt.Errorf("close filing view: %w", err)
 	}
+
 	if err := os.Rename(temporaryName, path); err != nil {
 		return "", fmt.Errorf("store filing view: %w", err)
 	}
@@ -193,6 +198,7 @@ func Load(path string) (View, error) {
 	if err := json.NewDecoder(file).Decode(&view); err != nil {
 		return View{}, fmt.Errorf("decode filing view: %w", err)
 	}
+
 	if view.SchemaVersion != SchemaVersion {
 		return View{}, fmt.Errorf("unsupported filing view schema %d", view.SchemaVersion)
 	}
@@ -218,20 +224,24 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 			if !ok {
 				continue
 			}
+
 			context, ok := contexts[fact.ContextRef]
 			if !ok {
 				continue
 			}
+
 			group, periodKey, periodLabel := classifyPeriod(context, filing.Metadata.ReportDate)
 			if group == "" {
 				continue
 			}
 
 			key := fact.Concept.Namespace + "\x00" + fact.Concept.Local + "\x00" + fact.UnitRef
+
 			if periodsByGroup[group] == nil {
 				periodsByGroup[group] = map[string]string{}
 				seriesByGroup[group] = map[string]*FactSeries{}
 			}
+
 			row := seriesByGroup[group][key]
 			if row == nil {
 				row = &FactSeries{
@@ -241,6 +251,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 				}
 				seriesByGroup[group][key] = row
 			}
+
 			periodsByGroup[group][periodKey] = periodLabel
 			row.Values[periodKey] = FactValue{
 				Value: fact.Value, Nil: fact.Nil,
@@ -255,15 +266,19 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 		if !ok {
 			continue
 		}
+
 		periodKeys := make([]string, 0, len(periods))
 		for key := range periods {
 			periodKeys = append(periodKeys, key)
 		}
+
 		sort.Sort(sort.Reverse(sort.StringSlice(periodKeys)))
+
 		rows := make([]FactSeries, 0, len(seriesByGroup[title]))
 		for _, row := range seriesByGroup[title] {
 			rows = append(rows, *row)
 		}
+
 		sort.Slice(rows, func(i, j int) bool {
 			if rows[i].Label != rows[j].Label {
 				return rows[i].Label < rows[j].Label
@@ -281,28 +296,35 @@ func classifyPeriod(context edgar.FactContext, reportDate string) (string, strin
 	if context.Instant != "" {
 		return "Instant", displayDate(context.Instant), displayDate(context.Instant)
 	}
+
 	start, startErr := parseDate(context.StartDate)
+
 	end, endErr := parseDate(context.EndDate)
 	if startErr != nil || endErr != nil || start.After(end) {
 		return "", "", ""
 	}
+
 	fiscalEnd, err := parseDate(reportDate)
 	if err != nil {
 		fiscalEnd = end
 	}
+
 	months := (end.Year()-start.Year())*12 + int(end.Month()) - int(start.Month()) + 1
+
 	fiscalYear := end.Year()
 	if months >= 10 {
 		label := fmt.Sprintf("FY%d", fiscalYear)
 
 		return "Fiscal year", label, label
 	}
+
 	if months == 3 {
 		fiscalStartMonth := fiscalEnd.Month()%12 + 1
 		label := fmt.Sprintf("Q%d FY%d", (int(start.Month())-int(fiscalStartMonth)+12)%12/3+1, fiscalYear)
 
 		return "Quarterly", label, label
 	}
+
 	if months > 3 {
 		label := fmt.Sprintf("YTD FY%d", fiscalYear)
 
