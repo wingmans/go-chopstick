@@ -35,10 +35,26 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 					},
 					Value: "999", ContextRef: "fy", UnitRef: "usd", Decimals: "-6", ID: "f2",
 				},
+				{
+					Concept: edgar.QName{
+						Namespace: testUSGAAPNamespace,
+						Local:     "RevenueFromContractWithCustomerExcludingAssessedTax",
+					},
+					Value: "25", ContextRef: "segment", UnitRef: "usd", Decimals: "-6", ID: "f3",
+				},
 			},
-			Contexts: []edgar.FactContext{{
-				ID: "fy", StartDate: "2025-07-01", EndDate: "2026-06-30",
-			}},
+			Contexts: []edgar.FactContext{
+				{ID: "fy", StartDate: "2025-07-01", EndDate: "2026-06-30"},
+				{
+					ID: "segment", StartDate: "2025-07-01", EndDate: "2026-06-30",
+					Dimensions: []edgar.FactDimension{{
+						Axis: edgar.QName{Namespace: "urn:test", Local: "SegmentAxis"},
+						Member: &edgar.QName{
+							Namespace: "urn:test", Local: "CloudMember",
+						},
+					}},
+				},
+			},
 			Units: []edgar.FactUnit{{
 				ID:       "usd",
 				Measures: []edgar.QName{{Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD"}},
@@ -50,6 +66,10 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 	view, err := Build(filing)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if view.Counts.DimensionalFactsExcluded != 1 {
+		t.Fatalf("dimensional fact count = %d, want 1", view.Counts.DimensionalFactsExcluded)
 	}
 
 	summaryRow := onlyRow(t, view.Summary, "Fiscal year")

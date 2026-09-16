@@ -27,7 +27,7 @@ SEC submission or the verbose parsed result.
 | `summary` | Selected financial facts grouped by period type. |
 | `statements` | Compact income, balance-sheet, and cash-flow sections. |
 | `ratios` | Derived ratios with their formulas and source periods. |
-| `counts` | Document, instance, fact, and context counts. |
+| `counts` | Document, instance, fact, context, and projection-exclusion counts. |
 | `diagnostics` | Parser diagnostics retained for the UI and debugging. |
 
 ## Summary
@@ -74,6 +74,10 @@ Each statement contains the same period groups used by the summary, such as
 source concept and normalized unit. Each value also retains its context
 reference, source unit reference, and decimals so displayed values can be
 traced back to the verbose parsed filing.
+
+Dimensional facts are excluded from summary and statement projection. They
+remain available in `filing.json`, and the compact view records their count in
+`counts.dimensional_facts_excluded`.
 
 Ratios are explicitly derived values. They are only emitted when both source
 values exist for the same period and can be parsed exactly. Examples include

@@ -37,3 +37,21 @@ Sign direction belongs in derived formulas and validation rules:
 
 This keeps source values auditable while still allowing product metrics to use
 clear, reviewed sign conventions.
+
+## Dimensional Facts
+
+The compact summary and statement views intentionally use only default-context
+facts. Facts with explicit or typed dimensions are preserved in `filing.json`,
+but they are excluded from `filing-view.json` statement projection and counted
+as `counts.dimensional_facts_excluded`.
+
+This prevents segment, geography, product, customer, share-class, or other
+breakdown facts from being mistaken for consolidated company totals. For
+example, a cloud revenue fact scoped to a product axis must not replace the
+company-level revenue fact in the income statement.
+
+Future work can use dimensional facts once the product has a separate model and
+UI for breakdowns. That model should keep the axis, member, typed dimension
+content, period, normalized unit, and source references attached to every value.
+It should present those facts as segment or analysis views, not as substitutes
+for default-context statement rows.

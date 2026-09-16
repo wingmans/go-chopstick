@@ -40,11 +40,12 @@ type Metadata struct {
 }
 
 type Counts struct {
-	Documents int    `json:"documents"`
-	Instances int    `json:"instances"`
-	Facts     int    `json:"facts"`
-	Contexts  int    `json:"contexts"`
-	Status    string `json:"status"`
+	Documents                int    `json:"documents"`
+	Instances                int    `json:"instances"`
+	Facts                    int    `json:"facts"`
+	Contexts                 int    `json:"contexts"`
+	DimensionalFactsExcluded int    `json:"dimensional_facts_excluded"`
+	Status                   string `json:"status"`
 }
 
 type SummaryGroup struct {
@@ -105,10 +106,12 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 
 	facts := 0
 	contexts := 0
+	dimensionalFactsExcluded := 0
 
 	for _, instance := range filing.Instances {
 		facts += len(instance.Facts)
 		contexts += len(instance.Contexts)
+		dimensionalFactsExcluded += countDimensionalFacts(instance)
 	}
 
 	statements, ratios := buildStatements(filing)
@@ -125,13 +128,35 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 			FormType: filing.Metadata.FormType, FilingDate: filing.Metadata.FilingDate,
 			ReportDate: filing.Metadata.ReportDate, Company: company,
 		},
-		Documents:   filing.Documents,
-		Summary:     financialSummary(filing),
-		Statements:  statements,
-		Ratios:      ratios,
-		Counts:      Counts{Documents: len(filing.Documents), Instances: len(filing.Instances), Facts: facts, Contexts: contexts, Status: filing.Status},
+		Documents:  filing.Documents,
+		Summary:    financialSummary(filing),
+		Statements: statements,
+		Ratios:     ratios,
+		Counts: Counts{
+			Documents: len(filing.Documents), Instances: len(filing.Instances),
+			Facts: facts, Contexts: contexts,
+			DimensionalFactsExcluded: dimensionalFactsExcluded,
+			Status:                   filing.Status,
+		},
 		Diagnostics: filing.Diagnostics,
 	}, nil
+}
+
+func countDimensionalFacts(instance edgar.XBRLInstance) int {
+	contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
+	for _, context := range instance.Contexts {
+		contexts[context.ID] = context
+	}
+
+	count := 0
+	for _, fact := range instance.Facts {
+		context, ok := contexts[fact.ContextRef]
+		if ok && len(context.Dimensions) > 0 {
+			count++
+		}
+	}
+
+	return count
 }
 
 func Path(directory string, filing *edgar.ParsedFiling) (string, error) {

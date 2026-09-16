@@ -6,7 +6,7 @@ This is the current roadmap after the first end-to-end and taxonomy passes.
 
 - [x] Implement deterministic duplicate-fact selection.
 - [x] Normalize units and define sign handling.
-- Preserve or explicitly exclude dimensional facts.
+- [x] Preserve or explicitly exclude dimensional facts.
 - Add accounting identity checks.
 - Expand and review the taxonomy across the 19-company validation set.
 - Add stronger golden expected-value fixtures.
