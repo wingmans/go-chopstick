@@ -95,6 +95,12 @@ Missing metric output is intentionally split two ways:
   `liabilities_and_equity` or `current_liabilities` as review evidence. This
   does not make the metric present; it separates hard gaps from gaps that may
   be covered by a related presentation.
+- Missing `eps_diluted` may keep supplemental `eps_basic` as related evidence.
+  Basic EPS is not substituted for diluted EPS; it only shows that the filing
+  has per-share earnings data while the diluted concept remains absent.
+  Many EPS facts are reported by share class using dimensional contexts. Those
+  facts remain outside the compact view until dimensional evidence is reviewed
+  and explicitly promoted.
 
 The `industry_sensitive` tier keeps banks, insurers, REITs, and other
 specialized filers from looking worse than they are when a generic industrial

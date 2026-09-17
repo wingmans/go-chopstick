@@ -340,6 +340,8 @@ func presentRelatedMetrics(metric string, present map[string]string) []string {
 
 func relatedCoverageMetrics(metric string) []string {
 	switch metric {
+	case "eps_diluted":
+		return []string{"eps_basic"}
 	case "liabilities":
 		return []string{"liabilities_and_equity", "current_liabilities"}
 	case "equity":

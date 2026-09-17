@@ -118,6 +118,19 @@
       ]
     },
     {
+      "key": "eps_basic",
+      "label": "Basic EPS",
+      "statement": "income",
+      "coverage_tier": "supplemental",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "EarningsPerShareBasic",
+          "priority": 1
+        }
+      ]
+    },
+    {
       "key": "assets",
       "label": "Assets",
       "statement": "balance",

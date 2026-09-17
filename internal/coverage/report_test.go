@@ -79,6 +79,12 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 				Values: map[string]filingview.FactValue{"FY2024": {
 					Value: "10", Nil: false, ContextRef: "", Decimals: "",
 				}},
+			}, {
+				Key: "eps_basic", Label: "Basic EPS", Concept: "EarningsPerShareBasic",
+				Namespace: "", Unit: "USD/shares",
+				Values: map[string]filingview.FactValue{"FY2024": {
+					Value: "1.23", Nil: false, ContextRef: "", Decimals: "",
+				}},
 			}},
 		}},
 		Statements: filingview.Statements{
@@ -104,6 +110,11 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 		Metrics: []filingview.MetricDefinition{
 			{Key: "revenue", Label: "Revenue", Statement: "income", Concepts: nil},
 			{Key: "net_income", Label: "Net income", Statement: "income", Concepts: nil},
+			{Key: "eps_diluted", Label: "Diluted EPS", Statement: "income", Concepts: nil},
+			{
+				Key: "eps_basic", Label: "Basic EPS", Statement: "income",
+				CoverageTier: "supplemental", Concepts: nil,
+			},
 			{
 				Key: "gross_profit", Label: "Gross profit", Statement: "income",
 				CoverageTier: "industry_sensitive", Concepts: nil,
@@ -118,19 +129,21 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 
 	metrics, missing, missingByTier, relatedEvidence := metricPresence(view, taxonomy)
 	if metrics["revenue"] != "present" || metrics["net_income"] != "missing" ||
+		metrics["eps_diluted"] != "missing" ||
+		metrics["eps_basic"] != "present" ||
 		metrics["gross_profit"] != "missing" ||
 		metrics["liabilities_and_equity"] != "present" ||
 		metrics["liabilities"] != "missing" {
 		t.Fatalf("unexpected metric states: %+v", metrics)
 	}
 
-	if len(missing) != 3 || missing[0] != "gross_profit" ||
-		missing[1] != "liabilities" || missing[2] != "net_income" {
+	if len(missing) != 4 || missing[0] != "eps_diluted" || missing[1] != "gross_profit" ||
+		missing[2] != "liabilities" || missing[3] != "net_income" {
 		t.Fatalf("unexpected missing metrics: %v", missing)
 	}
 
-	if got := missingByTier["core"]; len(got) != 2 ||
-		got[0] != "liabilities" || got[1] != "net_income" {
+	if got := missingByTier["core"]; len(got) != 3 ||
+		got[0] != "eps_diluted" || got[1] != "liabilities" || got[2] != "net_income" {
 		t.Fatalf("unexpected core missing metrics: %+v", missingByTier)
 	}
 
@@ -140,5 +153,9 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 
 	if got := relatedEvidence["liabilities"]; len(got) != 1 || got[0] != "liabilities_and_equity" {
 		t.Fatalf("unexpected related evidence: %+v", relatedEvidence)
+	}
+
+	if got := relatedEvidence["eps_diluted"]; len(got) != 1 || got[0] != "eps_basic" {
+		t.Fatalf("unexpected EPS related evidence: %+v", relatedEvidence)
 	}
 }
