@@ -40,7 +40,7 @@ taxonomy-validation: build
 run:
 	go run ./cmd/ecb
 
-serve:
+serve: build
 	LOGLEVEL=debug ./bin/edgar serve --set us-gaap-coverage
 
 test:

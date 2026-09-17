@@ -63,7 +63,7 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 			view.Statements.Income, view.Statements.Balance, view.Statements.CashFlow,
 		} {
 			for _, group := range statement.Groups {
-				if group.Title != "Fiscal year" {
+				if !historyGroupAllowed(group.Title) {
 					continue
 				}
 
@@ -108,10 +108,7 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 	}
 
 	for _, title := range []string{"Income statement", "Balance sheet", "Cash flow"} {
-		statement, ok := rowsByStatement[title]
-		if !ok {
-			continue
-		}
+		statement := rowsByStatement[title]
 
 		rows := make([]HistoryRow, 0, len(statement))
 		for key, values := range statement {
@@ -165,8 +162,16 @@ func historyMetricLabel(key string) string {
 	return key
 }
 
+func historyGroupAllowed(title string) bool {
+	return title == "Fiscal year" || title == "Instant"
+}
+
 func historyYear(period string) string {
 	if !strings.HasPrefix(period, "FY") || len(period) != 6 {
+		if len(period) >= 4 && period[0] >= '0' && period[0] <= '9' {
+			return period[:4]
+		}
+
 		return ""
 	}
 

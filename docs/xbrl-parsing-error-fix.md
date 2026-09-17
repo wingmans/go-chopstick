@@ -146,24 +146,26 @@ network failures, or current pacing errors.
 
 ### Current behavior
 
-The parser stores the filing with status `partial` and records the XBRL error
-in its diagnostics. The workflow treats `xbrl_error` as a processing failure.
-An existing partial result may still be reused, so rerunning the workflow
-repeats the diagnostic until parser behavior changes.
+For reviewed legacy patterns, the parser first runs the strict XML reader and
+then retries an in-memory normalized copy only if strict parsing fails. The raw
+SEC filing remains unchanged and its checksum remains the source lineage.
+Successful retries record a legacy-normalization diagnostic on the parsed
+filing. Other malformed XML still stores the filing with status `partial` and
+records the original `xbrl_error`.
 
-The E2E script stops when the combined `filings` command returns these errors,
-so its later explicit `parse --reprocess` step is not reached.
+The workflow still treats unresolved `xbrl_error` diagnostics as processing
+failures. A clean full SEC rerun is useful after the compatibility patch is
+committed; doing it before then makes parser improvements hard to distinguish
+from cache and download churn.
 
 ### Follow-up
 
-Do not mutate the pristine raw filing. The remaining-work list tracks a future
-compatibility path that creates a parser-only normalized copy of the affected
-XML, with the original bytes, normalization rules, and diagnostics retained
-for lineage. That work should be covered by fixtures before being enabled
-broadly.
+Do not mutate the pristine raw filing. Compatibility code must keep using a
+parser-only normalized copy of the affected XML, with the original bytes,
+normalization rules, and diagnostics retained for lineage.
 
 Tiny malformed fixtures now live in
 `internal/edgar/testdata/malformed-xbrl/`. They preserve the failure patterns
-without copying full SEC filings into the test suite. Current tests assert
-that these inputs fail as malformed XBRL; future normalization work can flip
-or extend those tests when repair behavior is explicit.
+without copying full SEC filings into the test suite. Tests assert both sides:
+the strict XML reader rejects the malformed bytes, while submission parsing can
+normalize reviewed patterns in memory and parse them successfully.

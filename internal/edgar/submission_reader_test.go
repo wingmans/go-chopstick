@@ -51,7 +51,7 @@ func writeSubmission(t *testing.T, source string) string {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "submission.txt")
-	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil { // #nosec G703 -- test helper writes only below t.TempDir().
 		t.Fatal(err)
 	}
 

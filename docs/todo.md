@@ -13,12 +13,17 @@ This is the current roadmap after the first end-to-end and taxonomy passes.
 
 ## Legacy XBRL Compatibility
 
-- Add a safe parser-only normalization copy for legacy malformed XBRL
+- [x] Add a safe parser-only normalization copy for legacy malformed XBRL
   documents.
 - Keep the pristine raw SEC filing unchanged.
 - Retain the original bytes, normalization rules, and diagnostics for
   lineage and reproducibility.
-- Add focused fixtures before enabling normalization broadly.
+- [x] Add focused fixtures before enabling normalization broadly.
+
+Near-future validation: after this compatibility path and its tests are
+committed, do a clean full run from SEC download through parsing. That rerun is
+useful for finding remaining legacy parser gaps, but doing it before the patch
+lands would mix parser changes with data churn.
 
 ## Product Validation
 

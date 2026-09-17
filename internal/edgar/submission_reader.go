@@ -397,9 +397,14 @@ func (f *ParsedFiling) extractInstances(ctx context.Context, source io.ReaderAt)
 			continue
 		}
 
-		reader := io.NewSectionReader(source, document.ContentOffset, document.ContentLength)
+		content, err := io.ReadAll(io.NewSectionReader(source, document.ContentOffset, document.ContentLength))
+		if err != nil {
+			return fmt.Errorf("read XBRL document %s: %w", document.Filename, err)
+		}
 
-		instance, recognized, err := readXBRL(ctx, reader)
+		instance, recognized, diagnostics, err := readXBRLWithLegacyNormalization(ctx, content, document.Filename)
+		f.Diagnostics = append(f.Diagnostics, diagnostics...)
+
 		if err != nil {
 			partial = true
 

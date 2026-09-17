@@ -82,6 +82,7 @@ func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger)
 		logger:    logger,
 		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
 			"formatFact": formatFactValue,
+			"add":        add,
 		}).ParseFS(templateFiles, "*.html")),
 		setName:     setName,
 		setAsOf:     "",
@@ -109,6 +110,10 @@ func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger)
 	}
 
 	return server, nil
+}
+
+func add(left, right int) int {
+	return left + right
 }
 
 func formatFactValue(value filingview.FactValue, unit string) string {

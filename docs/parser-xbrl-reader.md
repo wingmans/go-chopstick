@@ -33,7 +33,9 @@ The submission reader supports older SEC files wrapped in a
 `PRIVACY-ENHANCED MESSAGE` envelope. The wrapper is treated as transport
 metadata; the enclosed `<SEC-DOCUMENT>` remains the parsed envelope and source
 byte offsets are preserved. Legacy XBRL instances declaring `US-ASCII` are
-accepted through an explicit ASCII pass-through charset reader. See
+accepted through an explicit ASCII pass-through charset reader. Reviewed legacy
+malformed-XBRL patterns are retried through a parser-only normalized copy after
+strict XML parsing fails; the raw filing bytes are not rewritten. See
 [xbrl-parsing-error-fix.md](xbrl-parsing-error-fix.md) for the troubleshooting
 history and verification fixtures.
 

@@ -127,7 +127,7 @@ func TestXBRLRejectsMalformedInstances(t *testing.T) {
 	}
 }
 
-func TestXBRLRejectsLegacyMalformedFixtures(t *testing.T) {
+func TestStrictXBRLRejectsLegacyMalformedFixtures(t *testing.T) {
 	for _, path := range []string{
 		"testdata/malformed-xbrl/missing-lt-semicolon.xml",
 		"testdata/malformed-xbrl/missing-gt-semicolon.xml",
@@ -139,6 +139,55 @@ func TestXBRLRejectsLegacyMalformedFixtures(t *testing.T) {
 
 			if _, recognized, err := readXBRL(t.Context(), source); err == nil || !recognized {
 				t.Fatalf("recognized=%v error=%v, want recognized malformed XBRL error", recognized, err)
+			}
+		})
+	}
+}
+
+func TestSubmissionNormalizesReviewedLegacyMalformedFixtures(t *testing.T) {
+	for _, test := range []struct {
+		path  string
+		code  string
+		value string
+	}{
+		{
+			path:  "testdata/malformed-xbrl/missing-lt-semicolon.xml",
+			code:  legacyMissingEntitySemicolonCode,
+			value: "A < B",
+		},
+		{
+			path:  "testdata/malformed-xbrl/missing-gt-semicolon.xml",
+			code:  legacyMissingEntitySemicolonCode,
+			value: "A > B",
+		},
+		{
+			path:  "testdata/malformed-xbrl/truncated-closing-tag.xml",
+			code:  legacyStrayClosingTagCode,
+			value: "legacy text</DescriptionOfDefinedContributionPensionAndO>",
+		},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			source, err := os.ReadFile(test.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			filing, err := ParseSubmission(t.Context(), writeSubmission(t, submissionText(string(source), testInstanceFilename)))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if filing.Status != ParseComplete || len(filing.Instances) != 1 {
+				t.Fatalf("status=%s instances=%d diagnostics=%+v", filing.Status, len(filing.Instances), filing.Diagnostics)
+			}
+
+			if len(filing.Diagnostics) != 1 || filing.Diagnostics[0].Code != test.code {
+				t.Fatalf("unexpected diagnostics: %+v", filing.Diagnostics)
+			}
+
+			facts := filing.Instances[0].FactsByConcept(QName{Namespace: "urn:malformed", Local: "Disclosure"})
+			if len(facts) != 1 || facts[0].Value != test.value {
+				t.Fatalf("unexpected facts: %+v", facts)
 			}
 		})
 	}

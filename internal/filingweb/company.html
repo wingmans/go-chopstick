@@ -42,6 +42,7 @@
     tbody tr:hover td:first-child { background: #fafbfc; }
     .source { display: block; margin-top: 1px; color: #94a3b8; font-size: 9px;
       font-weight: 400; }
+    .empty-row { padding: 18px 8px; color: #94a3b8; text-align: left; }
     @media (max-width: 700px) {
       main { padding: 12px; }
       .line-item-col, th:first-child, td:first-child { width: 160px; }
@@ -66,7 +67,7 @@
           <thead><tr><th>Line item</th>
             {{range $.History.Years}}<th>{{.}}</th>{{end}}
           </tr></thead>
-          <tbody>{{range $row := .Rows}}
+          <tbody>{{if .Rows}}{{range $row := .Rows}}
             <tr data-concept="{{$row.Key}}">
               <td>{{$row.Label}}</td>
               {{range $year := $.History.Years}}
@@ -79,7 +80,7 @@
               </td>
               {{end}}
             </tr>
-          {{end}}</tbody>
+          {{end}}{{else}}<tr><td class="empty-row" colspan="{{add 1 (len $.History.Years)}}">No annual values selected for this statement.</td></tr>{{end}}</tbody>
         </table>
       </div>
     </section>

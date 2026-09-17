@@ -136,6 +136,54 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 			t.Errorf("details page is missing %q", marker)
 		}
 	}
+
+	record = httptest.NewRecorder()
+	request = httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/companies/789019", nil)
+	server.ServeHTTP(record, request)
+
+	if record.Code != http.StatusOK {
+		t.Fatalf("company page status=%d body=%s", record.Code, record.Body.String())
+	}
+
+	body = record.Body.String()
+	for _, marker := range []string{
+		"data-statement=\"Income statement\"",
+		"data-statement=\"Balance sheet\"",
+		"data-statement=\"Cash flow\"",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Errorf("company page is missing %q", marker)
+		}
+	}
+}
+
+func TestIndexPageIncludesSearchBreadcrumb(t *testing.T) {
+	t.Parallel()
+
+	server := NewServer(t.TempDir(), nil)
+	record := httptest.NewRecorder()
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+
+	server.ServeHTTP(record, request)
+
+	if record.Code != http.StatusOK {
+		t.Fatalf("index status=%d body=%s", record.Code, record.Body.String())
+	}
+
+	body := record.Body.String()
+	for _, marker := range []string{
+		"id=\"search-breadcrumb\"",
+		"aria-label=\"Search breadcrumb\"",
+		"All filings",
+		"edgar.search-trail.v1",
+		"const searchTrailLimit = 8",
+		"function rememberSearch(query, form, year)",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Errorf("index page is missing %q", marker)
+		}
+	}
 }
 
 func summaryGroupByTitle(groups []filingview.SummaryGroup, title string) *filingview.SummaryGroup {

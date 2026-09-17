@@ -22,7 +22,7 @@ func TestBuildCompanyHistorySelectsNewestAnnualFact(t *testing.T) {
 		t.Fatalf("years = %v, want %v", got, want)
 	}
 
-	if len(history.Statements) != 1 || len(history.Statements[0].Rows) != 1 {
+	if len(history.Statements) != 3 {
 		t.Fatalf("unexpected statements: %+v", history.Statements)
 	}
 
@@ -33,6 +33,14 @@ func TestBuildCompanyHistorySelectsNewestAnnualFact(t *testing.T) {
 
 	if row.Sources["2024"] != "0000000002" {
 		t.Fatalf("unexpected source: %+v", row.Sources)
+	}
+
+	if history.Statements[1].Title != "Balance sheet" || len(history.Statements[1].Rows) != 1 {
+		t.Fatalf("unexpected balance history: %+v", history.Statements[1])
+	}
+
+	if history.Statements[2].Title != "Cash flow" {
+		t.Fatalf("unexpected cash flow history: %+v", history.Statements[2])
 	}
 }
 
@@ -57,7 +65,19 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 					},
 				}},
 			}}},
-			Balance:  StatementView{Title: "Balance sheet", Groups: []SummaryGroup{}},
+			Balance: StatementView{Title: "Balance sheet", Groups: []SummaryGroup{{
+				Title: "Instant", Periods: []string{year + "-06-30"}, Rows: []FactSeries{{
+					Key: "assets", Label: "Assets", Namespace: "us-gaap",
+					Concept: "Assets", Unit: "usd", Values: map[string]FactValue{
+						year + "-06-30": {
+							Value: value, Nil: false, ContextRef: "c2",
+							Decimals: "-3", UnitRef: "",
+							priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+							id: "", precision: "",
+						},
+					},
+				}},
+			}}},
 			CashFlow: StatementView{Title: "Cash flow", Groups: []SummaryGroup{}},
 		}, Ratios: []RatioSeries{}, Quality: Quality{IdentityChecks: nil},
 		Counts: Counts{

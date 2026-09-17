@@ -21,6 +21,12 @@ parser work learns to normalize an older XBRL flavor, the test can change from
 "rejects malformed input" to "normalizes a parser-only copy" while preserving
 the original malformed bytes here.
 
+The parser now retries these reviewed patterns through a parser-only
+normalization copy after the strict XML reader fails. The fixture bytes remain
+malformed on disk so tests continue to prove that compatibility code does not
+rewrite or bless the original SEC source. New normalization rules still need
+human-reviewed fixtures before they are enabled.
+
 - `missing-lt-semicolon.xml`: entity reference like `&lt` without `;`.
 - `missing-gt-semicolon.xml`: entity reference like `&gt` without `;`.
 - `truncated-closing-tag.xml`: invalid text between a closing tag name and
