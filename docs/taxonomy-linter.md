@@ -57,7 +57,11 @@ instead of repeating every filing row:
 Use the linked JSON files when a summary item needs line-item detail.
 For identity-check failures, JSON keeps both backward-compatible
 `quality_issues` strings and structured `quality_checks` entries with actual,
-expected, tolerance, period, unit, and involved metrics.
+expected, tolerance, period, unit, involved metrics, and the selected source
+evidence for each formula input. Evidence records include metric, role, sign,
+concept, context reference, reported value, decimals, and unit reference so
+reviewers can distinguish taxonomy mistakes from context/period selection or
+issuer-specific presentation.
 
 The expected filing coverage report also contains per-filing metric presence.
 Useful review one-liners are:

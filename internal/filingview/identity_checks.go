@@ -156,9 +156,13 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 
 	expected := new(big.Rat)
 	values := []FactValue{resultValue}
+	evidence := []IdentityEvidence{
+		identityEvidence(definition.Result, "actual", 0, result, resultValue),
+	}
 
 	for _, term := range definition.Terms {
-		value, ok := identityValue(rows[term.Metric+"\x00"+unit], period)
+		row := rows[term.Metric+"\x00"+unit]
+		value, ok := identityValue(row, period)
 		if !ok {
 			check.Message = "missing " + term.Metric
 
@@ -173,6 +177,7 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 		}
 
 		values = append(values, value)
+		evidence = append(evidence, identityEvidence(term.Metric, "term", term.Sign, row, value))
 
 		expected.Add(expected, new(big.Rat).Mul(number, big.NewRat(term.Sign, 1)))
 	}
@@ -184,6 +189,7 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 	check.Expected = expected.FloatString(2)
 	check.Actual = actual.FloatString(2)
 	check.Tolerance = tolerance.FloatString(2)
+	check.Evidence = evidence
 
 	check.Status = identityPass
 	if difference.Cmp(tolerance) > 0 {
@@ -264,6 +270,20 @@ func identityMetrics(definition identityDefinition) []string {
 	}
 
 	return result
+}
+
+func identityEvidence(metric, role string, sign int64, row *FactSeries, value FactValue) IdentityEvidence {
+	evidence := IdentityEvidence{
+		Metric: metric, Role: role, Sign: sign,
+		Value: value.Value, ContextRef: value.ContextRef,
+		Decimals: value.Decimals, UnitRef: value.UnitRef,
+	}
+	if row != nil {
+		evidence.Namespace = row.Namespace
+		evidence.Concept = row.Concept
+	}
+
+	return evidence
 }
 
 func identityValue(row *FactSeries, period string) (FactValue, bool) {

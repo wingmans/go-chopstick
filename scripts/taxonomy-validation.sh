@@ -277,6 +277,33 @@ write_lint_text_summary() {
       "- delta=\(.delta) actual=\(.actual) expected=\(.expected) tolerance=\(.tolerance) \(.name) \(.period) \(.unit); \(.cik) \(.accession) \(.filing_date)"
     '
 
+    printf '\n## Quality Evidence For Largest Deltas\n\n'
+    append_jq_lines '_None._' "$RUN_DIR/lint-report.json" '
+      [.filings[] | . as $f | .lint.quality_checks[]? |
+        {
+          cik: $f.cik,
+          accession: $f.accession,
+          filing_date: $f.filing_date,
+          name,
+          period,
+          unit,
+          delta: (((.actual | tonumber) - (.expected | tonumber)) | fabs),
+          evidence: ((.evidence // []) |
+            map(
+              .metric + "=" + (.value // "") +
+              " concept=" + (.concept // "") +
+              " ctx=" + (.context_ref // "") +
+              " sign=" + ((.sign // 0) | tostring)
+            ) |
+            join("; ")
+          )
+        }
+      ] |
+      sort_by(-.delta, .cik, .accession, .period) |
+      .[:12][] |
+      "- \(.cik) \(.accession) \(.period) \(.name): \(.evidence)"
+    '
+
     printf '\n## Remaining Quality Issues\n\n'
     append_jq_lines '_None._' "$RUN_DIR/lint-report.json" '
       [.filings[] | . as $f | ($f.lint.quality_issues // [])[] | {issue: .}] |

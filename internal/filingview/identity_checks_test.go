@@ -15,6 +15,16 @@ func TestCheckAccountingIdentitiesReportsFailure(t *testing.T) {
 	if failure.Status != identityFail || failure.Expected != "60.00" || failure.Actual != "50.00" {
 		t.Fatalf("unexpected identity failure: %+v", failure)
 	}
+
+	if len(failure.Evidence) != 3 ||
+		failure.Evidence[0].Metric != "gross_profit" ||
+		failure.Evidence[0].Role != "actual" ||
+		failure.Evidence[1].Metric != "revenue" ||
+		failure.Evidence[1].Sign != 1 ||
+		failure.Evidence[2].Metric != "cost_of_revenue" ||
+		failure.Evidence[2].Sign != -1 {
+		t.Fatalf("unexpected identity evidence: %+v", failure.Evidence)
+	}
 }
 
 func TestCheckAccountingIdentitiesAllowsRoundingTolerance(t *testing.T) {
@@ -136,6 +146,10 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 	if len(report.QualityChecks) != 1 || report.QualityChecks[0].Actual != "50.00" ||
 		report.QualityChecks[0].Expected != "60.00" {
 		t.Fatalf("missing structured identity quality check: %+v", report.QualityChecks)
+	}
+
+	if len(report.QualityChecks[0].Evidence) != 3 {
+		t.Fatalf("missing structured identity evidence: %+v", report.QualityChecks[0])
 	}
 }
 

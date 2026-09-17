@@ -54,15 +54,28 @@ type Quality struct {
 }
 
 type IdentityCheck struct {
-	Name      string   `json:"name"`
-	Period    string   `json:"period,omitempty"`
-	Unit      string   `json:"unit,omitempty"`
-	Status    string   `json:"status"`
-	Expected  string   `json:"expected,omitempty"`
-	Actual    string   `json:"actual,omitempty"`
-	Tolerance string   `json:"tolerance,omitempty"`
-	Metrics   []string `json:"metrics,omitempty"`
-	Message   string   `json:"message,omitempty"`
+	Name      string             `json:"name"`
+	Period    string             `json:"period,omitempty"`
+	Unit      string             `json:"unit,omitempty"`
+	Status    string             `json:"status"`
+	Expected  string             `json:"expected,omitempty"`
+	Actual    string             `json:"actual,omitempty"`
+	Tolerance string             `json:"tolerance,omitempty"`
+	Metrics   []string           `json:"metrics,omitempty"`
+	Evidence  []IdentityEvidence `json:"evidence,omitempty"`
+	Message   string             `json:"message,omitempty"`
+}
+
+type IdentityEvidence struct {
+	Metric     string `json:"metric"`
+	Role       string `json:"role"`
+	Sign       int64  `json:"sign,omitempty"`
+	Namespace  string `json:"namespace,omitempty"`
+	Concept    string `json:"concept,omitempty"`
+	Value      string `json:"value,omitempty"`
+	ContextRef string `json:"context_ref,omitempty"`
+	Decimals   string `json:"decimals,omitempty"`
+	UnitRef    string `json:"unit_ref,omitempty"`
 }
 
 type SummaryGroup struct {
