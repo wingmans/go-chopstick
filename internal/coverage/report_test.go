@@ -95,15 +95,33 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 		Metrics: []filingview.MetricDefinition{
 			{Key: "revenue", Label: "Revenue", Statement: "income", Concepts: nil},
 			{Key: "net_income", Label: "Net income", Statement: "income", Concepts: nil},
+			{
+				Key: "gross_profit", Label: "Gross profit", Statement: "income",
+				CoverageTier: "industry_sensitive", Concepts: nil,
+			},
+			{
+				Key: "liabilities_and_equity", Label: "Liabilities and equity",
+				Statement: "balance", CoverageTier: "supplemental", Concepts: nil,
+			},
 		}, Ratios: nil,
 	}
 
-	metrics, missing := metricPresence(view, taxonomy)
-	if metrics["revenue"] != "present" || metrics["net_income"] != "missing" {
+	metrics, missing, missingByTier := metricPresence(view, taxonomy)
+	if metrics["revenue"] != "present" || metrics["net_income"] != "missing" ||
+		metrics["gross_profit"] != "missing" ||
+		metrics["liabilities_and_equity"] != "supplemental_missing" {
 		t.Fatalf("unexpected metric states: %+v", metrics)
 	}
 
-	if len(missing) != 1 || missing[0] != "net_income" {
+	if len(missing) != 2 || missing[0] != "gross_profit" || missing[1] != "net_income" {
 		t.Fatalf("unexpected missing metrics: %v", missing)
+	}
+
+	if got := missingByTier["core"]; len(got) != 1 || got[0] != "net_income" {
+		t.Fatalf("unexpected core missing metrics: %+v", missingByTier)
+	}
+
+	if got := missingByTier["industry_sensitive"]; len(got) != 1 || got[0] != "gross_profit" {
+		t.Fatalf("unexpected industry-sensitive missing metrics: %+v", missingByTier)
 	}
 }

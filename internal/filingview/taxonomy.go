@@ -20,10 +20,11 @@ type Taxonomy struct {
 }
 
 type MetricDefinition struct {
-	Key       string             `json:"key"`
-	Label     string             `json:"label"`
-	Statement string             `json:"statement"`
-	Concepts  []ConceptReference `json:"concepts"`
+	Key          string             `json:"key"`
+	Label        string             `json:"label"`
+	Statement    string             `json:"statement"`
+	CoverageTier string             `json:"coverage_tier,omitempty"`
+	Concepts     []ConceptReference `json:"concepts"`
 }
 
 type ConceptReference struct {

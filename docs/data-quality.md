@@ -4,6 +4,22 @@ This note records the compact filing-view policy for normalized units and sign
 handling. Parsed filings remain source-level records; this policy applies when
 building `filing-view.json`.
 
+## Human Review Principle
+
+Validation runs can nominate parser fixes, taxonomy aliases, data-quality
+rules, malformed fixtures, and expected-value changes. They should not
+automatically turn those nominations into permanent truth.
+
+A human reviewer stays in the loop for every quality-improvement loop:
+
+- approve new or changed fixtures before they become tests;
+- approve taxonomy mappings before they affect canonical metrics or ratios;
+- approve parser normalization rules before they accept older source formats;
+- approve expected-value changes before they redefine golden behavior.
+
+This keeps validation output useful as evidence without letting one noisy run
+rewrite the project's definition of correct behavior.
+
 ## Unit Normalization
 
 XBRL unit IDs such as `U_USD` are local to a filing and are not comparable
@@ -70,12 +86,26 @@ selection, sign policy, or source presentation issues.
 Current checks:
 
 - `gross_profit = revenue - cost_of_revenue`
+- `assets = liabilities_and_equity`
 - `assets = liabilities + equity`
 
 Checks only compare facts for the same period and normalized unit. Values are
 parsed exactly as rational numbers. Tolerance is derived from XBRL `decimals`:
 each reported input contributes its maximum rounding drift, and the combined
 drift is allowed before a warning is emitted.
+
+The balance-sheet checks prefer a direct `liabilities_and_equity` total when
+the filing provides one. In that case the broader
+`assets = liabilities + equity` fallback is skipped for the same period and
+unit. This avoids false warnings where a filing's total equity includes
+noncontrolling interest but the plain `equity` metric represents only
+shareholders' equity.
+
+`StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` is
+therefore not mapped to the plain `equity` metric. Future taxonomy work can
+add a separate noncontrolling-interest-aware equity metric or an ownership
+breakdown view. Until then, the concept should remain visible in source
+coverage output rather than quietly changing debt-to-equity semantics.
 
 Future work can add more identities after their sign conventions are reviewed,
 for example cash reconciliation or free cash flow. Those formulas should stay

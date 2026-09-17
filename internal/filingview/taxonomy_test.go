@@ -21,6 +21,19 @@ func TestLoadTaxonomyDefault(t *testing.T) {
 		"http://example.test/company/2026", "Revenues"); ok {
 		t.Fatal("company extension must not resolve as US-GAAP")
 	}
+
+	if metric, ok := taxonomy.metricForConcept(
+		"http://fasb.org/us-gaap/2024", "LiabilitiesAndStockholdersEquity"); !ok ||
+		metric.Key != "liabilities_and_equity" {
+		t.Fatalf("expected liabilities and equity concept to resolve, got %+v", metric)
+	}
+
+	if _, ok := taxonomy.metricForConcept(
+		"http://fasb.org/us-gaap/2024",
+		"StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+	); ok {
+		t.Fatal("NCI-inclusive equity must not resolve as plain shareholders' equity")
+	}
 }
 
 func TestLintViewReportsOnlyUnmappedTerms(t *testing.T) {

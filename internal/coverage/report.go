@@ -52,26 +52,28 @@ type Selection struct {
 }
 
 type Summary struct {
-	Expected       int `json:"expected"`
-	Downloaded     int `json:"downloaded"`
-	Parsed         int `json:"parsed"`
-	Missing        int `json:"missing"`
-	Unparsed       int `json:"unparsed"`
-	MissingMetrics int `json:"filings_with_missing_metrics"`
+	Expected             int            `json:"expected"`
+	Downloaded           int            `json:"downloaded"`
+	Parsed               int            `json:"parsed"`
+	Missing              int            `json:"missing"`
+	Unparsed             int            `json:"unparsed"`
+	MissingMetrics       int            `json:"filings_with_missing_metrics"`
+	MissingMetricsByTier map[string]int `json:"filings_with_missing_metrics_by_tier,omitempty"`
 }
 
 type Filing struct {
-	CIK           string            `json:"cik"`
-	Company       string            `json:"company"`
-	Accession     string            `json:"accession"`
-	FormType      string            `json:"form_type"`
-	DateFiled     string            `json:"date_filed"`
-	FilingPath    string            `json:"filing_path"`
-	SourcePath    string            `json:"source_path"`
-	ParsedPath    string            `json:"parsed_path"`
-	Status        string            `json:"status"`
-	MissingMetric []string          `json:"missing_metrics,omitempty"`
-	Metrics       map[string]string `json:"metrics,omitempty"`
+	CIK           string              `json:"cik"`
+	Company       string              `json:"company"`
+	Accession     string              `json:"accession"`
+	FormType      string              `json:"form_type"`
+	DateFiled     string              `json:"date_filed"`
+	FilingPath    string              `json:"filing_path"`
+	SourcePath    string              `json:"source_path"`
+	ParsedPath    string              `json:"parsed_path"`
+	Status        string              `json:"status"`
+	MissingMetric []string            `json:"missing_metrics,omitempty"`
+	MissingByTier map[string][]string `json:"missing_metrics_by_tier,omitempty"`
+	Metrics       map[string]string   `json:"metrics,omitempty"`
 }
 
 type AcquisitionRequest struct {
@@ -121,7 +123,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		Selection:     selection,
 		Summary: Summary{
 			Expected: 0, Downloaded: 0, Parsed: 0, Missing: 0,
-			Unparsed: 0, MissingMetrics: 0,
+			Unparsed: 0, MissingMetrics: 0, MissingMetricsByTier: nil,
 		},
 		Filings:     nil,
 		Acquisition: nil,
@@ -180,6 +182,13 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		if len(filing.MissingMetric) > 0 {
 			report.Summary.MissingMetrics++
 		}
+		for tier := range filing.MissingByTier {
+			if report.Summary.MissingMetricsByTier == nil {
+				report.Summary.MissingMetricsByTier = make(map[string]int)
+			}
+
+			report.Summary.MissingMetricsByTier[tier]++
+		}
 	}
 
 	addMissingIndexRequests(&report, config)
@@ -203,7 +212,8 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 		CIK: record.CIK, Company: record.CompanyName, Accession: accession,
 		FormType: record.FormType, DateFiled: record.DateFiled.Format("2006-01-02"),
 		FilingPath: record.FilingPath, SourcePath: sourcePath,
-		ParsedPath: parsedPath, Status: "missing", MissingMetric: nil, Metrics: nil,
+		ParsedPath: parsedPath, Status: "missing", MissingMetric: nil,
+		MissingByTier: nil, Metrics: nil,
 	}
 
 	if sourceErr != nil {
@@ -232,13 +242,13 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 	}
 
 	result.Status = "parsed"
-	result.Metrics, result.MissingMetric = metricPresence(view, config.Taxonomy)
+	result.Metrics, result.MissingMetric, result.MissingByTier = metricPresence(view, config.Taxonomy)
 
 	return result, nil
 }
 
 // metricPresence checks which metrics are present in the filing view and which are missing according to the taxonomy.
-func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[string]string, []string) {
+func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[string]string, []string, map[string][]string) {
 	present := make(map[string]string)
 
 	for _, group := range view.Summary {
@@ -263,6 +273,7 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 
 	metrics := make(map[string]string, len(taxonomy.Metrics))
 	missing := make([]string, 0)
+	missingByTier := make(map[string][]string)
 
 	for _, metric := range taxonomy.Metrics {
 		if _, ok := present[metric.Key]; ok {
@@ -271,13 +282,36 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 			continue
 		}
 
+		tier := metricCoverageTier(metric)
+		if tier == "supplemental" {
+			metrics[metric.Key] = "supplemental_missing"
+
+			continue
+		}
+
 		metrics[metric.Key] = "missing"
 		missing = append(missing, metric.Key)
+		missingByTier[tier] = append(missingByTier[tier], metric.Key)
 	}
 
 	sort.Strings(missing)
+	for tier := range missingByTier {
+		sort.Strings(missingByTier[tier])
+	}
+	if len(missingByTier) == 0 {
+		missingByTier = nil
+	}
 
-	return metrics, missing
+	return metrics, missing, missingByTier
+}
+
+func metricCoverageTier(metric filingview.MetricDefinition) string {
+	tier := strings.TrimSpace(metric.CoverageTier)
+	if tier == "" {
+		return "core"
+	}
+
+	return tier
 }
 
 // addMissingIndexRequests adds acquisition requests for any missing quarterly index files within the specified range of years.

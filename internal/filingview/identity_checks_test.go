@@ -49,6 +49,32 @@ func TestCheckAccountingIdentitiesSupportsAddition(t *testing.T) {
 	}
 }
 
+func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T) {
+	view := View{Statements: Statements{
+		Balance: StatementView{Groups: []SummaryGroup{{
+			Title:   "Instant",
+			Periods: []string{"2026-06-30"},
+			Rows: []FactSeries{
+				identityRow("assets", "USD", "2026-06-30", "150", "0"),
+				identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
+				identityRow("equity", "USD", "2026-06-30", "50", "0"),
+				identityRow("liabilities_and_equity", "USD", "2026-06-30", "150", "0"),
+			},
+		}}},
+	}}
+
+	checks := CheckAccountingIdentities(view)
+	direct := identityCheckByName(checks, "assets = liabilities_and_equity")
+	if direct == nil || direct.Status != identityPass {
+		t.Fatalf("unexpected direct balance identity check: %+v", checks)
+	}
+
+	fallback := identityCheckByName(checks, "assets = liabilities + equity")
+	if fallback != nil {
+		t.Fatalf("fallback balance check should be skipped when direct total exists: %+v", fallback)
+	}
+}
+
 func TestLintViewReportsIdentityFailures(t *testing.T) {
 	report := LintView(identityTestView("100", "40", "50", "0"), Taxonomy{
 		SchemaVersion: 1, TaxonomyVersion: "test",

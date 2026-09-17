@@ -28,6 +28,7 @@
       "key": "cost_of_revenue",
       "label": "Cost of revenue",
       "statement": "income",
+      "coverage_tier": "industry_sensitive",
       "concepts": [
         {
           "namespace_family": "us-gaap",
@@ -45,6 +46,7 @@
       "key": "gross_profit",
       "label": "Gross profit",
       "statement": "income",
+      "coverage_tier": "industry_sensitive",
       "concepts": [
         {
           "namespace_family": "us-gaap",
@@ -57,6 +59,7 @@
       "key": "operating_income",
       "label": "Operating income",
       "statement": "income",
+      "coverage_tier": "industry_sensitive",
       "concepts": [
         {
           "namespace_family": "us-gaap",
@@ -110,6 +113,7 @@
       "key": "current_assets",
       "label": "Current assets",
       "statement": "balance",
+      "coverage_tier": "industry_sensitive",
       "concepts": [
         {
           "namespace_family": "us-gaap",
@@ -146,6 +150,7 @@
       "key": "current_liabilities",
       "label": "Current liabilities",
       "statement": "balance",
+      "coverage_tier": "industry_sensitive",
       "concepts": [
         {
           "namespace_family": "us-gaap",
@@ -163,6 +168,24 @@
           "namespace_family": "us-gaap",
           "name": "StockholdersEquity",
           "priority": 1
+        }
+      ]
+    },
+    {
+      "key": "liabilities_and_equity",
+      "label": "Liabilities and equity",
+      "statement": "balance",
+      "coverage_tier": "supplemental",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "LiabilitiesAndStockholdersEquity",
+          "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "LiabilitiesAndPartnersCapital",
+          "priority": 2
         }
       ]
     },
@@ -206,6 +229,7 @@
       "key": "capital_expenditures",
       "label": "Capital expenditures",
       "statement": "cash_flow",
+      "coverage_tier": "industry_sensitive",
       "concepts": [
         {
           "namespace_family": "us-gaap",

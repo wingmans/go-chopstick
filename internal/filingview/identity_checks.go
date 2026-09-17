@@ -20,6 +20,12 @@ type identityDefinition struct {
 	// code instead of inferred from labels like "expense" or "payment".
 	Result string
 	Terms  []identityTerm
+	// SkipWhenPresent suppresses a broader fallback check when a more direct
+	// identity is available for the same period and unit. For example, some
+	// filers report noncontrolling-interest-inclusive equity totals; comparing
+	// total assets to liabilities plus plain shareholders' equity would then be
+	// a false warning if the direct liabilities-and-equity total is present.
+	SkipWhenPresent []string
 }
 
 type identityTerm struct {
@@ -37,12 +43,20 @@ var accountingIdentities = []identityDefinition{
 		},
 	},
 	{
+		Name: "assets = liabilities_and_equity", Statement: "balance",
+		Result: "assets",
+		Terms: []identityTerm{
+			{Metric: "liabilities_and_equity", Sign: 1},
+		},
+	},
+	{
 		Name: "assets = liabilities + equity", Statement: "balance",
 		Result: "assets",
 		Terms: []identityTerm{
 			{Metric: "liabilities", Sign: 1},
 			{Metric: "equity", Sign: 1},
 		},
+		SkipWhenPresent: []string{"liabilities_and_equity"},
 	},
 }
 
@@ -83,11 +97,25 @@ func checkIdentityGroup(definition identityDefinition, group SummaryGroup) []Ide
 		result := rows[definition.Result+"\x00"+unit]
 
 		for _, period := range group.Periods {
+			if identityShouldSkip(definition, period, unit, rows) {
+				continue
+			}
+
 			checks = append(checks, checkIdentityPeriod(definition, period, unit, result, rows))
 		}
 	}
 
 	return checks
+}
+
+func identityShouldSkip(definition identityDefinition, period, unit string, rows map[string]*FactSeries) bool {
+	for _, metric := range definition.SkipWhenPresent {
+		if _, ok := identityValue(rows[metric+"\x00"+unit], period); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func checkIdentityPeriod(definition identityDefinition, period, unit string, result *FactSeries, rows map[string]*FactSeries) IdentityCheck {

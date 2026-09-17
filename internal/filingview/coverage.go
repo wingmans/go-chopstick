@@ -8,6 +8,8 @@ import (
 	"wingman.com/fetch-ecb/internal/edgar"
 )
 
+const coverageTextLimit = 25
+
 type CoverageReport struct {
 	TaxonomyVersion string     `json:"taxonomy_version"`
 	Facts           int        `json:"facts"`
@@ -155,15 +157,54 @@ func (r CoverageReport) String() string {
 		r.InvalidPeriods, r.MissingUnits, r.DuplicateFacts,
 	)
 
-	for _, term := range r.Unmapped {
+	for _, term := range topCoverageTerms(r.Unmapped, coverageTextLimit) {
 		fmt.Fprintf(&result, "\n  unmapped %s %s count=%d", term.Namespace,
 			term.Concept, term.Count)
 	}
+	if omitted := len(r.Unmapped) - minInt(len(r.Unmapped), coverageTextLimit); omitted > 0 {
+		fmt.Fprintf(&result, "\n  unmapped ... omitted=%d", omitted)
+	}
 
-	for _, term := range r.Extensions {
+	for _, term := range topCoverageTerms(r.Extensions, coverageTextLimit) {
 		fmt.Fprintf(&result, "\n  extension %s %s count=%d", term.Namespace,
 			term.Concept, term.Count)
 	}
+	if omitted := len(r.Extensions) - minInt(len(r.Extensions), coverageTextLimit); omitted > 0 {
+		fmt.Fprintf(&result, "\n  extension ... omitted=%d", omitted)
+	}
 
 	return result.String()
+}
+
+func topCoverageTerms(terms []LintTerm, limit int) []LintTerm {
+	if limit <= 0 || len(terms) == 0 {
+		return nil
+	}
+
+	result := append([]LintTerm(nil), terms...)
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Count != result[j].Count {
+			return result[i].Count > result[j].Count
+		}
+
+		if result[i].Concept != result[j].Concept {
+			return result[i].Concept < result[j].Concept
+		}
+
+		return result[i].Namespace < result[j].Namespace
+	})
+
+	if len(result) > limit {
+		result = result[:limit]
+	}
+
+	return result
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+
+	return right
 }

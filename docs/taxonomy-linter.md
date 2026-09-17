@@ -43,6 +43,19 @@ and one lint report per filing. Review findings such as unmapped concepts or
 identity-check warnings remain successful command output; malformed or
 unreadable input files are operational failures and produce a non-zero exit.
 
+The validation script writes detailed JSON artifacts and separate
+human-readable text summaries. The text files intentionally aggregate the JSON
+instead of repeating every filing row:
+
+- `coverage-report.txt` summarizes expected filing coverage, missing core
+  metrics, industry-sensitive gaps, and filing hotspots.
+- `taxonomy-coverage.txt` summarizes source-level unmapped concepts, company
+  extension concepts, and high-noise filings.
+- `lint-report.txt` summarizes compact-view quality issues and filings that
+  need review.
+
+Use the linked JSON files when a summary item needs line-item detail.
+
 The expected filing coverage report also contains per-filing metric presence.
 Useful review one-liners are:
 
@@ -58,6 +71,20 @@ jq -r '.filings[] | .metrics | to_entries[] | [.key,.value] | @tsv' \
   awk -F '\t' '$2=="present"{present[$1]++} $2=="missing"{missing[$1]++}
     END {for (m in present) print m, present[m]+0, missing[m]+0}'
 ```
+
+Missing metric output is intentionally split two ways:
+
+- `missing_metrics` keeps the full backward-compatible list.
+- `missing_metrics_by_tier` groups absent metrics as `core`,
+  `industry_sensitive`, or `supplemental`.
+- `filings_with_missing_metrics_by_tier` in the summary counts how many
+  filings had at least one missing metric in each tier.
+
+The `industry_sensitive` tier keeps banks, insurers, REITs, and other
+specialized filers from looking worse than they are when a generic industrial
+metric such as gross profit, cost of revenue, current assets/current
+liabilities, operating income, or capital expenditures is absent. The tier does
+not hide those gaps; it keeps them in a separate review lane.
 
 ## Source Coverage
 
@@ -78,6 +105,11 @@ It reports the complete source fact population, including concepts discarded
 from the compact view. The report separates unmapped concepts and probable
 company extensions, and counts dimensional facts, missing contexts, invalid
 periods, missing units, and duplicate facts.
+
+JSON coverage reports keep the complete unmapped and extension lists. Text
+coverage reports are capped to the highest-count unmapped concepts and
+extensions per filing so the human-readable artifact stays reviewable. Use the
+JSON artifact for exhaustive tuning queries.
 
 ## Data-Quality Follow-Up
 
@@ -123,6 +155,14 @@ Identity checks now run during compact-view build and taxonomy lint. Failures
 are warnings with the involved metrics, periods, units, actual value, expected
 value, and tolerance. They can reveal parser or taxonomy mistakes, but may also
 reflect presentation choices, rounding, or restatements.
+
+Balance-sheet checks first try `assets = liabilities_and_equity` when a filing
+reports that direct total. The fallback `assets = liabilities + equity` is
+skipped for that period and unit when the direct total exists, because plain
+shareholders' equity may exclude noncontrolling interest. Do not map
+`StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` to
+plain `equity` unless the downstream ratios and labels are also made
+noncontrolling-interest-aware.
 
 ## Interpretation
 
