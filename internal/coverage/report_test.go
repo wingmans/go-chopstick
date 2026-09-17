@@ -82,8 +82,17 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 			}},
 		}},
 		Statements: filingview.Statements{
-			Income:   filingview.StatementView{Title: "", Groups: nil},
-			Balance:  filingview.StatementView{Title: "", Groups: nil},
+			Income: filingview.StatementView{Title: "", Groups: nil},
+			Balance: filingview.StatementView{Title: "", Groups: []filingview.SummaryGroup{{
+				Title: "Balance", Periods: []string{"2024-06-30"},
+				Rows: []filingview.FactSeries{{
+					Key: "liabilities_and_equity", Label: "Liabilities and equity",
+					Concept: "LiabilitiesAndStockholdersEquity", Namespace: "", Unit: "USD",
+					Values: map[string]filingview.FactValue{"2024-06-30": {
+						Value: "20", Nil: false, ContextRef: "", Decimals: "",
+					}},
+				}},
+			}}},
 			CashFlow: filingview.StatementView{Title: "", Groups: nil},
 		}, Ratios: nil, Counts: filingview.Counts{
 			Documents: 0, Instances: 0, Facts: 0, Contexts: 0, Status: "",
@@ -103,25 +112,33 @@ func TestMetricPresenceReportsMappedAndMissingMetrics(t *testing.T) {
 				Key: "liabilities_and_equity", Label: "Liabilities and equity",
 				Statement: "balance", CoverageTier: "supplemental", Concepts: nil,
 			},
+			{Key: "liabilities", Label: "Liabilities", Statement: "balance", Concepts: nil},
 		}, Ratios: nil,
 	}
 
-	metrics, missing, missingByTier := metricPresence(view, taxonomy)
+	metrics, missing, missingByTier, relatedEvidence := metricPresence(view, taxonomy)
 	if metrics["revenue"] != "present" || metrics["net_income"] != "missing" ||
 		metrics["gross_profit"] != "missing" ||
-		metrics["liabilities_and_equity"] != "supplemental_missing" {
+		metrics["liabilities_and_equity"] != "present" ||
+		metrics["liabilities"] != "missing" {
 		t.Fatalf("unexpected metric states: %+v", metrics)
 	}
 
-	if len(missing) != 2 || missing[0] != "gross_profit" || missing[1] != "net_income" {
+	if len(missing) != 3 || missing[0] != "gross_profit" ||
+		missing[1] != "liabilities" || missing[2] != "net_income" {
 		t.Fatalf("unexpected missing metrics: %v", missing)
 	}
 
-	if got := missingByTier["core"]; len(got) != 1 || got[0] != "net_income" {
+	if got := missingByTier["core"]; len(got) != 2 ||
+		got[0] != "liabilities" || got[1] != "net_income" {
 		t.Fatalf("unexpected core missing metrics: %+v", missingByTier)
 	}
 
 	if got := missingByTier["industry_sensitive"]; len(got) != 1 || got[0] != "gross_profit" {
 		t.Fatalf("unexpected industry-sensitive missing metrics: %+v", missingByTier)
+	}
+
+	if got := relatedEvidence["liabilities"]; len(got) != 1 || got[0] != "liabilities_and_equity" {
+		t.Fatalf("unexpected related evidence: %+v", relatedEvidence)
 	}
 }

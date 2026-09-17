@@ -62,18 +62,19 @@ type Summary struct {
 }
 
 type Filing struct {
-	CIK           string              `json:"cik"`
-	Company       string              `json:"company"`
-	Accession     string              `json:"accession"`
-	FormType      string              `json:"form_type"`
-	DateFiled     string              `json:"date_filed"`
-	FilingPath    string              `json:"filing_path"`
-	SourcePath    string              `json:"source_path"`
-	ParsedPath    string              `json:"parsed_path"`
-	Status        string              `json:"status"`
-	MissingMetric []string            `json:"missing_metrics,omitempty"`
-	MissingByTier map[string][]string `json:"missing_metrics_by_tier,omitempty"`
-	Metrics       map[string]string   `json:"metrics,omitempty"`
+	CIK                    string              `json:"cik"`
+	Company                string              `json:"company"`
+	Accession              string              `json:"accession"`
+	FormType               string              `json:"form_type"`
+	DateFiled              string              `json:"date_filed"`
+	FilingPath             string              `json:"filing_path"`
+	SourcePath             string              `json:"source_path"`
+	ParsedPath             string              `json:"parsed_path"`
+	Status                 string              `json:"status"`
+	MissingMetric          []string            `json:"missing_metrics,omitempty"`
+	MissingByTier          map[string][]string `json:"missing_metrics_by_tier,omitempty"`
+	MissingRelatedEvidence map[string][]string `json:"missing_metric_related_evidence,omitempty"`
+	Metrics                map[string]string   `json:"metrics,omitempty"`
 }
 
 type AcquisitionRequest struct {
@@ -214,7 +215,7 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 		FormType: record.FormType, DateFiled: record.DateFiled.Format("2006-01-02"),
 		FilingPath: record.FilingPath, SourcePath: sourcePath,
 		ParsedPath: parsedPath, Status: "missing", MissingMetric: nil,
-		MissingByTier: nil, Metrics: nil,
+		MissingByTier: nil, MissingRelatedEvidence: nil, Metrics: nil,
 	}
 
 	if sourceErr != nil {
@@ -243,13 +244,13 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 	}
 
 	result.Status = "parsed"
-	result.Metrics, result.MissingMetric, result.MissingByTier = metricPresence(view, config.Taxonomy)
+	result.Metrics, result.MissingMetric, result.MissingByTier, result.MissingRelatedEvidence = metricPresence(view, config.Taxonomy)
 
 	return result, nil
 }
 
 // metricPresence checks which metrics are present in the filing view and which are missing according to the taxonomy.
-func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[string]string, []string, map[string][]string) {
+func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[string]string, []string, map[string][]string, map[string][]string) {
 	present := make(map[string]string)
 
 	for _, group := range view.Summary {
@@ -275,6 +276,7 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 	metrics := make(map[string]string, len(taxonomy.Metrics))
 	missing := make([]string, 0)
 	missingByTier := make(map[string][]string)
+	relatedEvidence := make(map[string][]string)
 
 	for _, metric := range taxonomy.Metrics {
 		if _, ok := present[metric.Key]; ok {
@@ -293,6 +295,9 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 		metrics[metric.Key] = "missing"
 		missing = append(missing, metric.Key)
 		missingByTier[tier] = append(missingByTier[tier], metric.Key)
+		if related := presentRelatedMetrics(metric.Key, present); len(related) > 0 {
+			relatedEvidence[metric.Key] = related
+		}
 	}
 
 	sort.Strings(missing)
@@ -305,7 +310,11 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 		missingByTier = nil
 	}
 
-	return metrics, missing, missingByTier
+	if len(relatedEvidence) == 0 {
+		relatedEvidence = nil
+	}
+
+	return metrics, missing, missingByTier, relatedEvidence
 }
 
 func metricCoverageTier(metric filingview.MetricDefinition) string {
@@ -315,6 +324,29 @@ func metricCoverageTier(metric filingview.MetricDefinition) string {
 	}
 
 	return tier
+}
+
+func presentRelatedMetrics(metric string, present map[string]string) []string {
+	candidates := relatedCoverageMetrics(metric)
+	result := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if _, ok := present[candidate]; ok {
+			result = append(result, candidate)
+		}
+	}
+
+	return result
+}
+
+func relatedCoverageMetrics(metric string) []string {
+	switch metric {
+	case "liabilities":
+		return []string{"liabilities_and_equity", "current_liabilities"}
+	case "equity":
+		return []string{"equity_including_noncontrolling_interest", "liabilities_and_equity"}
+	default:
+		return nil
+	}
 }
 
 // addMissingIndexRequests adds acquisition requests for any missing quarterly index files within the specified range of years.

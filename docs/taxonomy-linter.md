@@ -90,6 +90,11 @@ Missing metric output is intentionally split two ways:
   `industry_sensitive`, or `supplemental`.
 - `filings_with_missing_metrics_by_tier` in the summary counts how many
   filings had at least one missing metric in each tier.
+- `missing_metric_related_evidence` records nearby canonical metrics that were
+  present when a metric is missing. For example, missing `liabilities` may keep
+  `liabilities_and_equity` or `current_liabilities` as review evidence. This
+  does not make the metric present; it separates hard gaps from gaps that may
+  be covered by a related presentation.
 
 The `industry_sensitive` tier keeps banks, insurers, REITs, and other
 specialized filers from looking worse than they are when a generic industrial

@@ -139,6 +139,36 @@ write_coverage_text_summary() {
       "- \(.count) \(.metric)"
     '
 
+    printf '\n## Core Missing Metrics With Related Evidence\n\n'
+    append_jq_lines '_None._' "$RUN_DIR/coverage-report.json" '
+      [.filings[] |
+        (.missing_metric_related_evidence // {}) |
+        to_entries[] |
+        .key as $metric |
+        .value[]? |
+        {metric: $metric, related: .}
+      ] |
+      group_by(.metric + "\u0000" + .related) |
+      map({metric: .[0].metric, related: .[0].related, count: length}) |
+      sort_by(-.count, .metric, .related) |
+      .[:12][] |
+      "- \(.count) \(.metric) with \(.related)"
+    '
+
+    printf '\n## Top Hard Missing Core Metrics\n\n'
+    append_jq_lines '_None._' "$RUN_DIR/coverage-report.json" '
+      [.filings[] |
+        . as $filing |
+        .missing_metrics_by_tier.core[]? |
+        select((($filing.missing_metric_related_evidence // {})[.] // []) | length == 0)
+      ] |
+      group_by(.) |
+      map({metric: .[0], count: length}) |
+      sort_by(-.count, .metric) |
+      .[:12][] |
+      "- \(.count) \(.metric)"
+    '
+
     printf '\n## Top Industry-Sensitive Gaps\n\n'
     append_jq_lines '_None._' "$RUN_DIR/coverage-report.json" '
       [.filings[] | .missing_metrics_by_tier.industry_sensitive[]?] |
