@@ -53,8 +53,10 @@ func TestLintViewReportsOnlyUnmappedTerms(t *testing.T) {
 			Balance:  StatementView{Title: "", Groups: nil},
 			CashFlow: StatementView{Title: "", Groups: nil},
 		}, Ratios: nil,
+		Quality: Quality{IdentityChecks: nil},
 		Counts: Counts{
-			Documents: 0, Instances: 0, Facts: 0, Contexts: 0, Status: "",
+			Documents: 0, Instances: 0, Facts: 0, Contexts: 0,
+			DimensionalFactsExcluded: 0, Status: "",
 		}, Diagnostics: nil,
 		Summary: []SummaryGroup{{
 			Title: "Fiscal year", Periods: nil, Rows: []FactSeries{

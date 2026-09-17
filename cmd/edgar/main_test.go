@@ -242,29 +242,50 @@ func TestRunTaxonomyLintWritesJSONReport(t *testing.T) {
 	}
 
 	view := filingview.View{
-		SchemaVersion:   filingview.SchemaVersion,
-		TaxonomyVersion: "test-taxonomy",
+		SchemaVersion: filingview.SchemaVersion, ParserVersion: "",
+		TaxonomyVersion: "test-taxonomy", SourcePath: "", SourceSHA256: "",
 		Metadata: filingview.Metadata{
 			Accession: "0000000001", CIK: "0000789019", FormType: "10-K",
-			FilingDate: "2024-01-02", Company: "Example Corp.",
+			FilingDate: "2024-01-02", ReportDate: "", Company: "Example Corp.",
 		},
+		Documents: nil,
 		Summary: []filingview.SummaryGroup{
 			{
 				Title:   "Summary",
 				Periods: []string{"FY2023"},
 				Rows: []filingview.FactSeries{
 					{
+						Key:       "",
 						Label:     "Example",
 						Namespace: "https://example.test/taxonomy",
 						Concept:   "ExampleMetric",
 						Unit:      "USD",
 						Values: map[string]filingview.FactValue{
-							"FY2023": {Value: "1"},
+							"FY2023": {
+								Value: "1", Nil: false, ContextRef: "",
+								Decimals: "", UnitRef: "",
+							},
 						},
 					},
 				},
 			},
 		},
+		Statements: filingview.Statements{
+			Income: filingview.StatementView{Title: "", Groups: nil},
+			Balance: filingview.StatementView{
+				Title: "", Groups: nil,
+			},
+			CashFlow: filingview.StatementView{Title: "", Groups: nil},
+		},
+		Ratios: nil,
+		Quality: filingview.Quality{
+			IdentityChecks: nil,
+		},
+		Counts: filingview.Counts{
+			Documents: 0, Instances: 0, Facts: 0, Contexts: 0,
+			DimensionalFactsExcluded: 0, Status: "",
+		},
+		Diagnostics: nil,
 	}
 
 	viewData, err := json.Marshal(view)
@@ -272,14 +293,17 @@ func TestRunTaxonomyLintWritesJSONReport(t *testing.T) {
 		t.Fatalf("encode view: %v", err)
 	}
 
-	if err := os.WriteFile(viewPath, viewData, 0o640); err != nil {
+	if err := os.WriteFile(viewPath, viewData, 0o600); err != nil {
 		t.Fatalf("write view: %v", err)
 	}
 
 	out := filepath.Join(root, "reports", "lint.json")
 
 	err = runTaxonomyCommand(t.Context(), "lint", "", "", parsedDir,
-		edgar.IndexFilter{CIK: "789019", FormTypes: []string{"10-K"}},
+		edgar.IndexFilter{
+			CIK: "789019", CIKs: nil, FormTypes: []string{"10-K"},
+			Year: 0, FromYear: 0, ToYear: 0,
+		},
 		"", 2020, 2025, "json", out)
 	if err != nil {
 		t.Fatalf("runTaxonomyCommand returned error: %v", err)

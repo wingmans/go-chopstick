@@ -35,7 +35,10 @@ func TestFilingWorkflowDownloadsFiltersAndReuses(t *testing.T) {
 	master := writeSubmission(t, "123|Example|10-K|2024-01-01|edgar/data/123/submission.txt|edgar/data/123/index.html\n"+
 		"123|Example|8-K|2024-01-01|skip-form.txt\n123|Example|10-K|2023-01-01|skip-year.txt\n"+
 		"456|Other|10-K|2024-01-01|skip-cik.txt\n")
-	filter := IndexFilter{CIK: "123", CIKs: nil, FormTypes: []string{annualForm}, Year: 2024}
+	filter := IndexFilter{
+		CIK: "123", CIKs: nil, FormTypes: []string{annualForm},
+		Year: 2024, FromYear: 0, ToYear: 0,
+	}
 	requests := 0
 
 	var client http.Client
@@ -180,7 +183,10 @@ func TestProcessLocalFilingsProcessesAvailableUnprocessedRecords(t *testing.T) {
 	master := writeSubmission(t, "123|Example|10-K|2024-01-01|edgar/data/123/submission.txt\n"+
 		"123|Example|10-Q|2024-01-01|missing.txt\n")
 	processing := ProcessingConfig{Directory: parsed, FilingsDirectory: filings, FormType: "", Reprocess: false, Noop: false}
-	filter := IndexFilter{CIK: "123", CIKs: nil, FormTypes: nil, Year: 2024}
+	filter := IndexFilter{
+		CIK: "123", CIKs: nil, FormTypes: nil,
+		Year: 2024, FromYear: 0, ToYear: 0,
+	}
 
 	first, err := ProcessLocalFilings(t.Context(), master, filings, processing, filter)
 	if err != nil || first.Selected != 1 || first.Processed != 1 {

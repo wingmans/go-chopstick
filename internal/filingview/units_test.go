@@ -15,33 +15,44 @@ func TestNormalizeUnits(t *testing.T) {
 		{
 			name: "usd",
 			unit: edgar.FactUnit{
-				ID:       "u1",
-				Measures: []edgar.QName{{Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD"}},
+				ID: "u1", Measures: []edgar.QName{{
+					Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD",
+				}},
+				Numerator: nil, Denominator: nil, Source: emptyXMLNode(),
 			},
 			want: "USD",
 		},
 		{
 			name: "shares",
 			unit: edgar.FactUnit{
-				ID:       "u2",
-				Measures: []edgar.QName{{Namespace: "http://www.xbrl.org/2003/instance", Local: "shares"}},
+				ID: "u2", Measures: []edgar.QName{{
+					Namespace: "http://www.xbrl.org/2003/instance", Local: "shares",
+				}},
+				Numerator: nil, Denominator: nil, Source: emptyXMLNode(),
 			},
 			want: "shares",
 		},
 		{
 			name: "pure",
 			unit: edgar.FactUnit{
-				ID:       "u3",
-				Measures: []edgar.QName{{Namespace: "http://www.xbrl.org/2003/instance", Local: "pure"}},
+				ID: "u3", Measures: []edgar.QName{{
+					Namespace: "http://www.xbrl.org/2003/instance", Local: "pure",
+				}},
+				Numerator: nil, Denominator: nil, Source: emptyXMLNode(),
 			},
 			want: "pure",
 		},
 		{
 			name: "usd per share",
 			unit: edgar.FactUnit{
-				ID:          "u4",
-				Numerator:   []edgar.QName{{Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD"}},
-				Denominator: []edgar.QName{{Namespace: "http://www.xbrl.org/2003/instance", Local: "shares"}},
+				ID: "u4", Measures: nil,
+				Numerator: []edgar.QName{{
+					Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD",
+				}},
+				Denominator: []edgar.QName{{
+					Namespace: "http://www.xbrl.org/2003/instance", Local: "shares",
+				}},
+				Source: emptyXMLNode(),
 			},
 			want: "USD/shares",
 		},
@@ -57,7 +68,20 @@ func TestNormalizeUnits(t *testing.T) {
 }
 
 func TestNormalizedUnitPreservesUnknownUnitRef(t *testing.T) {
-	got := normalizedUnit(edgar.Fact{UnitRef: "missing"}, map[string]string{})
+	got := normalizedUnit(edgar.Fact{
+		Namespaces: nil,
+		Concept:    edgar.QName{Namespace: "", Local: ""},
+		Value:      "",
+		ContextRef: "",
+		UnitRef:    "missing",
+		Decimals:   "",
+		Precision:  "",
+		Language:   "",
+		Nil:        false,
+		ID:         "",
+		Attributes: nil,
+		Structured: nil,
+	}, map[string]string{})
 	if got != "unknown:missing" {
 		t.Fatalf("normalizedUnit() = %q, want unknown:missing", got)
 	}

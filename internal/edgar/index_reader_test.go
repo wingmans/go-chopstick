@@ -31,6 +31,8 @@ func TestReadMasterTSVByFormType(t *testing.T) {
 		CIKs:      nil,
 		FormTypes: []string{formType},
 		Year:      0,
+		FromYear:  0,
+		ToYear:    0,
 	})
 
 	for {
@@ -59,6 +61,8 @@ func TestIndexReaderReadsAndFiltersRecords(t *testing.T) {
 		CIKs:      nil,
 		FormTypes: []string{"10-K"},
 		Year:      0,
+		FromYear:  0,
+		ToYear:    0,
 	})
 
 	record, err := reader.Next()
@@ -89,6 +93,8 @@ func TestIndexReaderRejectsMalformedRows(t *testing.T) {
 		CIKs:      nil,
 		FormTypes: nil,
 		Year:      0,
+		FromYear:  0,
+		ToYear:    0,
 	})
 
 	if _, err := reader.Next(); err == nil {
@@ -106,6 +112,8 @@ func TestIndexReaderFiltersByYear(t *testing.T) {
 		CIKs:      nil,
 		FormTypes: nil,
 		Year:      2024,
+		FromYear:  0,
+		ToYear:    0,
 	})
 
 	record, err := reader.Next()
@@ -154,7 +162,7 @@ func TestIndexReaderFiltersByYearRange(t *testing.T) {
 
 func TestIndexReaderMatchesPaddedCIK(t *testing.T) {
 	reader := NewIndexReader(strings.NewReader("789019|Example|10-K|2024-01-02|filing.txt\n"), IndexFilter{
-		CIK: "0000789019", CIKs: nil, FormTypes: nil, Year: 0,
+		CIK: "0000789019", CIKs: nil, FormTypes: nil, Year: 0, FromYear: 0, ToYear: 0,
 	})
 	if _, err := reader.Next(); err != nil {
 		t.Fatalf("padded CIK did not match master index: %v", err)
@@ -170,6 +178,8 @@ func TestIndexReaderFiltersByCIKSet(t *testing.T) {
 		CIKs:      []string{"0000320193"},
 		FormTypes: nil,
 		Year:      0,
+		FromYear:  0,
+		ToYear:    0,
 	})
 
 	record, err := reader.Next()
@@ -188,6 +198,8 @@ func TestIndexReaderSkipsBlankRows(t *testing.T) {
 		CIKs:      nil,
 		FormTypes: nil,
 		Year:      0,
+		FromYear:  0,
+		ToYear:    0,
 	})
 
 	if _, err := reader.Next(); err != nil {

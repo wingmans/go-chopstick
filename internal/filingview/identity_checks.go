@@ -4,6 +4,8 @@ import (
 	"math/big"
 	"sort"
 	"strings"
+
+	"wingman.com/fetch-ecb/internal/edgar"
 )
 
 const (
@@ -40,6 +42,7 @@ var accountingIdentities = []identityDefinition{
 		Terms: []identityTerm{
 			{Metric: "liabilities_and_equity", Sign: 1},
 		},
+		SkipWhenPresent: nil,
 	},
 	{
 		Name: "assets = liabilities + equity_including_noncontrolling_interest", Statement: "balance",
@@ -128,8 +131,8 @@ func identityShouldSkip(definition identityDefinition, period, unit string, rows
 func checkIdentityPeriod(definition identityDefinition, period, unit string, result *FactSeries, rows map[string]*FactSeries) IdentityCheck {
 	check := IdentityCheck{
 		Name: definition.Name, Period: period, Unit: unit,
-		Status:  identitySkipped,
-		Metrics: identityMetrics(definition),
+		Status: identitySkipped, Expected: "", Actual: "", Tolerance: "",
+		Metrics: identityMetrics(definition), Evidence: nil, Message: "",
 	}
 
 	resultValue, ok := identityValue(result, period)
@@ -154,6 +157,7 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 
 	for _, term := range definition.Terms {
 		row := rows[term.Metric+"\x00"+unit]
+
 		value, ok := identityValue(row, period)
 		if !ok {
 			check.Message = "missing " + term.Metric
@@ -222,7 +226,7 @@ func identityStatement(view View, statement string) StatementView {
 	case "cash_flow":
 		return view.Statements.CashFlow
 	default:
-		return StatementView{}
+		return StatementView{Title: "", Groups: nil}
 	}
 }
 
@@ -288,6 +292,7 @@ func identityMetrics(definition identityDefinition) []string {
 func identityEvidence(metric, role string, sign int64, row *FactSeries, value FactValue) IdentityEvidence {
 	evidence := IdentityEvidence{
 		Metric: metric, Role: role, Sign: sign,
+		Namespace: "", Concept: "",
 		Value: value.Value, ContextRef: value.ContextRef,
 		Decimals: value.Decimals, UnitRef: value.UnitRef,
 	}
@@ -301,12 +306,20 @@ func identityEvidence(metric, role string, sign int64, row *FactSeries, value Fa
 
 func identityValue(row *FactSeries, period string) (FactValue, bool) {
 	if row == nil {
-		return FactValue{}, false
+		return FactValue{
+			Value: "", Nil: false, ContextRef: "", Decimals: "", UnitRef: "",
+			priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+			id: "", precision: "",
+		}, false
 	}
 
 	value, ok := row.Values[period]
 	if !ok || value.Nil {
-		return FactValue{}, false
+		return FactValue{
+			Value: "", Nil: false, ContextRef: "", Decimals: "", UnitRef: "",
+			priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+			id: "", precision: "",
+		}, false
 	}
 
 	return value, true

@@ -98,15 +98,37 @@ Missing metric output is intentionally split two ways:
 - Missing `eps_diluted` may keep supplemental `eps_basic` as related evidence.
   Basic EPS is not substituted for diluted EPS; it only shows that the filing
   has per-share earnings data while the diluted concept remains absent.
-  Many EPS facts are reported by share class using dimensional contexts. Those
-  facts remain outside the compact view until dimensional evidence is reviewed
-  and explicitly promoted.
+- `missing_metric_dimensional_evidence` records source-level hints that were
+  excluded from the compact filing view because they use dimensional contexts.
+  The first supported case is missing `eps_diluted` with source
+  `EarningsPerShareBasic` facts reported by share class. This evidence reduces
+  hard-gap noise in validation reports, but it does not make the metric present.
+  Future work may explicitly promote selected dimensional facts when the axis,
+  member, period, and unit handling rules are clear enough to preserve meaning.
 
 The `industry_sensitive` tier keeps banks, insurers, REITs, and other
 specialized filers from looking worse than they are when a generic industrial
 metric such as gross profit, cost of revenue, current assets/current
 liabilities, operating income, or capital expenditures is absent. The tier does
 not hide those gaps; it keeps them in a separate review lane.
+
+### Current hard-gap notes
+
+Run `data/validation/runs/20260917T181634Z` reduced unexplained core gaps to
+the small set below. These are intentionally left as hard gaps rather than
+taxonomy aliases until fresh evidence justifies a safer rule:
+
+- Caterpillar 2015-2018 is missing compact `cash`. Source facts include
+  restricted-cash and cash-flow concepts, but no obvious consolidated
+  `cash` equivalent that should be mapped to the dashboard metric.
+- Linde 2018 is missing compact `revenue` and `investing_cash_flow`. The filing
+  is sparse, with only 133 source facts, and appears to be a special
+  pre-combination or transitional filing rather than a normal operating-year
+  taxonomy miss.
+
+Future validation runs should treat this list as review context, not as a
+permanent suppression list. If later filings or manual source review show a
+clear consolidated concept, add the alias with a focused before/after run.
 
 ## Source Coverage
 

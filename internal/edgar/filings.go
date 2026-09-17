@@ -71,6 +71,8 @@ func UniqueFormTypes(masterPath string) ([]string, error) {
 		CIKs:      nil,
 		FormTypes: nil,
 		Year:      0,
+		FromYear:  0,
+		ToYear:    0,
 	})
 	types := make(map[string]struct{})
 

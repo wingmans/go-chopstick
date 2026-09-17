@@ -21,14 +21,18 @@ func selectFact(existing FactValue, existingConcept edgar.QName, candidate selec
 
 	current := selectedFact{
 		Fact: edgar.Fact{
+			Namespaces: nil,
 			Concept:    existingConcept,
 			Value:      existing.Value,
 			ContextRef: existing.ContextRef,
 			UnitRef:    existing.UnitRef,
 			Decimals:   existing.Decimals,
 			Precision:  existing.precision,
+			Language:   "",
 			Nil:        existing.Nil,
 			ID:         existing.id,
+			Attributes: nil,
+			Structured: nil,
 		},
 		Priority: existing.priority,
 	}

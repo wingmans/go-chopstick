@@ -20,6 +20,13 @@ A human reviewer stays in the loop for every quality-improvement loop:
 This keeps validation output useful as evidence without letting one noisy run
 rewrite the project's definition of correct behavior.
 
+## Code Review Discipline
+
+Go code and tests should satisfy `exhaustruct_v5`. Struct literals should list
+every field, including intentional zero values. This makes new fields visible
+at compile and lint time so callers choose whether the value should be
+populated, empty, or nil.
+
 ## Deferred Coverage Profiles
 
 Validation runs may eventually need company or industry profiles, for example

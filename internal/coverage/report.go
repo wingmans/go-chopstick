@@ -62,19 +62,20 @@ type Summary struct {
 }
 
 type Filing struct {
-	CIK                    string              `json:"cik"`
-	Company                string              `json:"company"`
-	Accession              string              `json:"accession"`
-	FormType               string              `json:"form_type"`
-	DateFiled              string              `json:"date_filed"`
-	FilingPath             string              `json:"filing_path"`
-	SourcePath             string              `json:"source_path"`
-	ParsedPath             string              `json:"parsed_path"`
-	Status                 string              `json:"status"`
-	MissingMetric          []string            `json:"missing_metrics,omitempty"`
-	MissingByTier          map[string][]string `json:"missing_metrics_by_tier,omitempty"`
-	MissingRelatedEvidence map[string][]string `json:"missing_metric_related_evidence,omitempty"`
-	Metrics                map[string]string   `json:"metrics,omitempty"`
+	CIK                        string              `json:"cik"`
+	Company                    string              `json:"company"`
+	Accession                  string              `json:"accession"`
+	FormType                   string              `json:"form_type"`
+	DateFiled                  string              `json:"date_filed"`
+	FilingPath                 string              `json:"filing_path"`
+	SourcePath                 string              `json:"source_path"`
+	ParsedPath                 string              `json:"parsed_path"`
+	Status                     string              `json:"status"`
+	MissingMetric              []string            `json:"missing_metrics,omitempty"`
+	MissingByTier              map[string][]string `json:"missing_metrics_by_tier,omitempty"`
+	MissingRelatedEvidence     map[string][]string `json:"missing_metric_related_evidence,omitempty"`
+	MissingDimensionalEvidence map[string][]string `json:"missing_metric_dimensional_evidence,omitempty"`
+	Metrics                    map[string]string   `json:"metrics,omitempty"`
 }
 
 type AcquisitionRequest struct {
@@ -215,7 +216,8 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 		FormType: record.FormType, DateFiled: record.DateFiled.Format("2006-01-02"),
 		FilingPath: record.FilingPath, SourcePath: sourcePath,
 		ParsedPath: parsedPath, Status: "missing", MissingMetric: nil,
-		MissingByTier: nil, MissingRelatedEvidence: nil, Metrics: nil,
+		MissingByTier: nil, MissingRelatedEvidence: nil,
+		MissingDimensionalEvidence: nil, Metrics: nil,
 	}
 
 	if sourceErr != nil {
@@ -245,6 +247,7 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 
 	result.Status = "parsed"
 	result.Metrics, result.MissingMetric, result.MissingByTier, result.MissingRelatedEvidence = metricPresence(view, config.Taxonomy)
+	result.MissingDimensionalEvidence = metricDimensionalEvidence(parsedSourcePath(parsedPath), result.MissingMetric)
 
 	return result, nil
 }
@@ -295,6 +298,7 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 		metrics[metric.Key] = "missing"
 		missing = append(missing, metric.Key)
 		missingByTier[tier] = append(missingByTier[tier], metric.Key)
+
 		if related := presentRelatedMetrics(metric.Key, present); len(related) > 0 {
 			relatedEvidence[metric.Key] = related
 		}
@@ -328,6 +332,7 @@ func metricCoverageTier(metric filingview.MetricDefinition) string {
 
 func presentRelatedMetrics(metric string, present map[string]string) []string {
 	candidates := relatedCoverageMetrics(metric)
+
 	result := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
 		if _, ok := present[candidate]; ok {
@@ -349,6 +354,83 @@ func relatedCoverageMetrics(metric string) []string {
 	default:
 		return nil
 	}
+}
+
+func metricDimensionalEvidence(path string, missing []string) map[string][]string {
+	if len(missing) == 0 {
+		return nil
+	}
+
+	source, err := edgar.LoadParsedFiling(path)
+	if err != nil {
+		// Dimensional evidence is advisory. Coverage should still report the
+		// compact view when the source parse is unavailable or incompatible.
+		return nil
+	}
+
+	return sourceDimensionalEvidence(source, missing)
+}
+
+func sourceDimensionalEvidence(filing *edgar.ParsedFiling, missing []string) map[string][]string {
+	if filing == nil {
+		return nil
+	}
+
+	missingSet := make(map[string]struct{}, len(missing))
+	for _, metric := range missing {
+		missingSet[metric] = struct{}{}
+	}
+
+	evidence := make(map[string][]string)
+
+	// Compact filing views intentionally ignore dimensional contexts. This
+	// source-level check preserves a review hint without promoting dimensional
+	// facts into canonical metric presence.
+	if _, ok := missingSet["eps_diluted"]; ok && hasDimensionalUSGAAPFact(filing, "EarningsPerShareBasic") {
+		evidence["eps_diluted"] = append(evidence["eps_diluted"], "eps_basic")
+	}
+
+	if len(evidence) == 0 {
+		return nil
+	}
+
+	for metric := range evidence {
+		sort.Strings(evidence[metric])
+	}
+
+	return evidence
+}
+
+func hasDimensionalUSGAAPFact(filing *edgar.ParsedFiling, concept string) bool {
+	for _, instance := range filing.Instances {
+		dimensionalContexts := make(map[string]struct{}, len(instance.Contexts))
+		for _, context := range instance.Contexts {
+			if len(context.Dimensions) > 0 {
+				dimensionalContexts[context.ID] = struct{}{}
+			}
+		}
+
+		for _, fact := range instance.Facts {
+			if fact.Nil || strings.TrimSpace(fact.Value) == "" {
+				continue
+			}
+
+			if fact.Concept.Local != concept || !usGAAPNamespace(fact.Concept.Namespace) {
+				continue
+			}
+
+			if _, ok := dimensionalContexts[fact.ContextRef]; ok {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func usGAAPNamespace(namespace string) bool {
+	return strings.Contains(namespace, "/us-gaap/") ||
+		strings.Contains(namespace, "/us-gaap:")
 }
 
 // addMissingIndexRequests adds acquisition requests for any missing quarterly index files within the specified range of years.
@@ -480,6 +562,10 @@ func parsedViewPath(directory, cik, accession string) string {
 	}
 
 	return filepath.Join(directory, normalized, accession, "filing-view.json")
+}
+
+func parsedSourcePath(viewPath string) string {
+	return filepath.Join(filepath.Dir(viewPath), "filing.json")
 }
 
 // yearFromDate extracts the year from a date string in the format "YYYY-MM-DD".

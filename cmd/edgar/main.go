@@ -475,7 +475,9 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 			FormTypes: filter.FormTypes, Year: filter.Year,
 			FromYear: fromYear, ToYear: toYear,
 		},
-		Summary: taxonomyBatchSummary{},
+		Summary: taxonomyBatchSummary{
+			Selected: 0, Failed: 0, Findings: 0, QualityIssues: 0,
+		},
 		Filings: nil,
 	}
 
@@ -486,7 +488,10 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 			return err
 		}
 
-		entry := taxonomyFilingReport{Path: filingPath}
+		entry := taxonomyFilingReport{
+			Path: filingPath, CIK: "", Accession: "", FormType: "",
+			FilingDate: "", Lint: nil, Coverage: nil, Error: "",
+		}
 
 		if operation == "coverage" {
 			filing, loadErr := edgar.LoadParsedFiling(filingPath)
@@ -709,7 +714,7 @@ func writeTaxonomyText(path, text string) error {
 		return fmt.Errorf("create taxonomy report directory: %w", err)
 	}
 
-	if err := os.WriteFile(path, []byte(text), 0o640); err != nil {
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 		return fmt.Errorf("write taxonomy report: %w", err)
 	}
 

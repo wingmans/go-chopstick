@@ -162,6 +162,7 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 		Summary:    financialSummary(filing),
 		Statements: statements,
 		Ratios:     ratios,
+		Quality:    Quality{IdentityChecks: nil},
 		Counts: Counts{
 			Documents: len(filing.Documents), Instances: len(filing.Instances),
 			Facts: facts, Contexts: contexts,

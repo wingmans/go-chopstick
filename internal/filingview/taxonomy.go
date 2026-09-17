@@ -127,8 +127,10 @@ func (t Taxonomy) metricReferenceForConcept(namespace, concept string) (MetricDe
 	}
 
 	return MetricDefinition{
-		Key: "", Label: "", Statement: "", Concepts: nil,
-	}, ConceptReference{}, false
+		Key: "", Label: "", Statement: "", CoverageTier: "", Concepts: nil,
+	}, ConceptReference{
+		NamespaceFamily: "", Name: "", Priority: 0,
+	}, false
 }
 
 func namespaceMatches(family, namespace string) bool {

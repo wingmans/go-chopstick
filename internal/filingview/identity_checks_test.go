@@ -1,6 +1,10 @@
 package filingview
 
-import "testing"
+import (
+	"testing"
+
+	"wingman.com/fetch-ecb/internal/edgar"
+)
 
 func TestCheckAccountingIdentitiesReportsFailure(t *testing.T) {
 	view := balanceIdentityTestView("100", "40", "50", "0")
@@ -43,17 +47,11 @@ func TestCheckAccountingIdentitiesAllowsRoundingTolerance(t *testing.T) {
 }
 
 func TestCheckAccountingIdentitiesSkipsDifferentContexts(t *testing.T) {
-	view := View{Statements: Statements{
-		Balance: StatementView{Groups: []SummaryGroup{{
-			Title:   "Instant",
-			Periods: []string{"2026-06-30"},
-			Rows: []FactSeries{
-				identityRowWithContext("assets", "USD", "2026-06-30", "150", "0", "assets-context"),
-				identityRowWithContext("liabilities", "USD", "2026-06-30", "75", "0", "liabilities-context"),
-				identityRowWithContext("equity", "USD", "2026-06-30", "75", "0", "equity-context"),
-			},
-		}}},
-	}}
+	view := balanceIdentityRowsView(
+		identityRowWithContext("assets", "USD", "2026-06-30", "150", "0", "assets-context"),
+		identityRowWithContext("liabilities", "USD", "2026-06-30", "75", "0", "liabilities-context"),
+		identityRowWithContext("equity", "USD", "2026-06-30", "75", "0", "equity-context"),
+	)
 
 	check := identityCheckByName(CheckAccountingIdentities(view), "assets = liabilities + equity")
 	if check == nil {
@@ -66,17 +64,11 @@ func TestCheckAccountingIdentitiesSkipsDifferentContexts(t *testing.T) {
 }
 
 func TestCheckAccountingIdentitiesSupportsAddition(t *testing.T) {
-	view := View{Statements: Statements{
-		Balance: StatementView{Groups: []SummaryGroup{{
-			Title:   "Instant",
-			Periods: []string{"2026-06-30"},
-			Rows: []FactSeries{
-				identityRow("assets", "USD", "2026-06-30", "150", "0"),
-				identityRow("liabilities", "USD", "2026-06-30", "75", "0"),
-				identityRow("equity", "USD", "2026-06-30", "75", "0"),
-			},
-		}}},
-	}}
+	view := balanceIdentityRowsView(
+		identityRow("assets", "USD", "2026-06-30", "150", "0"),
+		identityRow("liabilities", "USD", "2026-06-30", "75", "0"),
+		identityRow("equity", "USD", "2026-06-30", "75", "0"),
+	)
 
 	check := identityCheckByName(CheckAccountingIdentities(view), "assets = liabilities + equity")
 	if check == nil || check.Status != identityPass {
@@ -85,19 +77,13 @@ func TestCheckAccountingIdentitiesSupportsAddition(t *testing.T) {
 }
 
 func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T) {
-	view := View{Statements: Statements{
-		Balance: StatementView{Groups: []SummaryGroup{{
-			Title:   "Instant",
-			Periods: []string{"2026-06-30"},
-			Rows: []FactSeries{
-				identityRow("assets", "USD", "2026-06-30", "150", "0"),
-				identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
-				identityRow("equity", "USD", "2026-06-30", "50", "0"),
-				identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "55", "0"),
-				identityRow("liabilities_and_equity", "USD", "2026-06-30", "150", "0"),
-			},
-		}}},
-	}}
+	view := balanceIdentityRowsView(
+		identityRow("assets", "USD", "2026-06-30", "150", "0"),
+		identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
+		identityRow("equity", "USD", "2026-06-30", "50", "0"),
+		identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "55", "0"),
+		identityRow("liabilities_and_equity", "USD", "2026-06-30", "150", "0"),
+	)
 
 	checks := CheckAccountingIdentities(view)
 
@@ -118,18 +104,12 @@ func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T
 }
 
 func TestCheckAccountingIdentitiesUsesNCIInclusiveEquityWhenPresent(t *testing.T) {
-	view := View{Statements: Statements{
-		Balance: StatementView{Groups: []SummaryGroup{{
-			Title:   "Instant",
-			Periods: []string{"2026-06-30"},
-			Rows: []FactSeries{
-				identityRow("assets", "USD", "2026-06-30", "150", "0"),
-				identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
-				identityRow("equity", "USD", "2026-06-30", "50", "0"),
-				identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "60", "0"),
-			},
-		}}},
-	}}
+	view := balanceIdentityRowsView(
+		identityRow("assets", "USD", "2026-06-30", "150", "0"),
+		identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
+		identityRow("equity", "USD", "2026-06-30", "50", "0"),
+		identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "60", "0"),
+	)
 
 	checks := CheckAccountingIdentities(view)
 
@@ -148,10 +128,26 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 	report := LintView(balanceIdentityTestView("100", "40", "50", "0"), Taxonomy{
 		SchemaVersion: 1, TaxonomyVersion: "test",
 		Metrics: []MetricDefinition{
-			{Key: "assets", Label: "Assets", Statement: "balance", Concepts: []ConceptReference{{Name: "Assets", NamespaceFamily: "any"}}},
-			{Key: "liabilities", Label: "Liabilities", Statement: "balance", Concepts: []ConceptReference{{Name: "Liabilities", NamespaceFamily: "any"}}},
-			{Key: "equity", Label: "Equity", Statement: "balance", Concepts: []ConceptReference{{Name: "Equity", NamespaceFamily: "any"}}},
+			{
+				Key: "assets", Label: "Assets", Statement: "balance", CoverageTier: "",
+				Concepts: []ConceptReference{{
+					Name: "Assets", NamespaceFamily: "any", Priority: 0,
+				}},
+			},
+			{
+				Key: "liabilities", Label: "Liabilities", Statement: "balance", CoverageTier: "",
+				Concepts: []ConceptReference{{
+					Name: "Liabilities", NamespaceFamily: "any", Priority: 0,
+				}},
+			},
+			{
+				Key: "equity", Label: "Equity", Statement: "balance", CoverageTier: "",
+				Concepts: []ConceptReference{{
+					Name: "Equity", NamespaceFamily: "any", Priority: 0,
+				}},
+			},
 		},
+		Ratios: nil,
 	})
 
 	found := false
@@ -177,17 +173,36 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 }
 
 func balanceIdentityTestView(assets, liabilities, equity, decimals string) View {
-	return View{Statements: Statements{
-		Balance: StatementView{Groups: []SummaryGroup{{
-			Title:   "Instant",
-			Periods: []string{"2026-06-30"},
-			Rows: []FactSeries{
-				identityRow("assets", "USD", "2026-06-30", assets, decimals),
-				identityRow("liabilities", "USD", "2026-06-30", liabilities, decimals),
-				identityRow("equity", "USD", "2026-06-30", equity, decimals),
-			},
-		}}},
-	}}
+	return balanceIdentityRowsView(
+		identityRow("assets", "USD", "2026-06-30", assets, decimals),
+		identityRow("liabilities", "USD", "2026-06-30", liabilities, decimals),
+		identityRow("equity", "USD", "2026-06-30", equity, decimals),
+	)
+}
+
+func balanceIdentityRowsView(rows ...FactSeries) View {
+	return View{
+		SchemaVersion: 0, ParserVersion: "", TaxonomyVersion: "",
+		SourcePath: "", SourceSHA256: "", Metadata: Metadata{
+			Accession: "", CIK: "", FormType: "", FilingDate: "",
+			ReportDate: "", Company: "",
+		}, Documents: nil, Summary: nil,
+		Statements: Statements{
+			Income: StatementView{Title: "", Groups: nil},
+			Balance: StatementView{Title: "", Groups: []SummaryGroup{{
+				Title:   "Instant",
+				Periods: []string{"2026-06-30"},
+				Rows:    rows,
+			}}},
+			CashFlow: StatementView{Title: "", Groups: nil},
+		},
+		Ratios: nil, Quality: Quality{IdentityChecks: nil},
+		Counts: Counts{
+			Documents: 0, Instances: 0, Facts: 0, Contexts: 0,
+			DimensionalFactsExcluded: 0, Status: "",
+		},
+		Diagnostics: nil,
+	}
 }
 
 func identityRow(key, unit, period, value, decimals string) FactSeries {
@@ -198,7 +213,12 @@ func identityRowWithContext(key, unit, period, value, decimals, context string) 
 	return FactSeries{
 		Key: key, Label: key, Namespace: "test", Concept: key, Unit: unit,
 		Values: map[string]FactValue{
-			period: {Value: value, Decimals: decimals, ContextRef: context},
+			period: {
+				Value: value, Nil: false, ContextRef: context,
+				Decimals: decimals, UnitRef: "",
+				priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+				id: "", precision: "",
+			},
 		},
 	}
 }

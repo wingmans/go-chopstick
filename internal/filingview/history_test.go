@@ -48,14 +48,21 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 				Title: "Fiscal year", Periods: []string{"FY" + year}, Rows: []FactSeries{{
 					Key: "revenue", Label: "Revenue", Namespace: "us-gaap",
 					Concept: "Revenues", Unit: "usd", Values: map[string]FactValue{
-						"FY" + year: {Value: value, Nil: false, ContextRef: "c1", Decimals: "-3"},
+						"FY" + year: {
+							Value: value, Nil: false, ContextRef: "c1",
+							Decimals: "-3", UnitRef: "",
+							priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+							id: "", precision: "",
+						},
 					},
 				}},
 			}}},
 			Balance:  StatementView{Title: "Balance sheet", Groups: []SummaryGroup{}},
 			CashFlow: StatementView{Title: "Cash flow", Groups: []SummaryGroup{}},
-		}, Ratios: []RatioSeries{}, Counts: Counts{
-			Documents: 0, Instances: 0, Facts: 1, Contexts: 1, Status: "complete",
+		}, Ratios: []RatioSeries{}, Quality: Quality{IdentityChecks: nil},
+		Counts: Counts{
+			Documents: 0, Instances: 0, Facts: 1, Contexts: 1,
+			DimensionalFactsExcluded: 0, Status: "complete",
 		}, Diagnostics: []edgar.ParseDiagnostic{},
 	}
 }
