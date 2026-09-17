@@ -20,6 +20,31 @@ A human reviewer stays in the loop for every quality-improvement loop:
 This keeps validation output useful as evidence without letting one noisy run
 rewrite the project's definition of correct behavior.
 
+## Deferred Coverage Profiles
+
+Validation runs may eventually need company or industry profiles, for example
+to mark generic industrial metrics as not applicable for banks, insurers, or
+REITs. That layer is intentionally deferred for now.
+
+The current quality loop should first use the simpler tools already in place:
+taxonomy mappings, `core` versus `industry_sensitive` coverage tiers, parser
+fixes, malformed fixtures, and human-readable validation summaries. Those
+tools keep missing metrics visible without requiring the project to maintain a
+second source of truth for each company's business model.
+
+Profiles can be reconsidered after several golden-set iterations if
+industry-specific noise still blocks useful review. If added later, profiles
+should be explicit metadata rather than hard-coded CIK checks, and they should
+only affect coverage interpretation. They must not change source facts, compact
+statement values, taxonomy aliases, or ratios.
+
+The Prologis/REIT investigation showed the trade-off clearly: a profile could
+move absent industrial metrics such as gross profit, cost of revenue, current
+assets/current liabilities, and capital expenditures out of the missing queue.
+That made the summary cleaner, but introduced company classification work and
+the risk of hiding real misses too early. For now, keep those metrics in the
+`industry_sensitive` review lane instead of adding a profile layer.
+
 ## Unit Normalization
 
 XBRL unit IDs such as `U_USD` are local to a filing and are not comparable

@@ -39,9 +39,10 @@ these states separate:
 - `source_error`: the local filing path cannot be inspected.
 
 For parsed views, the report also records which canonical taxonomy metrics are
-present or missing. Missing quarterly index files and missing filings produce
-structured acquisition requests. These requests are suggestions for a later
-index, filings, or parse invocation; the coverage command never executes them.
+present, missing, or supplemental-only. Missing quarterly index files and
+missing filings produce structured acquisition requests. These requests are
+suggestions for a later index, filings, or parse invocation; the coverage
+command never executes them.
 
 The expected population is deliberately conservative: it is made from records
 present in `master.tsv` after applying the set, CIK, form-type, and year
