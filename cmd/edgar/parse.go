@@ -75,7 +75,7 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, err)
 	}
 
-	if err := applyYearSelection(flags, &cfg.parse.filter, cfg.parse.year,
+	if err := applyYearSelection(&cfg.parse.filter, cfg.parse.year,
 		cfg.parse.fromYear, cfg.parse.toYear); err != nil {
 		return subcommandError(flags, err)
 	}

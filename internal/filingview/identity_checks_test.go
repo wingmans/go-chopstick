@@ -48,9 +48,9 @@ func TestCheckAccountingIdentitiesAllowsRoundingTolerance(t *testing.T) {
 
 func TestCheckAccountingIdentitiesSkipsDifferentContexts(t *testing.T) {
 	view := balanceIdentityRowsView(
-		identityRowWithContext("assets", "USD", "2026-06-30", "150", "0", "assets-context"),
-		identityRowWithContext("liabilities", "USD", "2026-06-30", "75", "0", "liabilities-context"),
-		identityRowWithContext("equity", "USD", "2026-06-30", "75", "0", "equity-context"),
+		identityRowWithContext("assets", "150", "0", "assets-context"),
+		identityRowWithContext("liabilities", "75", "0", "liabilities-context"),
+		identityRowWithContext("equity", "75", "0", "equity-context"),
 	)
 
 	check := identityCheckByName(CheckAccountingIdentities(view), "assets = liabilities + equity")
@@ -65,9 +65,9 @@ func TestCheckAccountingIdentitiesSkipsDifferentContexts(t *testing.T) {
 
 func TestCheckAccountingIdentitiesSupportsAddition(t *testing.T) {
 	view := balanceIdentityRowsView(
-		identityRow("assets", "USD", "2026-06-30", "150", "0"),
-		identityRow("liabilities", "USD", "2026-06-30", "75", "0"),
-		identityRow("equity", "USD", "2026-06-30", "75", "0"),
+		identityRow("assets", "150", "0"),
+		identityRow("liabilities", "75", "0"),
+		identityRow("equity", "75", "0"),
 	)
 
 	check := identityCheckByName(CheckAccountingIdentities(view), "assets = liabilities + equity")
@@ -78,11 +78,11 @@ func TestCheckAccountingIdentitiesSupportsAddition(t *testing.T) {
 
 func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T) {
 	view := balanceIdentityRowsView(
-		identityRow("assets", "USD", "2026-06-30", "150", "0"),
-		identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
-		identityRow("equity", "USD", "2026-06-30", "50", "0"),
-		identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "55", "0"),
-		identityRow("liabilities_and_equity", "USD", "2026-06-30", "150", "0"),
+		identityRow("assets", "150", "0"),
+		identityRow("liabilities", "90", "0"),
+		identityRow("equity", "50", "0"),
+		identityRow("equity_including_noncontrolling_interest", "55", "0"),
+		identityRow("liabilities_and_equity", "150", "0"),
 	)
 
 	checks := CheckAccountingIdentities(view)
@@ -105,10 +105,10 @@ func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T
 
 func TestCheckAccountingIdentitiesUsesNCIInclusiveEquityWhenPresent(t *testing.T) {
 	view := balanceIdentityRowsView(
-		identityRow("assets", "USD", "2026-06-30", "150", "0"),
-		identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
-		identityRow("equity", "USD", "2026-06-30", "50", "0"),
-		identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "60", "0"),
+		identityRow("assets", "150", "0"),
+		identityRow("liabilities", "90", "0"),
+		identityRow("equity", "50", "0"),
+		identityRow("equity_including_noncontrolling_interest", "60", "0"),
 	)
 
 	checks := CheckAccountingIdentities(view)
@@ -174,9 +174,9 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 
 func balanceIdentityTestView(assets, liabilities, equity, decimals string) View {
 	return balanceIdentityRowsView(
-		identityRow("assets", "USD", "2026-06-30", assets, decimals),
-		identityRow("liabilities", "USD", "2026-06-30", liabilities, decimals),
-		identityRow("equity", "USD", "2026-06-30", equity, decimals),
+		identityRow("assets", assets, decimals),
+		identityRow("liabilities", liabilities, decimals),
+		identityRow("equity", equity, decimals),
 	)
 }
 
@@ -205,13 +205,15 @@ func balanceIdentityRowsView(rows ...FactSeries) View {
 	}
 }
 
-func identityRow(key, unit, period, value, decimals string) FactSeries {
-	return identityRowWithContext(key, unit, period, value, decimals, "")
+func identityRow(key, value, decimals string) FactSeries {
+	return identityRowWithContext(key, value, decimals, "")
 }
 
-func identityRowWithContext(key, unit, period, value, decimals, context string) FactSeries {
+func identityRowWithContext(key, value, decimals, context string) FactSeries {
+	const period = "2026-06-30"
+
 	return FactSeries{
-		Key: key, Label: key, Namespace: "test", Concept: key, Unit: unit,
+		Key: key, Label: key, Namespace: "test", Concept: key, Unit: "USD",
 		Values: map[string]FactValue{
 			period: {
 				Value: value, Nil: false, ContextRef: context,

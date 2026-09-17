@@ -130,7 +130,7 @@ func TestBuildSelectsDuplicateFactIndependentOfEncounterOrder(t *testing.T) {
 	}, Priority: 1}
 
 	selected, concept := selectFact(first, edgar.QName{Namespace: "", Local: ""}, second)
-	selected, concept = selectFact(selected, concept, third)
+	selected, _ = selectFact(selected, concept, third)
 
 	if selected.Value != "exact-wins" || selected.ContextRef != "c1" {
 		t.Fatalf("unexpected selected fact: %+v", selected)

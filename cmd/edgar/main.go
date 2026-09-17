@@ -393,7 +393,7 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, err)
 	}
 
-	if err := applyYearSelection(flags, &cfg.taxonomy.filter, cfg.taxonomy.year,
+	if err := applyYearSelection(&cfg.taxonomy.filter, cfg.taxonomy.year,
 		cfg.taxonomy.fromYear, cfg.taxonomy.toYear); err != nil {
 		return subcommandError(flags, err)
 	}
@@ -737,7 +737,7 @@ func parseFilingDate(value string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("invalid filing date %q", value)
 }
 
-func applyYearSelection(flags *flag.FlagSet, filter *edgar.IndexFilter, year string, fromYear, toYear int) error {
+func applyYearSelection(filter *edgar.IndexFilter, year string, fromYear, toYear int) error {
 	if fromYear != 0 && (fromYear < edgar.EarliestYear || fromYear > 9999) {
 		return errors.New("--from-year must be a valid EDGAR year")
 	}
@@ -883,7 +883,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, err)
 	}
 
-	if err := applyYearSelection(flags, &cfg.filings.filter, cfg.filings.year,
+	if err := applyYearSelection(&cfg.filings.filter, cfg.filings.year,
 		cfg.filings.fromYear, cfg.filings.toYear); err != nil {
 		return subcommandError(flags, err)
 	}

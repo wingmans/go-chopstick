@@ -35,38 +35,40 @@ type identityTerm struct {
 	Sign   int64
 }
 
-var accountingIdentities = []identityDefinition{
-	{
-		Name: "assets = liabilities_and_equity", Statement: "balance",
-		Result: "assets",
-		Terms: []identityTerm{
-			{Metric: "liabilities_and_equity", Sign: 1},
+func accountingIdentities() []identityDefinition {
+	return []identityDefinition{
+		{
+			Name: "assets = liabilities_and_equity", Statement: "balance",
+			Result: "assets",
+			Terms: []identityTerm{
+				{Metric: "liabilities_and_equity", Sign: 1},
+			},
+			SkipWhenPresent: nil,
 		},
-		SkipWhenPresent: nil,
-	},
-	{
-		Name: "assets = liabilities + equity_including_noncontrolling_interest", Statement: "balance",
-		Result: "assets",
-		Terms: []identityTerm{
-			{Metric: "liabilities", Sign: 1},
-			{Metric: "equity_including_noncontrolling_interest", Sign: 1},
+		{
+			Name: "assets = liabilities + equity_including_noncontrolling_interest", Statement: "balance",
+			Result: "assets",
+			Terms: []identityTerm{
+				{Metric: "liabilities", Sign: 1},
+				{Metric: "equity_including_noncontrolling_interest", Sign: 1},
+			},
+			SkipWhenPresent: []string{
+				"liabilities_and_equity",
+			},
 		},
-		SkipWhenPresent: []string{
-			"liabilities_and_equity",
+		{
+			Name: "assets = liabilities + equity", Statement: "balance",
+			Result: "assets",
+			Terms: []identityTerm{
+				{Metric: "liabilities", Sign: 1},
+				{Metric: "equity", Sign: 1},
+			},
+			SkipWhenPresent: []string{
+				"liabilities_and_equity",
+				"equity_including_noncontrolling_interest",
+			},
 		},
-	},
-	{
-		Name: "assets = liabilities + equity", Statement: "balance",
-		Result: "assets",
-		Terms: []identityTerm{
-			{Metric: "liabilities", Sign: 1},
-			{Metric: "equity", Sign: 1},
-		},
-		SkipWhenPresent: []string{
-			"liabilities_and_equity",
-			"equity_including_noncontrolling_interest",
-		},
-	},
+	}
 }
 
 // CheckAccountingIdentities validates relationships between already-selected
@@ -76,7 +78,7 @@ var accountingIdentities = []identityDefinition{
 func CheckAccountingIdentities(view View) []IdentityCheck {
 	var result []IdentityCheck
 
-	for _, definition := range accountingIdentities {
+	for _, definition := range accountingIdentities() {
 		statement := identityStatement(view, definition.Statement)
 		for _, group := range statement.Groups {
 			result = append(result, checkIdentityGroup(definition, group)...)
@@ -281,7 +283,9 @@ func identityUsesMetric(definition identityDefinition, metric string) bool {
 }
 
 func identityMetrics(definition identityDefinition) []string {
-	result := []string{definition.Result}
+	result := make([]string, 0, 1+len(definition.Terms))
+	result = append(result, definition.Result)
+
 	for _, term := range definition.Terms {
 		result = append(result, term.Metric)
 	}
