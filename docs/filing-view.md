@@ -112,3 +112,7 @@ historical 10-K data only for Microsoft. More Microsoft filings should be
 validated before broadening the dataset to other companies. This gives us a
 controlled way to detect period selection, concept mapping, sign, unit, and
 restatement errors before introducing DuckDB or a larger storage layer.
+The coverage package also keeps a small
+`internal/coverage/testdata/golden-expected-coverage.json` fixture for expected
+metric-presence behavior across clean, dimensional-evidence, and known hard-gap
+cases.

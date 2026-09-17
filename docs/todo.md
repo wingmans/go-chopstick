@@ -9,7 +9,7 @@ This is the current roadmap after the first end-to-end and taxonomy passes.
 - [x] Preserve or explicitly exclude dimensional facts.
 - [x] Add accounting identity checks.
 - Expand and review the taxonomy across the 19-company validation set.
-- Add stronger golden expected-value fixtures.
+- [x] Add stronger golden expected-value fixtures.
 
 ## Legacy XBRL Compatibility
 

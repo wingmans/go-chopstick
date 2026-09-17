@@ -1,0 +1,71 @@
+{
+  "cases": [
+    {
+      "name": "clean industrial baseline",
+      "cik": "789019",
+      "company": "MICROSOFT CORP",
+      "accession": "0001193125-26-323660",
+      "date_filed": "2026-07-30",
+      "present_metrics": [
+        "cash",
+        "eps_diluted",
+        "investing_cash_flow",
+        "revenue"
+      ],
+      "missing_core": [],
+      "dimensional_evidence": {}
+    },
+    {
+      "name": "dimensional basic EPS evidence",
+      "cik": "1067983",
+      "company": "BERKSHIRE HATHAWAY INC",
+      "accession": "0000950170-24-019719",
+      "date_filed": "2024-02-26",
+      "present_metrics": [
+        "cash",
+        "investing_cash_flow",
+        "revenue"
+      ],
+      "missing_core": [
+        "eps_diluted"
+      ],
+      "dimensional_evidence": {
+        "eps_diluted": [
+          "eps_basic"
+        ]
+      }
+    },
+    {
+      "name": "known hard cash gap",
+      "cik": "18230",
+      "company": "CATERPILLAR INC",
+      "accession": "0000018230-18-000042",
+      "date_filed": "2018-02-15",
+      "present_metrics": [
+        "eps_diluted",
+        "investing_cash_flow",
+        "revenue"
+      ],
+      "missing_core": [
+        "cash"
+      ],
+      "dimensional_evidence": {}
+    },
+    {
+      "name": "known sparse transitional filing",
+      "cik": "1707925",
+      "company": "LINDE PLC",
+      "accession": "0001707925-18-000004",
+      "date_filed": "2018-03-23",
+      "present_metrics": [
+        "cash",
+        "eps_diluted"
+      ],
+      "missing_core": [
+        "investing_cash_flow",
+        "revenue"
+      ],
+      "dimensional_evidence": {}
+    }
+  ]
+}
