@@ -36,6 +36,11 @@
           "namespace_family": "us-gaap",
           "name": "SalesRevenueGoodsNet",
           "priority": 6
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "RealEstateRevenueNet",
+          "priority": 7
         }
       ]
     },
@@ -231,6 +236,11 @@
           "namespace_family": "us-gaap",
           "name": "NetCashProvidedByUsedInOperatingActivities",
           "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+          "priority": 2
         }
       ]
     },
@@ -243,6 +253,11 @@
           "namespace_family": "us-gaap",
           "name": "NetCashProvidedByUsedInInvestingActivities",
           "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations",
+          "priority": 2
         }
       ]
     },
@@ -255,6 +270,11 @@
           "namespace_family": "us-gaap",
           "name": "NetCashProvidedByUsedInFinancingActivities",
           "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "NetCashProvidedByUsedInFinancingActivitiesContinuingOperations",
+          "priority": 2
         }
       ]
     },
