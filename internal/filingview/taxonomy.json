@@ -21,6 +21,21 @@
           "namespace_family": "us-gaap",
           "name": "SalesRevenueNet",
           "priority": 3
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "RevenueFromContractWithCustomerIncludingAssessedTax",
+          "priority": 4
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "RegulatedAndUnregulatedOperatingRevenue",
+          "priority": 5
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "SalesRevenueGoodsNet",
+          "priority": 6
         }
       ]
     },
