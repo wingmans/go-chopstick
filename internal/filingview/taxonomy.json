@@ -151,6 +151,16 @@
           "namespace_family": "us-gaap",
           "name": "CashAndCashEquivalentsAtCarryingValue",
           "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+          "priority": 2
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "CashAndDueFromBanks",
+          "priority": 3
         }
       ]
     },
