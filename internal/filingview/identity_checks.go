@@ -50,13 +50,24 @@ var accountingIdentities = []identityDefinition{
 		},
 	},
 	{
+		Name: "assets = liabilities + equity_including_noncontrolling_interest", Statement: "balance",
+		Result: "assets",
+		Terms: []identityTerm{
+			{Metric: "liabilities", Sign: 1},
+			{Metric: "equity_including_noncontrolling_interest", Sign: 1},
+		},
+	},
+	{
 		Name: "assets = liabilities + equity", Statement: "balance",
 		Result: "assets",
 		Terms: []identityTerm{
 			{Metric: "liabilities", Sign: 1},
 			{Metric: "equity", Sign: 1},
 		},
-		SkipWhenPresent: []string{"liabilities_and_equity"},
+		SkipWhenPresent: []string{
+			"liabilities_and_equity",
+			"equity_including_noncontrolling_interest",
+		},
 	},
 }
 

@@ -75,6 +75,32 @@ func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T
 	}
 }
 
+func TestCheckAccountingIdentitiesUsesNCIInclusiveEquityWhenPresent(t *testing.T) {
+	view := View{Statements: Statements{
+		Balance: StatementView{Groups: []SummaryGroup{{
+			Title:   "Instant",
+			Periods: []string{"2026-06-30"},
+			Rows: []FactSeries{
+				identityRow("assets", "USD", "2026-06-30", "150", "0"),
+				identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
+				identityRow("equity", "USD", "2026-06-30", "50", "0"),
+				identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "60", "0"),
+			},
+		}}},
+	}}
+
+	checks := CheckAccountingIdentities(view)
+	nci := identityCheckByName(checks, "assets = liabilities + equity_including_noncontrolling_interest")
+	if nci == nil || nci.Status != identityPass {
+		t.Fatalf("unexpected NCI-inclusive balance identity check: %+v", checks)
+	}
+
+	fallback := identityCheckByName(checks, "assets = liabilities + equity")
+	if fallback != nil {
+		t.Fatalf("plain equity fallback should be skipped when NCI-inclusive equity exists: %+v", fallback)
+	}
+}
+
 func TestLintViewReportsIdentityFailures(t *testing.T) {
 	report := LintView(identityTestView("100", "40", "50", "0"), Taxonomy{
 		SchemaVersion: 1, TaxonomyVersion: "test",
@@ -94,6 +120,11 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 
 	if !found {
 		t.Fatalf("missing identity quality issue: %+v", report.QualityIssues)
+	}
+
+	if len(report.QualityChecks) != 1 || report.QualityChecks[0].Actual != "50.00" ||
+		report.QualityChecks[0].Expected != "60.00" {
+		t.Fatalf("missing structured identity quality check: %+v", report.QualityChecks)
 	}
 }
 

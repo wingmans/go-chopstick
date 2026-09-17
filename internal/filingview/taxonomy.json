@@ -190,6 +190,24 @@
       ]
     },
     {
+      "key": "equity_including_noncontrolling_interest",
+      "label": "Equity including noncontrolling interest",
+      "statement": "balance",
+      "coverage_tier": "supplemental",
+      "concepts": [
+        {
+          "namespace_family": "us-gaap",
+          "name": "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+          "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest",
+          "priority": 2
+        }
+      ]
+    },
+    {
       "key": "operating_cash_flow",
       "label": "Operating cash flow",
       "statement": "cash_flow",

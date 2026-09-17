@@ -13,11 +13,12 @@ type LintTerm struct {
 }
 
 type LintReport struct {
-	TaxonomyVersion string     `json:"taxonomy_version"`
-	Rows            int        `json:"rows"`
-	Mapped          int        `json:"mapped"`
-	Unmapped        []LintTerm `json:"unmapped"`
-	QualityIssues   []string   `json:"quality_issues"`
+	TaxonomyVersion string          `json:"taxonomy_version"`
+	Rows            int             `json:"rows"`
+	Mapped          int             `json:"mapped"`
+	Unmapped        []LintTerm      `json:"unmapped"`
+	QualityIssues   []string        `json:"quality_issues"`
+	QualityChecks   []IdentityCheck `json:"quality_checks,omitempty"`
 }
 
 // LintView checks the compact model against the taxonomy. Unmapped terms are
@@ -87,10 +88,12 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 	visit(view.Statements.Balance.Groups)
 	visit(view.Statements.CashFlow.Groups)
 
+	var qualityChecks []IdentityCheck
 	for _, check := range CheckAccountingIdentities(view) {
 		if check.Status == identityFail {
 			qualityIssues["identity check failed: "+check.Name+
 				" period="+check.Period+" unit="+check.Unit] = struct{}{}
+			qualityChecks = append(qualityChecks, check)
 		}
 	}
 
@@ -113,11 +116,21 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 	}
 
 	sort.Strings(quality)
+	sort.Slice(qualityChecks, func(i, j int) bool {
+		if qualityChecks[i].Name != qualityChecks[j].Name {
+			return qualityChecks[i].Name < qualityChecks[j].Name
+		}
+		if qualityChecks[i].Period != qualityChecks[j].Period {
+			return qualityChecks[i].Period < qualityChecks[j].Period
+		}
+
+		return qualityChecks[i].Unit < qualityChecks[j].Unit
+	})
 
 	return LintReport{
 		TaxonomyVersion: taxonomy.TaxonomyVersion,
 		Rows:            rows, Mapped: mapped,
-		Unmapped: result, QualityIssues: quality,
+		Unmapped: result, QualityIssues: quality, QualityChecks: qualityChecks,
 	}
 }
 

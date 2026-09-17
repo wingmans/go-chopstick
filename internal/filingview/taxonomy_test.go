@@ -28,11 +28,11 @@ func TestLoadTaxonomyDefault(t *testing.T) {
 		t.Fatalf("expected liabilities and equity concept to resolve, got %+v", metric)
 	}
 
-	if _, ok := taxonomy.metricForConcept(
+	if metric, ok := taxonomy.metricForConcept(
 		"http://fasb.org/us-gaap/2024",
 		"StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
-	); ok {
-		t.Fatal("NCI-inclusive equity must not resolve as plain shareholders' equity")
+	); !ok || metric.Key != "equity_including_noncontrolling_interest" {
+		t.Fatalf("expected NCI-inclusive equity concept to resolve separately, got %+v", metric)
 	}
 }
 

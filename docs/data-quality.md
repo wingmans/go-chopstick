@@ -101,11 +101,13 @@ unit. This avoids false warnings where a filing's total equity includes
 noncontrolling interest but the plain `equity` metric represents only
 shareholders' equity.
 
-`StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` is
-therefore not mapped to the plain `equity` metric. Future taxonomy work can
-add a separate noncontrolling-interest-aware equity metric or an ownership
-breakdown view. Until then, the concept should remain visible in source
-coverage output rather than quietly changing debt-to-equity semantics.
+`StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` and
+`PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest` are
+therefore mapped to a separate supplemental
+`equity_including_noncontrolling_interest` metric, not to plain `equity`. That
+metric can support NCI-aware identity checks without quietly changing
+debt-to-equity semantics or making NCI-inclusive equity a required coverage
+metric.
 
 Future work can add more identities after their sign conventions are reviewed,
 for example cash reconciliation or free cash flow. Those formulas should stay

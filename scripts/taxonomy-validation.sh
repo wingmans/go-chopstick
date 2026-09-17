@@ -246,6 +246,37 @@ write_lint_text_summary() {
       "- quality issues: \(.quality_issues // 0)"
     ' "$RUN_DIR/lint-report.json"
 
+    printf '\n## Quality Issue Formulas\n\n'
+    append_jq_lines '_None._' "$RUN_DIR/lint-report.json" '
+      [.filings[] | .lint.quality_checks[]? | {name}] |
+      group_by(.name) |
+      map({name: .[0].name, count: length}) |
+      sort_by(-.count, .name) |
+      .[:12][] |
+      "- \(.count) \(.name)"
+    '
+
+    printf '\n## Largest Quality Deltas\n\n'
+    append_jq_lines '_None._' "$RUN_DIR/lint-report.json" '
+      [.filings[] | . as $f | .lint.quality_checks[]? |
+        {
+          cik: $f.cik,
+          accession: $f.accession,
+          filing_date: $f.filing_date,
+          name,
+          period,
+          unit,
+          actual,
+          expected,
+          tolerance,
+          delta: (((.actual | tonumber) - (.expected | tonumber)) | fabs)
+        }
+      ] |
+      sort_by(-.delta, .cik, .accession, .period) |
+      .[:20][] |
+      "- delta=\(.delta) actual=\(.actual) expected=\(.expected) tolerance=\(.tolerance) \(.name) \(.period) \(.unit); \(.cik) \(.accession) \(.filing_date)"
+    '
+
     printf '\n## Remaining Quality Issues\n\n'
     append_jq_lines '_None._' "$RUN_DIR/lint-report.json" '
       [.filings[] | . as $f | ($f.lint.quality_issues // [])[] | {issue: .}] |
