@@ -110,8 +110,8 @@ selection, sign policy, or source presentation issues.
 
 Current checks:
 
-- `gross_profit = revenue - cost_of_revenue`
 - `assets = liabilities_and_equity`
+- `assets = liabilities + equity_including_noncontrolling_interest`
 - `assets = liabilities + equity`
 
 Checks only compare facts for the same period and normalized unit. Values are
@@ -121,10 +121,10 @@ drift is allowed before a warning is emitted.
 
 The balance-sheet checks prefer a direct `liabilities_and_equity` total when
 the filing provides one. In that case the broader
-`assets = liabilities + equity` fallback is skipped for the same period and
-unit. This avoids false warnings where a filing's total equity includes
-noncontrolling interest but the plain `equity` metric represents only
-shareholders' equity.
+`assets = liabilities + equity_including_noncontrolling_interest` and
+`assets = liabilities + equity` fallbacks are skipped for the same period and
+unit. This avoids false warnings where a direct total reconciles but component
+subtotals follow issuer-specific presentation.
 
 `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` and
 `PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest` are
@@ -134,6 +134,9 @@ metric can support NCI-aware identity checks without quietly changing
 debt-to-equity semantics or making NCI-inclusive equity a required coverage
 metric.
 
-Future work can add more identities after their sign conventions are reviewed,
-for example cash reconciliation or free cash flow. Those formulas should stay
-explicit in code rather than being inferred from labels.
+Future work can add more identities after their sign conventions and source
+evidence are reviewed, for example gross profit, cash reconciliation, or free
+cash flow. Gross profit specifically should wait for calculation-link or
+statement-presentation evidence because `revenue - cost_of_revenue` can differ
+from reported gross profit for legitimate issuer presentation reasons. Those
+formulas should stay explicit in code rather than being inferred from labels.

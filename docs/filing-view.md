@@ -86,10 +86,9 @@ gross margin, operating margin, net margin, current ratio, and liabilities to
 equity. They are not XBRL facts and must not be mistaken for reported values.
 
 `quality.identity_checks` records accounting identity checks evaluated during
-the compact-view build. These findings compare selected rows, such as
-`gross_profit = revenue - cost_of_revenue`, using normalized units and
-rounding tolerances from source decimals. They are warnings only and do not
-change reported values.
+the compact-view build. These findings currently focus on balance-sheet
+identities, using normalized units and rounding tolerances from source
+decimals. They are warnings only and do not change reported values.
 
 ## Taxonomy
 

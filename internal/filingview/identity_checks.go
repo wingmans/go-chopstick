@@ -35,14 +35,6 @@ type identityTerm struct {
 
 var accountingIdentities = []identityDefinition{
 	{
-		Name: "gross_profit = revenue - cost_of_revenue", Statement: "income",
-		Result: "gross_profit",
-		Terms: []identityTerm{
-			{Metric: "revenue", Sign: 1},
-			{Metric: "cost_of_revenue", Sign: -1},
-		},
-	},
-	{
 		Name: "assets = liabilities_and_equity", Statement: "balance",
 		Result: "assets",
 		Terms: []identityTerm{
@@ -182,6 +174,13 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 		expected.Add(expected, new(big.Rat).Mul(number, big.NewRat(term.Sign, 1)))
 	}
 
+	check.Evidence = evidence
+	if !identitySameContext(values...) {
+		check.Message = "formula facts use different contexts"
+
+		return check
+	}
+
 	tolerance := identityTolerance(values...)
 	difference := new(big.Rat).Sub(actual, expected)
 	difference.Abs(difference)
@@ -189,7 +188,6 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 	check.Expected = expected.FloatString(2)
 	check.Actual = actual.FloatString(2)
 	check.Tolerance = tolerance.FloatString(2)
-	check.Evidence = evidence
 
 	check.Status = identityPass
 	if difference.Cmp(tolerance) > 0 {
@@ -198,6 +196,21 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 	}
 
 	return check
+}
+
+func identitySameContext(values ...FactValue) bool {
+	if len(values) == 0 {
+		return true
+	}
+
+	context := values[0].ContextRef
+	for _, value := range values[1:] {
+		if value.ContextRef != context {
+			return false
+		}
+	}
+
+	return true
 }
 
 func identityStatement(view View, statement string) StatementView {

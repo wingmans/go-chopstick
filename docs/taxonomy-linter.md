@@ -62,6 +62,10 @@ evidence for each formula input. Evidence records include metric, role, sign,
 concept, context reference, reported value, decimals, and unit reference so
 reviewers can distinguish taxonomy mistakes from context/period selection or
 issuer-specific presentation.
+Formula checks only compare facts selected for the same period, unit, and
+source context. When the compact rows share a display period but come from
+different XBRL contexts, the check is skipped instead of reported as a quality
+issue.
 
 The expected filing coverage report also contains per-filing metric presence.
 Useful review one-liners are:
@@ -155,7 +159,6 @@ Identity checks compare related reported facts without inventing replacements.
 Examples include:
 
 - assets versus liabilities plus equity;
-- gross profit versus revenue minus cost of revenue;
 - ending cash versus beginning cash plus cash-flow components.
 
 Identity checks now run during compact-view build and taxonomy lint. Failures
@@ -170,6 +173,13 @@ shareholders' equity may exclude noncontrolling interest. Do not map
 `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` to
 plain `equity` unless the downstream ratios and labels are also made
 noncontrolling-interest-aware.
+
+Gross-profit identity checks are intentionally not active yet. Golden-set
+evidence showed that `revenue - cost_of_revenue` can disagree with reported
+gross profit for legitimate issuer presentation reasons, such as revenue that
+includes financing, membership, service, or other amounts outside the gross
+profit subtotal. Bring this check back only when calculation-link or statement
+presentation evidence proves the selected facts are intended to reconcile.
 
 ## Interpretation
 

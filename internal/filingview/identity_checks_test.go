@@ -3,42 +3,65 @@ package filingview
 import "testing"
 
 func TestCheckAccountingIdentitiesReportsFailure(t *testing.T) {
-	view := identityTestView("100", "40", "50", "0")
+	view := balanceIdentityTestView("100", "40", "50", "0")
 
 	checks := CheckAccountingIdentities(view)
 
-	failure := identityCheckByName(checks, "gross_profit = revenue - cost_of_revenue")
+	failure := identityCheckByName(checks, "assets = liabilities + equity")
 	if failure == nil {
 		t.Fatalf("missing identity check: %+v", checks)
 	}
 
-	if failure.Status != identityFail || failure.Expected != "60.00" || failure.Actual != "50.00" {
+	if failure.Status != identityFail || failure.Expected != "90.00" || failure.Actual != "100.00" {
 		t.Fatalf("unexpected identity failure: %+v", failure)
 	}
 
 	if len(failure.Evidence) != 3 ||
-		failure.Evidence[0].Metric != "gross_profit" ||
+		failure.Evidence[0].Metric != "assets" ||
 		failure.Evidence[0].Role != "actual" ||
-		failure.Evidence[1].Metric != "revenue" ||
+		failure.Evidence[1].Metric != "liabilities" ||
 		failure.Evidence[1].Sign != 1 ||
-		failure.Evidence[2].Metric != "cost_of_revenue" ||
-		failure.Evidence[2].Sign != -1 {
+		failure.Evidence[2].Metric != "equity" ||
+		failure.Evidence[2].Sign != 1 {
 		t.Fatalf("unexpected identity evidence: %+v", failure.Evidence)
 	}
 }
 
 func TestCheckAccountingIdentitiesAllowsRoundingTolerance(t *testing.T) {
-	view := identityTestView("1000", "400", "601", "-3")
+	view := balanceIdentityTestView("1000", "400", "601", "-3")
 
 	checks := CheckAccountingIdentities(view)
 
-	check := identityCheckByName(checks, "gross_profit = revenue - cost_of_revenue")
+	check := identityCheckByName(checks, "assets = liabilities + equity")
 	if check == nil {
 		t.Fatalf("missing identity check: %+v", checks)
 	}
 
 	if check.Status != identityPass {
 		t.Fatalf("rounded values should pass within tolerance: %+v", check)
+	}
+}
+
+func TestCheckAccountingIdentitiesSkipsDifferentContexts(t *testing.T) {
+	view := View{Statements: Statements{
+		Balance: StatementView{Groups: []SummaryGroup{{
+			Title:   "Instant",
+			Periods: []string{"2026-06-30"},
+			Rows: []FactSeries{
+				identityRowWithContext("assets", "USD", "2026-06-30", "150", "0", "assets-context"),
+				identityRowWithContext("liabilities", "USD", "2026-06-30", "75", "0", "liabilities-context"),
+				identityRowWithContext("equity", "USD", "2026-06-30", "75", "0", "equity-context"),
+			},
+		}}},
+	}}
+
+	check := identityCheckByName(CheckAccountingIdentities(view), "assets = liabilities + equity")
+	if check == nil {
+		t.Fatalf("missing identity check")
+	}
+
+	if check.Status != identitySkipped || check.Message != "formula facts use different contexts" {
+		t.Fatalf("context mismatch should skip identity check: %+v", check)
 	}
 }
 
@@ -122,19 +145,19 @@ func TestCheckAccountingIdentitiesUsesNCIInclusiveEquityWhenPresent(t *testing.T
 }
 
 func TestLintViewReportsIdentityFailures(t *testing.T) {
-	report := LintView(identityTestView("100", "40", "50", "0"), Taxonomy{
+	report := LintView(balanceIdentityTestView("100", "40", "50", "0"), Taxonomy{
 		SchemaVersion: 1, TaxonomyVersion: "test",
 		Metrics: []MetricDefinition{
-			{Key: "revenue", Label: "Revenue", Statement: "income", Concepts: []ConceptReference{{Name: "Revenue", NamespaceFamily: "any"}}},
-			{Key: "cost_of_revenue", Label: "Cost", Statement: "income", Concepts: []ConceptReference{{Name: "Cost", NamespaceFamily: "any"}}},
-			{Key: "gross_profit", Label: "Gross profit", Statement: "income", Concepts: []ConceptReference{{Name: "GrossProfit", NamespaceFamily: "any"}}},
+			{Key: "assets", Label: "Assets", Statement: "balance", Concepts: []ConceptReference{{Name: "Assets", NamespaceFamily: "any"}}},
+			{Key: "liabilities", Label: "Liabilities", Statement: "balance", Concepts: []ConceptReference{{Name: "Liabilities", NamespaceFamily: "any"}}},
+			{Key: "equity", Label: "Equity", Statement: "balance", Concepts: []ConceptReference{{Name: "Equity", NamespaceFamily: "any"}}},
 		},
 	})
 
 	found := false
 
 	for _, issue := range report.QualityIssues {
-		if issue == "identity check failed: gross_profit = revenue - cost_of_revenue period=FY2026 unit=USD" {
+		if issue == "identity check failed: assets = liabilities + equity period=2026-06-30 unit=USD" {
 			found = true
 		}
 	}
@@ -143,8 +166,8 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 		t.Fatalf("missing identity quality issue: %+v", report.QualityIssues)
 	}
 
-	if len(report.QualityChecks) != 1 || report.QualityChecks[0].Actual != "50.00" ||
-		report.QualityChecks[0].Expected != "60.00" {
+	if len(report.QualityChecks) != 1 || report.QualityChecks[0].Actual != "100.00" ||
+		report.QualityChecks[0].Expected != "90.00" {
 		t.Fatalf("missing structured identity quality check: %+v", report.QualityChecks)
 	}
 
@@ -153,25 +176,29 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 	}
 }
 
-func identityTestView(revenue, cost, grossProfit, decimals string) View {
+func balanceIdentityTestView(assets, liabilities, equity, decimals string) View {
 	return View{Statements: Statements{
-		Income: StatementView{Groups: []SummaryGroup{{
-			Title:   "Fiscal year",
-			Periods: []string{"FY2026"},
+		Balance: StatementView{Groups: []SummaryGroup{{
+			Title:   "Instant",
+			Periods: []string{"2026-06-30"},
 			Rows: []FactSeries{
-				identityRow("revenue", "USD", "FY2026", revenue, decimals),
-				identityRow("cost_of_revenue", "USD", "FY2026", cost, decimals),
-				identityRow("gross_profit", "USD", "FY2026", grossProfit, decimals),
+				identityRow("assets", "USD", "2026-06-30", assets, decimals),
+				identityRow("liabilities", "USD", "2026-06-30", liabilities, decimals),
+				identityRow("equity", "USD", "2026-06-30", equity, decimals),
 			},
 		}}},
 	}}
 }
 
 func identityRow(key, unit, period, value, decimals string) FactSeries {
+	return identityRowWithContext(key, unit, period, value, decimals, "")
+}
+
+func identityRowWithContext(key, unit, period, value, decimals, context string) FactSeries {
 	return FactSeries{
 		Key: key, Label: key, Namespace: "test", Concept: key, Unit: unit,
 		Values: map[string]FactValue{
-			period: {Value: value, Decimals: decimals},
+			period: {Value: value, Decimals: decimals, ContextRef: context},
 		},
 	}
 }
