@@ -161,6 +161,7 @@ func (r CoverageReport) String() string {
 		fmt.Fprintf(&result, "\n  unmapped %s %s count=%d", term.Namespace,
 			term.Concept, term.Count)
 	}
+
 	if omitted := len(r.Unmapped) - minInt(len(r.Unmapped), coverageTextLimit); omitted > 0 {
 		fmt.Fprintf(&result, "\n  unmapped ... omitted=%d", omitted)
 	}
@@ -169,6 +170,7 @@ func (r CoverageReport) String() string {
 		fmt.Fprintf(&result, "\n  extension %s %s count=%d", term.Namespace,
 			term.Concept, term.Count)
 	}
+
 	if omitted := len(r.Extensions) - minInt(len(r.Extensions), coverageTextLimit); omitted > 0 {
 		fmt.Fprintf(&result, "\n  extension ... omitted=%d", omitted)
 	}

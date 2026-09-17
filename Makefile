@@ -10,7 +10,7 @@ help:
 		'  make help         Display this command list' \
 		'  make build        Build all command binaries' \
 		'  make constituents Download the current S&P 500 constituent set' \
-		'  make lint         Run golangci-lint' \
+		'  make lint         Run golangci-lint with auto-fixes' \
 		'  make integration  Run the EDGAR end-to-end test' \
 		'  make taxonomy-validation  Run the 19-company taxonomy validation pass' \
 		'  make run          Run the ECB command' \
@@ -29,7 +29,7 @@ constituents:
 	go run ./cmd/constituents
 
 lint:
-	golangci-lint run ./cmd/... ./internal/...
+	golangci-lint run --fix ./cmd/... ./internal/...
 
 integration: build
 	bash scripts/edgar-e2e.sh

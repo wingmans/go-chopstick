@@ -22,6 +22,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 
 	for _, instance := range filing.Instances {
 		units := unitMap(instance)
+
 		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			if len(context.Dimensions) == 0 {

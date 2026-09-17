@@ -56,6 +56,9 @@ var accountingIdentities = []identityDefinition{
 			{Metric: "liabilities", Sign: 1},
 			{Metric: "equity_including_noncontrolling_interest", Sign: 1},
 		},
+		SkipWhenPresent: []string{
+			"liabilities_and_equity",
+		},
 	},
 	{
 		Name: "assets = liabilities + equity", Statement: "balance",
@@ -89,6 +92,7 @@ func CheckAccountingIdentities(view View) []IdentityCheck {
 		if result[i].Name != result[j].Name {
 			return result[i].Name < result[j].Name
 		}
+
 		if result[i].Period != result[j].Period {
 			return result[i].Period < result[j].Period
 		}
@@ -152,6 +156,7 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 
 	expected := new(big.Rat)
 	values := []FactValue{resultValue}
+
 	for _, term := range definition.Terms {
 		value, ok := identityValue(rows[term.Metric+"\x00"+unit], period)
 		if !ok {
@@ -168,6 +173,7 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 		}
 
 		values = append(values, value)
+
 		expected.Add(expected, new(big.Rat).Mul(number, big.NewRat(term.Sign, 1)))
 	}
 
@@ -178,6 +184,7 @@ func checkIdentityPeriod(definition identityDefinition, period, unit string, res
 	check.Expected = expected.FloatString(2)
 	check.Actual = actual.FloatString(2)
 	check.Tolerance = tolerance.FloatString(2)
+
 	check.Status = identityPass
 	if difference.Cmp(tolerance) > 0 {
 		check.Status = identityFail
@@ -216,6 +223,7 @@ func rowsByMetricAndUnit(rows []FactSeries) map[string]*FactSeries {
 
 func identityUnits(rows map[string]*FactSeries, definition identityDefinition) []string {
 	seen := map[string]struct{}{}
+
 	for key := range rows {
 		metric, unit, ok := strings.Cut(key, "\x00")
 		if !ok || !identityUsesMetric(definition, metric) {
@@ -297,8 +305,9 @@ func decimalsTolerance(decimals string) *big.Rat {
 	}
 
 	scale := new(big.Int)
-	if strings.HasPrefix(decimals, "-") {
-		exponent := strings.TrimPrefix(decimals, "-")
+
+	if after, ok := strings.CutPrefix(decimals, "-"); ok {
+		exponent := after
 		if _, ok := scale.SetString(exponent, 10); !ok {
 			return new(big.Rat)
 		}

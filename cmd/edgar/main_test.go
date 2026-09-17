@@ -235,6 +235,7 @@ func TestParseTaxonomyConfigRejectsUnknownFormat(t *testing.T) {
 func TestRunTaxonomyLintWritesJSONReport(t *testing.T) {
 	root := t.TempDir()
 	parsedDir := filepath.Join(root, "parsed")
+
 	viewPath := filepath.Join(parsedDir, "0000789019", "0000000001", "filing-view.json")
 	if err := os.MkdirAll(filepath.Dir(viewPath), 0o750); err != nil {
 		t.Fatalf("create view directory: %v", err)
@@ -265,15 +266,18 @@ func TestRunTaxonomyLintWritesJSONReport(t *testing.T) {
 			},
 		},
 	}
+
 	viewData, err := json.Marshal(view)
 	if err != nil {
 		t.Fatalf("encode view: %v", err)
 	}
+
 	if err := os.WriteFile(viewPath, viewData, 0o640); err != nil {
 		t.Fatalf("write view: %v", err)
 	}
 
 	out := filepath.Join(root, "reports", "lint.json")
+
 	err = runTaxonomyCommand(t.Context(), "lint", "", "", parsedDir,
 		edgar.IndexFilter{CIK: "789019", FormTypes: []string{"10-K"}},
 		"", 2020, 2025, "json", out)

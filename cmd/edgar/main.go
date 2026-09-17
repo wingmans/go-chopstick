@@ -478,6 +478,7 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 		Summary: taxonomyBatchSummary{},
 		Filings: nil,
 	}
+
 	var text strings.Builder
 
 	for _, filingPath := range paths {
@@ -664,8 +665,10 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 }
 
 func writeTaxonomyJSON(path string, report taxonomyBatchReport) error {
-	var writer io.Writer = os.Stdout
-	var file *os.File
+	var (
+		writer io.Writer = os.Stdout
+		file   *os.File
+	)
 
 	if path != "" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {

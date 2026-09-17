@@ -6,6 +6,7 @@ func TestCheckAccountingIdentitiesReportsFailure(t *testing.T) {
 	view := identityTestView("100", "40", "50", "0")
 
 	checks := CheckAccountingIdentities(view)
+
 	failure := identityCheckByName(checks, "gross_profit = revenue - cost_of_revenue")
 	if failure == nil {
 		t.Fatalf("missing identity check: %+v", checks)
@@ -20,6 +21,7 @@ func TestCheckAccountingIdentitiesAllowsRoundingTolerance(t *testing.T) {
 	view := identityTestView("1000", "400", "601", "-3")
 
 	checks := CheckAccountingIdentities(view)
+
 	check := identityCheckByName(checks, "gross_profit = revenue - cost_of_revenue")
 	if check == nil {
 		t.Fatalf("missing identity check: %+v", checks)
@@ -58,12 +60,14 @@ func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T
 				identityRow("assets", "USD", "2026-06-30", "150", "0"),
 				identityRow("liabilities", "USD", "2026-06-30", "90", "0"),
 				identityRow("equity", "USD", "2026-06-30", "50", "0"),
+				identityRow("equity_including_noncontrolling_interest", "USD", "2026-06-30", "55", "0"),
 				identityRow("liabilities_and_equity", "USD", "2026-06-30", "150", "0"),
 			},
 		}}},
 	}}
 
 	checks := CheckAccountingIdentities(view)
+
 	direct := identityCheckByName(checks, "assets = liabilities_and_equity")
 	if direct == nil || direct.Status != identityPass {
 		t.Fatalf("unexpected direct balance identity check: %+v", checks)
@@ -72,6 +76,11 @@ func TestCheckAccountingIdentitiesUsesDirectBalanceTotalWhenPresent(t *testing.T
 	fallback := identityCheckByName(checks, "assets = liabilities + equity")
 	if fallback != nil {
 		t.Fatalf("fallback balance check should be skipped when direct total exists: %+v", fallback)
+	}
+
+	nciFallback := identityCheckByName(checks, "assets = liabilities + equity_including_noncontrolling_interest")
+	if nciFallback != nil {
+		t.Fatalf("NCI-inclusive fallback should be skipped when direct total exists: %+v", nciFallback)
 	}
 }
 
@@ -90,6 +99,7 @@ func TestCheckAccountingIdentitiesUsesNCIInclusiveEquityWhenPresent(t *testing.T
 	}}
 
 	checks := CheckAccountingIdentities(view)
+
 	nci := identityCheckByName(checks, "assets = liabilities + equity_including_noncontrolling_interest")
 	if nci == nil || nci.Status != identityPass {
 		t.Fatalf("unexpected NCI-inclusive balance identity check: %+v", checks)
@@ -112,6 +122,7 @@ func TestLintViewReportsIdentityFailures(t *testing.T) {
 	})
 
 	found := false
+
 	for _, issue := range report.QualityIssues {
 		if issue == "identity check failed: gross_profit = revenue - cost_of_revenue period=FY2026 unit=USD" {
 			found = true

@@ -89,6 +89,7 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 	visit(view.Statements.CashFlow.Groups)
 
 	var qualityChecks []IdentityCheck
+
 	for _, check := range CheckAccountingIdentities(view) {
 		if check.Status == identityFail {
 			qualityIssues["identity check failed: "+check.Name+
@@ -120,6 +121,7 @@ func LintView(view View, taxonomy Taxonomy) LintReport {
 		if qualityChecks[i].Name != qualityChecks[j].Name {
 			return qualityChecks[i].Name < qualityChecks[j].Name
 		}
+
 		if qualityChecks[i].Period != qualityChecks[j].Period {
 			return qualityChecks[i].Period < qualityChecks[j].Period
 		}

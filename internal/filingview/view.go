@@ -169,6 +169,7 @@ func countDimensionalFacts(instance edgar.XBRLInstance) int {
 	}
 
 	count := 0
+
 	for _, fact := range instance.Facts {
 		context, ok := contexts[fact.ContextRef]
 		if ok && len(context.Dimensions) > 0 {
@@ -263,6 +264,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 
 	for _, instance := range filing.Instances {
 		units := unitMap(instance)
+
 		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			if len(context.Dimensions) == 0 {

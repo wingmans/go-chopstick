@@ -182,6 +182,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		if len(filing.MissingMetric) > 0 {
 			report.Summary.MissingMetrics++
 		}
+
 		for tier := range filing.MissingByTier {
 			if report.Summary.MissingMetricsByTier == nil {
 				report.Summary.MissingMetricsByTier = make(map[string]int)
@@ -295,9 +296,11 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 	}
 
 	sort.Strings(missing)
+
 	for tier := range missingByTier {
 		sort.Strings(missingByTier[tier])
 	}
+
 	if len(missingByTier) == 0 {
 		missingByTier = nil
 	}
