@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "status": "human-review-pending",
+  "source_document": "manual checks from validation run 20260918T150014Z",
+  "currency": "USD",
+  "monetary_unit": "USD billions",
+  "notes": [
+    "Values are human-entered cross-check values and are not yet an automated expected-value baseline.",
+    "Assets and liabilities mean total assets and total liabilities.",
+    "Net income means consolidated after-tax net income.",
+    "NVIDIA reports fiscal years ending in a different calendar year from the other companies.",
+    "Apple values use the SEC 10-K concepts exposed by the parser; vendor values with different labels remain out of this baseline.",
+    "Berkshire diluted EPS is null because the compact filing view does not currently expose that metric for this filing.",
+    "Verify source labels, cash-flow signs, fiscal periods, and accession numbers before promotion."
+  ],
+  "companies": [
+    {
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "name": "Microsoft Corporation",
+      "fiscal_years": {
+        "2024": {
+          "revenue": 245.122,
+          "net_income": 88.136,
+          "diluted_eps": 11.8,
+          "total_assets": 512.163,
+          "cash_and_cash_equivalents": 18.315,
+          "total_liabilities": 243.686,
+          "equity": 268.477,
+          "operating_cash_flow": 118.548,
+          "investing_cash_flow": -96.97,
+          "financing_cash_flow": -37.757
+        },
+        "2023": {
+          "revenue": 211.915,
+          "net_income": 72.361,
+          "diluted_eps": 9.68,
+          "total_assets": 411.976,
+          "cash_and_cash_equivalents": 34.704,
+          "total_liabilities": 205.73,
+          "equity": 206.223,
+          "operating_cash_flow": 87.582,
+          "investing_cash_flow": -22.68,
+          "financing_cash_flow": -43.935
+        }
+      }
+    },
+    {
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "name": "Apple Inc.",
+      "fiscal_years": {
+        "2024": {
+          "revenue": 391.035,
+          "net_income": 93.736,
+          "diluted_eps": 6.08,
+          "total_assets": 364.98,
+          "cash_and_cash_equivalents": 29.943,
+          "total_liabilities": 308.03,
+          "equity": 56.95,
+          "operating_cash_flow": 118.254,
+          "investing_cash_flow": 2.935,
+          "financing_cash_flow": -5.802
+        },
+        "2023": {
+          "revenue": 383.285,
+          "net_income": 96.995,
+          "diluted_eps": 6.13,
+          "total_assets": 352.583,
+          "cash_and_cash_equivalents": 29.965,
+          "total_liabilities": 290.437,
+          "equity": 62.146,
+          "operating_cash_flow": 110.543,
+          "investing_cash_flow": 3.705,
+          "financing_cash_flow": -6.012
+        }
+      }
+    },
+    {
+      "ticker": "AMZN",
+      "cik": "0001018724",
+      "name": "Amazon.com, Inc.",
+      "fiscal_years": {
+        "2024": {
+          "revenue": 637.959,
+          "net_income": 59.248,
+          "diluted_eps": 5.53,
+          "total_assets": 624.894,
+          "cash_and_cash_equivalents": 78.779,
+          "total_liabilities": 338.924,
+          "equity": 285.97,
+          "operating_cash_flow": 115.877,
+          "investing_cash_flow": -94.342,
+          "financing_cash_flow": -11.812
+        },
+        "2023": {
+          "revenue": 574.785,
+          "net_income": 30.425,
+          "diluted_eps": 2.9,
+          "total_assets": 527.854,
+          "cash_and_cash_equivalents": 73.387,
+          "total_liabilities": 325.979,
+          "equity": 201.875,
+          "operating_cash_flow": 84.946,
+          "investing_cash_flow": -49.833,
+          "financing_cash_flow": -15.879
+        }
+      }
+    },
+    {
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "name": "NVIDIA Corporation",
+      "fiscal_years": {
+        "2024": {
+          "revenue": 60.922,
+          "net_income": 29.76,
+          "diluted_eps": 1.19,
+          "total_assets": 65.728,
+          "cash_and_cash_equivalents": 7.28,
+          "total_liabilities": 22.75,
+          "equity": 42.978,
+          "operating_cash_flow": 28.09,
+          "investing_cash_flow": -10.566,
+          "financing_cash_flow": -13.633
+        },
+        "2023": {
+          "revenue": 26.974,
+          "net_income": 4.368,
+          "diluted_eps": 0.21,
+          "total_assets": 41.182,
+          "cash_and_cash_equivalents": 3.389,
+          "total_liabilities": 19.081,
+          "equity": 22.101,
+          "operating_cash_flow": 5.641,
+          "investing_cash_flow": 7.375,
+          "financing_cash_flow": -11.617
+        }
+      }
+    },
+    {
+      "ticker": "BRK-B",
+      "cik": "0001067983",
+      "name": "Berkshire Hathaway Inc.",
+      "fiscal_years": {
+        "2024": {
+          "revenue": 371.433,
+          "net_income": 88.995,
+          "diluted_eps": null,
+          "total_assets": 1153.881,
+          "cash_and_cash_equivalents": 48.376,
+          "total_liabilities": 502.226,
+          "equity": 649.368,
+          "operating_cash_flow": 30.592,
+          "investing_cash_flow": -10.287,
+          "financing_cash_flow": -10.36
+        },
+        "2023": {
+          "revenue": 364.482,
+          "net_income": 96.223,
+          "diluted_eps": null,
+          "total_assets": 1069.978,
+          "cash_and_cash_equivalents": 38.643,
+          "total_liabilities": 499.208,
+          "equity": 561.273,
+          "operating_cash_flow": 49.196,
+          "investing_cash_flow": -32.663,
+          "financing_cash_flow": -14.405
+        }
+      }
+    }
+  ]
+}

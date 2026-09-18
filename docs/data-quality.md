@@ -20,6 +20,13 @@ A human reviewer stays in the loop for every quality-improvement loop:
 This keeps validation output useful as evidence without letting one noisy run
 rewrite the project's definition of correct behavior.
 
+The manually cross-checked company values are kept in
+[`golden/manual-checks.json`](../golden/manual-checks.json). This is a durable
+candidate baseline for the five-company, two-year spot check. It remains marked
+`human-review-pending` until the source labels, fiscal periods, signs, and
+values have been checked. Only then should a comparison test promote it to an
+automated expected-value fixture.
+
 ## Code Review Discipline
 
 Go code and tests should satisfy `exhaustruct_v5`. Struct literals should list
