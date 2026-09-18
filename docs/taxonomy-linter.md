@@ -227,3 +227,65 @@ High unmapped or dimensional counts are not automatically bad. They are
 signals for taxonomy review. Industry-specific filings, especially banks,
 insurers, REITs, and utilities, require separate concepts and should not be
 forced into industrial-company ratios.
+
+## Taxonomy Tuning Scope And Fast Loop
+
+The immediate product goal is reliable consolidated, company-level aggregates:
+revenue, profit, assets, liabilities, equity, cash, cash flow, per-share
+values, and the inputs needed by the current ratios. Taxonomy work should be
+prioritized by whether an unmapped concept can change one of those outputs.
+
+The 132,484 source-level findings in the 2026-09-18 validation run are not
+132,484 defects. They are finding groups across 685,898 source facts, including
+476,419 dimensional facts. Many describe segments, geographies, products,
+share classes, debt terms, fair-value tables, or other disclosure detail. They
+matter for future analysis, but mapping them into the current compact company
+view would risk treating a slice or disclosure component as a consolidated
+total.
+
+For the current phase:
+
+1. Prioritize unmapped concepts that repeatedly block a core compact metric or
+   cause an accounting identity or ratio failure.
+2. Review high-frequency concepts only after checking their contexts, units,
+   periods, and statement role. Frequency alone is not evidence that a mapping
+   is correct.
+3. Keep dimensional facts in the source report, but exclude them from the
+   consolidated mapping queue unless a future dimension-aware feature explicitly
+   requests them.
+4. Keep industry-sensitive metrics in a separate review lane. Do not add
+   company profiles merely to make the headline counts look cleaner.
+5. Stop mapping when the candidate no longer changes a top-level output or
+   removes a real quality failure. The goal is useful coverage, not an empty
+   unmapped-concept list.
+
+The 19-company set is sufficient for the first automatic regression gate. It
+contains 222 annual filings from 2015 onward across technology, financials,
+insurance, healthcare, energy, consumer, industrial, materials, real estate,
+and utility issuers. It is broad enough to expose cross-industry regressions,
+but it is not proof of universal XBRL compatibility. A future holdout set of
+companies not used during tuning should provide that check.
+
+The rapid taxonomy iteration loop should be:
+
+1. Select one canonical metric or one small related cluster, such as
+   liabilities and equity.
+2. Query the detailed JSON report for the highest-frequency candidate concepts
+   affecting that metric.
+3. Inspect a few source facts from different companies and years, including
+   context, dimensions, unit, period, and sign.
+4. Make one small, human-approved taxonomy change.
+5. Re-run the fast validation against existing parsed data: source taxonomy
+   coverage plus compact taxonomy lint. Do not download or reparse filings for
+   a taxonomy-only change.
+6. Compare core metric presence, quality issues, identity checks, and the
+   candidate concept counts before and after.
+7. Run the full parse and download-backed validation only after several small
+   changes have accumulated or parser behavior changed.
+
+The planned automatic result should distinguish operational status from
+taxonomy progress. A run is red for missing/unparsed filings, command errors,
+or compact quality failures. It is review-needed when core metric gaps or
+taxonomy findings remain. It is green only when the operational gate passes
+and the configured core-gap and quality thresholds pass. Source-level
+unmapped volume alone should not make the run red.
