@@ -80,6 +80,7 @@ type appConfig struct {
 		year      string
 		fromYear  int
 		toYear    int
+		limit     int
 	}
 	coverage struct {
 		masterPath string
@@ -225,10 +226,10 @@ func run(ctx context.Context, args []string) error {
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir,
 			cfg.serve.setName)
 	case "taxonomy":
-		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
+		commandErr = runTaxonomyCommandWithLimit(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
 			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter,
 			cfg.taxonomy.setName, cfg.taxonomy.fromYear, cfg.taxonomy.toYear,
-			cfg.taxonomy.format, cfg.taxonomy.out)
+			cfg.taxonomy.limit, cfg.taxonomy.format, cfg.taxonomy.out)
 	case "coverage":
 		commandErr = runCoverageCommand(ctx, cfg)
 	default:
@@ -323,7 +324,7 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	flags := flag.NewFlagSet("taxonomy", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
-		printSubcommandHelp("taxonomy <lint|coverage>", "Inspect local filing data against the taxonomy.", []helpOption{
+		printSubcommandHelp("taxonomy <lint|coverage|tune>", "Inspect local filing data against the taxonomy.", []helpOption{
 			{"-i, --file <path>", "Inspect one filing-view.json or filing.json."},
 			{"-c, --cik <cik>", "Select locally parsed filings for this CIK."},
 			{"-s, --set <name>", "Select current members from data/sets/<name>.json."},
@@ -334,12 +335,14 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 			{"-d, --parsed-dir <path>", "Parsed filing directory; default ./data/parsed."},
 			{"-t, --taxonomy <path>", "Use a taxonomy JSON file instead of the embedded default."},
 			{"    --format <text|json>", "Output format; default text."},
+			{"    --limit <n>", "Maximum tuning candidates; default 25."},
 			{"-o, --out <path>", "Write output to this file instead of stdout."},
 			{"-h, --help", "Show command help."},
 		})
 	}
 	cfg.taxonomy.parsedDir = edgar.DefaultParsedDirectory
 	cfg.taxonomy.format = "text"
+	cfg.taxonomy.limit = 25
 	flags.StringVar(&cfg.taxonomy.file, "i", "", "lint one compact filing-view.json")
 	flags.StringVar(&cfg.taxonomy.file, "file", "", "lint one compact filing-view.json")
 	flags.StringVar(&cfg.taxonomy.filter.CIK, "c", "", "select locally parsed filings for this CIK")
@@ -357,11 +360,12 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.taxonomy.taxonomy, "t", "", "taxonomy JSON file")
 	flags.StringVar(&cfg.taxonomy.taxonomy, "taxonomy", "", "taxonomy JSON file")
 	flags.StringVar(&cfg.taxonomy.format, "format", cfg.taxonomy.format, "output format")
+	flags.IntVar(&cfg.taxonomy.limit, "limit", cfg.taxonomy.limit, "maximum tuning candidates")
 	flags.StringVar(&cfg.taxonomy.out, "o", "", "output path")
 	flags.StringVar(&cfg.taxonomy.out, "out", "", "output path")
 
-	if len(args) == 0 || (args[0] != "lint" && args[0] != "coverage") {
-		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
+	if len(args) == 0 || (args[0] != "lint" && args[0] != "coverage" && args[0] != "tune") {
+		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage|tune>'"))
 	}
 
 	cfg.taxonomy.operation = args[0]
@@ -370,7 +374,7 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	}
 
 	if flags.NArg() != 0 {
-		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
+		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage|tune>'"))
 	}
 
 	if strings.TrimSpace(cfg.taxonomy.file) != "" &&
@@ -386,6 +390,10 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 
 	if cfg.taxonomy.format != "text" && cfg.taxonomy.format != "json" {
 		return subcommandError(flags, errors.New("--format must be text or json"))
+	}
+
+	if cfg.taxonomy.limit <= 0 {
+		return subcommandError(flags, errors.New("--limit must be positive"))
 	}
 
 	cfg.taxonomy.filter.FormTypes = cfg.taxonomy.formTypes
@@ -444,9 +452,22 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 	parsedDir string, filter edgar.IndexFilter, setName string, fromYear,
 	toYear int, format, out string,
 ) error {
+	return runTaxonomyCommandWithLimit(ctx, operation, path, taxonomyPath, parsedDir,
+		filter, setName, fromYear, toYear, 25, format, out)
+}
+
+func runTaxonomyCommandWithLimit(ctx context.Context, operation, path, taxonomyPath,
+	parsedDir string, filter edgar.IndexFilter, setName string, fromYear,
+	toYear, limit int, format, out string,
+) error {
 	taxonomy, err := filingview.LoadTaxonomy(taxonomyPath)
 	if err != nil {
 		return err
+	}
+
+	if operation == "tune" {
+		return runTaxonomyTuneCommand(ctx, path, parsedDir, filter, setName,
+			fromYear, toYear, taxonomy, limit, format, out)
 	}
 
 	paths := []string{path}
@@ -571,6 +592,321 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 	return nil
 }
 
+type taxonomyTuneReport struct {
+	SchemaVersion   int                     `json:"schema_version"`
+	Operation       string                  `json:"operation"`
+	TaxonomyVersion string                  `json:"taxonomy_version"`
+	GeneratedAt     string                  `json:"generated_at"`
+	Selection       taxonomySelection       `json:"selection"`
+	Summary         taxonomyTuneSummary     `json:"summary"`
+	Candidates      []taxonomyTuneCandidate `json:"candidates"`
+}
+
+type taxonomyTuneSummary struct {
+	SelectedFilings int `json:"selected_filings"`
+	ScannedFacts    int `json:"scanned_facts"`
+	EligibleFacts   int `json:"eligible_facts"`
+	Candidates      int `json:"candidates"`
+}
+
+type taxonomyTuneCandidate struct {
+	Metric       string   `json:"metric"`
+	Namespace    string   `json:"namespace"`
+	Concept      string   `json:"concept"`
+	Occurrences  int      `json:"occurrences"`
+	Filings      int      `json:"filings"`
+	Companies    int      `json:"companies"`
+	Years        []int    `json:"years"`
+	Units        []string `json:"units"`
+	Examples     []string `json:"examples"`
+	Confidence   string   `json:"confidence"`
+	ReviewReason string   `json:"review_reason"`
+}
+
+type taxonomyTuneAccumulator struct {
+	candidate taxonomyTuneCandidate
+
+	filingKeys  map[string]struct{}
+	companyKeys map[string]struct{}
+	years       map[int]struct{}
+	units       map[string]struct{}
+	examples    map[string]struct{}
+}
+
+// runTaxonomyTuneCommand is intentionally a candidate screen, not an
+// automatic taxonomy learner. It limits evidence to numeric, non-dimensional
+// standard US-GAAP facts and emits suggestions for human review only.
+func runTaxonomyTuneCommand(ctx context.Context, path, parsedDir string,
+	filter edgar.IndexFilter, setName string, fromYear, toYear int,
+	taxonomy filingview.Taxonomy, limit int, format, out string,
+) error {
+	paths := []string{path}
+
+	var err error
+	if path == "" {
+		paths, err = parsedFilingPaths(ctx, parsedDir, filter, fromYear, toYear)
+		if err != nil {
+			return err
+		}
+	}
+
+	coreMetrics := make(map[string]string)
+	mappedConcepts := make(map[string]struct{})
+
+	for _, metric := range taxonomy.Metrics {
+		for _, concept := range metric.Concepts {
+			if concept.NamespaceFamily == "us-gaap" {
+				mappedConcepts[concept.Name] = struct{}{}
+			}
+		}
+
+		if metric.CoverageTier == "" {
+			coreMetrics[metric.Key] = metric.Label
+		}
+	}
+
+	accumulators := make(map[string]*taxonomyTuneAccumulator)
+	scannedFacts, eligibleFacts := 0, 0
+
+	for _, filingPath := range paths {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		filing, loadErr := edgar.LoadParsedFiling(filingPath)
+		if loadErr != nil {
+			return fmt.Errorf("load %s: %w", filingPath, loadErr)
+		}
+
+		for _, instance := range filing.Instances {
+			contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
+			for _, context := range instance.Contexts {
+				contexts[context.ID] = context
+			}
+
+			for _, fact := range instance.Facts {
+				scannedFacts++
+
+				if fact.Nil || fact.UnitRef == "" || !isUSGAAPNamespace(fact.Concept.Namespace) {
+					continue
+				}
+
+				context, ok := contexts[fact.ContextRef]
+				if !ok || len(context.Dimensions) > 0 {
+					continue
+				}
+
+				metric, ok := tuneMetricForConcept(fact.Concept.Local, coreMetrics)
+				if !ok {
+					continue
+				}
+
+				if _, mapped := mappedConcepts[fact.Concept.Local]; mapped {
+					continue
+				}
+
+				eligibleFacts++
+				key := metric + "\x00" + fact.Concept.Namespace + "\x00" + fact.Concept.Local
+
+				candidate := accumulators[key]
+				if candidate == nil {
+					candidate = &taxonomyTuneAccumulator{
+						candidate: taxonomyTuneCandidate{
+							Metric: metric, Namespace: fact.Concept.Namespace,
+							Concept: fact.Concept.Local, Confidence: "review",
+							ReviewReason: "non-dimensional standard US-GAAP fact with a core-metric-like name; inspect presentation role and scope",
+							Occurrences:  0, Filings: 0, Companies: 0, Years: nil, Units: nil, Examples: nil,
+						},
+						filingKeys: map[string]struct{}{}, companyKeys: map[string]struct{}{},
+						years: map[int]struct{}{}, units: map[string]struct{}{}, examples: map[string]struct{}{},
+					}
+					accumulators[key] = candidate
+				}
+
+				candidate.candidate.Occurrences++
+				candidate.filingKeys[filing.Metadata.Accession] = struct{}{}
+				candidate.companyKeys[filing.Metadata.CIK] = struct{}{}
+
+				candidate.units[fact.UnitRef] = struct{}{}
+				if year := tuneFactYear(context); year != 0 {
+					candidate.years[year] = struct{}{}
+				}
+
+				if len(candidate.examples) < 5 {
+					candidate.examples[filing.Metadata.Accession] = struct{}{}
+				}
+			}
+		}
+	}
+
+	candidates := make([]taxonomyTuneCandidate, 0, len(accumulators))
+	for _, accumulator := range accumulators {
+		candidate := accumulator.candidate
+		candidate.Filings = len(accumulator.filingKeys)
+		candidate.Companies = len(accumulator.companyKeys)
+		candidate.Years = sortedTuneInts(accumulator.years)
+		candidate.Units = sortedTuneStrings(accumulator.units)
+		candidate.Examples = sortedTuneStrings(accumulator.examples)
+		candidates = append(candidates, candidate)
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].Occurrences != candidates[j].Occurrences {
+			return candidates[i].Occurrences > candidates[j].Occurrences
+		}
+
+		if candidates[i].Companies != candidates[j].Companies {
+			return candidates[i].Companies > candidates[j].Companies
+		}
+
+		return candidates[i].Concept < candidates[j].Concept
+	})
+
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+
+	report := taxonomyTuneReport{
+		SchemaVersion: 1, Operation: "tune", TaxonomyVersion: taxonomy.TaxonomyVersion,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		Selection: taxonomySelection{
+			File: path, Set: setName, CIK: filter.CIK,
+			CIKs: filter.CIKs, FormTypes: filter.FormTypes, Year: filter.Year,
+			FromYear: fromYear, ToYear: toYear,
+		},
+		Summary: taxonomyTuneSummary{
+			SelectedFilings: len(paths), ScannedFacts: scannedFacts,
+			EligibleFacts: eligibleFacts, Candidates: len(candidates),
+		},
+		Candidates: candidates,
+	}
+
+	if format == "json" {
+		return writeTaxonomyJSON(out, report)
+	}
+
+	var text strings.Builder
+	fmt.Fprintf(&text, "taxonomy tune summary selected=%d scanned_facts=%d eligible_facts=%d candidates=%d\n",
+		report.Summary.SelectedFilings, scannedFacts, eligibleFacts, len(candidates))
+
+	for _, candidate := range candidates {
+		fmt.Fprintf(&text, "%s metric=%s occurrences=%d filings=%d companies=%d units=%s examples=%s\n",
+			candidate.Concept, candidate.Metric, candidate.Occurrences, candidate.Filings,
+			candidate.Companies, strings.Join(candidate.Units, ","), strings.Join(candidate.Examples, ","))
+	}
+
+	return writeTaxonomyText(out, text.String())
+}
+
+func isUSGAAPNamespace(namespace string) bool {
+	return strings.Contains(namespace, "/us-gaap/") || strings.Contains(namespace, "/us-gaap:")
+}
+
+func tuneMetricForConcept(concept string, metrics map[string]string) (string, bool) {
+	concept = strings.ToLower(concept)
+	// These facts contain metric words but are not the consolidated dashboard
+	// metric itself. Keep them out of the first-pass review queue.
+	for _, excluded := range []string{
+		"incomelossfromcontinuingoperationsbefore",
+		"incomelossfromequitymethod",
+		"attributabletononcontrollinginterest",
+		"periodincrease",
+		"dividend",
+		"effectofexchange",
+		"taxbenefits",
+		"fairvalue",
+		"deferredtaxassets",
+		"deferredtaxliabilities",
+		"deferredincometaxliabilities",
+		"amortizationofintangibleassets",
+		"otherliabilities",
+		"otherassets",
+		"availabletocommonstockholders",
+		"noncash",
+		"payments",
+		"proceeds",
+		"othercomprehensive",
+		"hedge",
+		"equitysecurities",
+	} {
+		if strings.Contains(concept, excluded) {
+			return "", false
+		}
+	}
+
+	keywords := []struct {
+		metric string
+		terms  []string
+	}{
+		{metric: "revenue", terms: []string{"revenue", "revenues", "salesrevenue"}},
+		{metric: "gross_profit", terms: []string{"grossprofit"}},
+		{metric: "operating_income", terms: []string{"operatingincome"}},
+		{metric: "net_income", terms: []string{"netincome", "profitloss"}},
+		{metric: "eps_diluted", terms: []string{"earningspersharediluted"}},
+		{metric: "assets", terms: []string{"assets"}},
+		{metric: "cash", terms: []string{"cash"}},
+		{metric: "liabilities_and_equity", terms: []string{"liabilitiesandstockholdersequity"}},
+		{metric: "liabilities", terms: []string{"liabilities"}},
+		{metric: "equity", terms: []string{"equity", "stockholdersequity"}},
+		{metric: "operating_cash_flow", terms: []string{"netcashprovidedbyusedinoperatingactivities"}},
+		{metric: "investing_cash_flow", terms: []string{"netcashprovidedbyusedininvestingactivities"}},
+		{metric: "financing_cash_flow", terms: []string{"netcashprovidedbyusedinfinancingactivities"}},
+	}
+	for _, keyword := range keywords {
+		if _, ok := metrics[keyword.metric]; !ok {
+			continue
+		}
+
+		for _, term := range keyword.terms {
+			if strings.Contains(concept, term) {
+				return keyword.metric, true
+			}
+		}
+	}
+
+	return "", false
+}
+
+func tuneFactYear(context edgar.FactContext) int {
+	date := context.Instant
+	if date == "" {
+		date = context.EndDate
+	}
+
+	if len(date) < 4 {
+		return 0
+	}
+
+	year, err := strconv.Atoi(date[:4])
+	if err != nil {
+		return 0
+	}
+
+	return year
+}
+
+func sortedTuneInts(values map[int]struct{}) []int {
+	result := make([]int, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+
+	sort.Ints(result)
+
+	return result
+}
+
+func sortedTuneStrings(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+
+	sort.Strings(result)
+
+	return result
+}
+
 // filingViewPaths returns the paths to all filing-view.json files in the given directory that match the filter.
 // The returned paths are sorted in lexicographical order.
 func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFilter, fromYear, toYear int) ([]string, error) {
@@ -669,7 +1005,7 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 	return paths, nil
 }
 
-func writeTaxonomyJSON(path string, report taxonomyBatchReport) error {
+func writeTaxonomyJSON(path string, report any) error {
 	var (
 		writer io.Writer = os.Stdout
 		file   *os.File
@@ -935,7 +1271,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
 	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
-	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
+	fmt.Fprintln(os.Stdout, "  taxonomy          lint, cover, or tune local filing taxonomy")
 	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")
