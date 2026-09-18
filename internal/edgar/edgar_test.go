@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -103,6 +104,108 @@ func TestStitch(t *testing.T) {
 	}
 }
 
+func TestDownloadArchiveUsesCachedZipUnlessForced(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "indexes")
+
+	zipDirectory := filepath.Join(t.TempDir(), "cache")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(zipDirectory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := Archive{URL: "https://example.test/master.zip", FileName: "2026-QTR1.tsv"}
+
+	zipPath := filepath.Join(zipDirectory, "2026-QTR1.zip")
+	if err := os.WriteFile(zipPath, testArchive(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	networkCalls := 0
+	client := edgarClient{httpClient: &http.Client{
+		Transport: roundTripper(func(*http.Request) (*http.Response, error) {
+			networkCalls++
+
+			return nil, errors.New("network should not be used for cached archive")
+		}),
+		CheckRedirect: nil,
+		Jar:           nil,
+		Timeout:       0,
+	}, userAgent: "Example contact@example.test"}
+
+	network, sourcePath, err := downloadArchive(t.Context(), client, directory, zipDirectory, archive, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if network || networkCalls != 0 || sourcePath != "2026-QTR1.zip" {
+		t.Fatalf("network=%v source=%q calls=%d", network, sourcePath, networkCalls)
+	}
+
+	if _, err := os.Stat(filepath.Join(directory, "2026-QTR1.tsv")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDownloadArchiveForcedRefreshReplacesCachedZip(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "indexes")
+
+	zipDirectory := filepath.Join(t.TempDir(), "cache")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(zipDirectory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := Archive{URL: "https://example.test/master.zip", FileName: "2026-QTR1.tsv"}
+
+	zipPath := filepath.Join(zipDirectory, "2026-QTR1.zip")
+	if err := os.WriteFile(zipPath, testArchiveWithCompany(t, "OLD CO"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	networkCalls := 0
+	client := edgarClient{httpClient: &http.Client{
+		Transport: roundTripper(func(req *http.Request) (*http.Response, error) {
+			networkCalls++
+
+			response := new(http.Response)
+			response.StatusCode = http.StatusOK
+			response.Status = "200 OK"
+			response.Body = io.NopCloser(bytes.NewReader(testArchiveWithCompany(t, "NEW CO")))
+			response.Header = make(http.Header)
+			response.Request = req
+
+			return response, nil
+		}),
+		CheckRedirect: nil,
+		Jar:           nil,
+		Timeout:       0,
+	}, userAgent: "Example contact@example.test"}
+
+	network, _, err := downloadArchive(t.Context(), client, directory, zipDirectory, archive, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !network || networkCalls != 1 {
+		t.Fatalf("network=%v calls=%d", network, networkCalls)
+	}
+
+	data, err := os.ReadFile(filepath.Join(directory, "2026-QTR1.tsv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(data), "NEW CO") || strings.Contains(string(data), "OLD CO") {
+		t.Fatalf("forced refresh did not replace archive: %s", data)
+	}
+}
+
 type roundTripper func(*http.Request) (*http.Response, error)
 
 func (f roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -110,6 +213,12 @@ func (f roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func testArchive(t *testing.T) []byte {
+	t.Helper()
+
+	return testArchiveWithCompany(t, "NICHOLAS FINANCIAL INC")
+}
+
+func testArchiveWithCompany(t *testing.T, company string) []byte {
 	t.Helper()
 
 	var buffer bytes.Buffer
@@ -125,7 +234,7 @@ func testArchive(t *testing.T) []byte {
 		_, _ = fmt.Fprintf(file, "header %d\n", i)
 	}
 
-	_, _ = strings.NewReader("1000045|NICHOLAS FINANCIAL INC|10-K|2018-06-27|edgar/data/1000045/0001193125-18-205637.txt\n").WriteTo(file)
+	_, _ = fmt.Fprintf(file, "1000045|%s|10-K|2018-06-27|edgar/data/1000045/0001193125-18-205637.txt\n", company)
 
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)

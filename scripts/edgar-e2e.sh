@@ -5,6 +5,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_PATH="$ROOT_DIR/bin/edgar"
 SET_NAME="us-gaap-coverage"
+REFRESH_LATEST="${REFRESH_LATEST:-0}"
 
 cd "$ROOT_DIR"
 export LOGLEVEL=debug
@@ -19,10 +20,12 @@ if [[ ! -x "$CLI_PATH" ]]; then
 fi
 
 echo "Step 1: downloading indexes from 2010 and stitching master.tsv"
+INDEX_ARGS=(--from-year 2010 --stitch)
+if [[ "$REFRESH_LATEST" == "1" ]]; then
+  INDEX_ARGS+=(--refresh-latest)
+fi
 "$CLI_PATH" index \
-  --from-year 2010 \
-  --refresh-latest \
-  --stitch
+  "${INDEX_ARGS[@]}"
 
 test -s data/indexes/master.tsv
 

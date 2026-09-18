@@ -49,6 +49,14 @@ Both commands provide `-r, --reprocess`, default false. It bypasses reuse and
 rebuilds parsed output; it does not force redownloading or refresh the HTML index.
 No separate skip-processed flag is needed: reuse is the default.
 
+To reset local EDGAR outputs while keeping downloaded raw SEC submissions, run
+`make clean-derived-data`. The underlying `scripts/clean-derived-data.sh`
+preserves `data/filings` and cached SEC index ZIPs under
+`data/cache/index-zips`; it removes parsed filings, validation runs, generated
+local sets, and stitched/extracted index files. This lets `edgar index
+--stitch` rebuild `master.tsv` from disk without network traffic unless
+`--refresh-latest` is also requested.
+
 Both commands provide `-n, --noop`, default false. This is now a planning operation:
 it reads local headers and checks existing parsed results and source checksums,
 but does not extract XBRL, download, normalize gzip files, or write output. Missing

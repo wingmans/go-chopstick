@@ -47,6 +47,13 @@ The validation script writes detailed JSON artifacts and separate
 human-readable text summaries. The text files intentionally aggregate the JSON
 instead of repeating every filing row:
 
+Validation runs reuse the local index and filing caches by default. To refresh
+only the newest SEC index quarter, opt in explicitly:
+
+```bash
+REFRESH_LATEST=1 make taxonomy-validation
+```
+
 - `coverage-report.txt` summarizes expected filing coverage, missing core
   metrics, industry-sensitive gaps, and filing hotspots.
 - `taxonomy-coverage.txt` summarizes source-level unmapped concepts, company

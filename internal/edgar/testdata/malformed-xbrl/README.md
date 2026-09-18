@@ -29,5 +29,10 @@ human-reviewed fixtures before they are enabled.
 
 - `missing-lt-semicolon.xml`: entity reference like `&lt` without `;`.
 - `missing-gt-semicolon.xml`: entity reference like `&gt` without `;`.
+- `split-entity-reference.xml`: escaped text entity split across a newline,
+  such as `&l` followed by `t;`.
+- `split-closing-tag-name.xml`: closing tag name split across a newline.
+- `split-closing-tag-opener.xml`: closing tag opener split between `<` and
+  `/`.
 - `truncated-closing-tag.xml`: invalid text between a closing tag name and
   `>`, matching legacy truncated closing-tag failures.

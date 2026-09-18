@@ -131,6 +131,9 @@ func TestStrictXBRLRejectsLegacyMalformedFixtures(t *testing.T) {
 	for _, path := range []string{
 		"testdata/malformed-xbrl/missing-lt-semicolon.xml",
 		"testdata/malformed-xbrl/missing-gt-semicolon.xml",
+		"testdata/malformed-xbrl/split-entity-reference.xml",
+		"testdata/malformed-xbrl/split-closing-tag-name.xml",
+		"testdata/malformed-xbrl/split-closing-tag-opener.xml",
 		"testdata/malformed-xbrl/truncated-closing-tag.xml",
 	} {
 		t.Run(path, func(t *testing.T) {
@@ -159,6 +162,21 @@ func TestSubmissionNormalizesReviewedLegacyMalformedFixtures(t *testing.T) {
 			path:  "testdata/malformed-xbrl/missing-gt-semicolon.xml",
 			code:  legacyMissingEntitySemicolonCode,
 			value: "A > B",
+		},
+		{
+			path:  "testdata/malformed-xbrl/split-entity-reference.xml",
+			code:  legacySplitEntityCode,
+			value: "A < B and C > D",
+		},
+		{
+			path:  "testdata/malformed-xbrl/split-closing-tag-name.xml",
+			code:  legacySplitClosingTagCode,
+			value: "legacy text",
+		},
+		{
+			path:  "testdata/malformed-xbrl/split-closing-tag-opener.xml",
+			code:  legacySplitClosingTagCode,
+			value: "legacy text",
 		},
 		{
 			path:  "testdata/malformed-xbrl/truncated-closing-tag.xml",

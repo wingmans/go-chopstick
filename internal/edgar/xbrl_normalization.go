@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 )
 
 const (
 	legacyMissingEntitySemicolonCode = "legacy_xbrl_missing_entity_semicolon"
+	legacySplitClosingTagCode        = "legacy_xbrl_split_closing_tag"
+	legacySplitEntityCode            = "legacy_xbrl_split_entity"
 	legacyStrayClosingTagCode        = "legacy_xbrl_stray_closing_tag"
 )
 
@@ -23,8 +26,12 @@ func readXBRLWithLegacyNormalization(ctx context.Context, source []byte, documen
 	}
 
 	instance, retryRecognized, retryErr := readXBRL(ctx, bytes.NewReader(normalized))
-	if retryErr != nil || !retryRecognized {
-		return XBRLInstance{}, recognized, nil, err
+	if retryErr != nil {
+		return XBRLInstance{}, retryRecognized, diagnostics, retryErr
+	}
+
+	if !retryRecognized {
+		return XBRLInstance{}, retryRecognized, diagnostics, err
 	}
 
 	return instance, retryRecognized, diagnostics, nil
@@ -35,8 +42,10 @@ func normalizeLegacyXBRLCopy(source []byte, document string) ([]byte, []ParseDia
 	// the strict XML parser fails. The pristine SEC source bytes, offsets, and
 	// checksum remain the audit trail.
 	normalized := append([]byte(nil), source...)
-	diagnostics := make([]ParseDiagnostic, 0, 3)
+	diagnostics := make([]ParseDiagnostic, 0, 4)
 
+	normalized, diagnostics = normalizeLegacySplitEntities(normalized, document, diagnostics)
+	normalized, diagnostics = normalizeLegacySplitClosingTags(normalized, document, diagnostics)
 	normalized, diagnostics = normalizeLegacyEntity(normalized, "lt", document, diagnostics)
 	normalized, diagnostics = normalizeLegacyEntity(normalized, "gt", document, diagnostics)
 	normalized, diagnostics = normalizeLegacyTruncatedClosingTag(normalized, document, diagnostics,
@@ -45,6 +54,74 @@ func normalizeLegacyXBRLCopy(source []byte, document string) ([]byte, []ParseDia
 		"escaped known legacy truncated closing tag text")
 
 	return normalized, diagnostics
+}
+
+func normalizeLegacySplitEntities(source []byte, document string, diagnostics []ParseDiagnostic) ([]byte, []ParseDiagnostic) {
+	normalized := make([]byte, 0, len(source))
+	replacements := 0
+
+	for len(source) > 0 {
+		name, consumed, ok := matchLegacySplitEntity(source)
+		if ok {
+			normalized = append(normalized, '&')
+			normalized = append(normalized, name...)
+			normalized = append(normalized, ';')
+			source = source[consumed:]
+			replacements++
+
+			continue
+		}
+
+		normalized = append(normalized, source[0])
+		source = source[1:]
+	}
+
+	if replacements == 0 {
+		return normalized, diagnostics
+	}
+
+	return normalized, append(diagnostics, legacyDiagnostic(
+		legacySplitEntityCode,
+		"compacted split XML entity reference in parser-only copy",
+		replacements,
+		document,
+	))
+}
+
+func matchLegacySplitEntity(source []byte) ([]byte, int, bool) {
+	if len(source) == 0 || source[0] != '&' {
+		return nil, 0, false
+	}
+
+	for _, name := range [][]byte{[]byte("lt"), []byte("gt"), []byte("amp"), []byte("quot"), []byte("apos")} {
+		position, spaced := 1, false
+
+		for _, char := range name {
+			for position < len(source) && legacyWhitespace(source[position]) {
+				position++
+				spaced = true
+			}
+
+			if position >= len(source) || source[position] != char {
+				position = 0
+
+				break
+			}
+
+			position++
+		}
+
+		for position > 0 && position < len(source) && legacyWhitespace(source[position]) {
+			position++
+			spaced = true
+		}
+
+		if spaced && position < len(source) && source[position] == ';' {
+			return name, position + 1, true
+		}
+	}
+
+	return nil, 0, false
 }
 
 func normalizeLegacyEntity(source []byte, name, document string, diagnostics []ParseDiagnostic) ([]byte, []ParseDiagnostic) {
@@ -82,12 +159,107 @@ func normalizeLegacyEntity(source []byte, name, document string, diagnostics []P
 }
 
 func legacyEntityBoundary(value byte) bool {
+	if legacyWhitespace(value) {
+		return true
+	}
+
+	return value == '<'
+}
+
+func legacyWhitespace(value byte) bool {
 	switch value {
-	case ' ', '\t', '\r', '\n', '<':
+	case ' ', '\t', '\r', '\n':
 		return true
 	default:
 		return false
 	}
+}
+
+func normalizeLegacySplitClosingTags(source []byte, document string, diagnostics []ParseDiagnostic) ([]byte, []ParseDiagnostic) {
+	normalized := append([]byte(nil), source...)
+	replacements, cursor := 0, 0
+
+	for cursor < len(normalized) {
+		start := bytes.IndexByte(normalized[cursor:], '<')
+		if start < 0 {
+			break
+		}
+
+		start += cursor
+
+		slash := start + 1
+		for slash < len(normalized) && legacyWhitespace(normalized[slash]) {
+			slash++
+		}
+
+		if slash >= len(normalized) || normalized[slash] != '/' {
+			cursor = start + 1
+
+			continue
+		}
+
+		end := bytes.IndexByte(normalized[slash:], '>')
+		if end < 0 {
+			break
+		}
+
+		end += slash
+
+		rawName := normalized[slash+1 : end]
+		if slash == start+1 && !containsLegacyWhitespace(rawName) {
+			cursor = end + 1
+
+			continue
+		}
+
+		compactName := compactLegacyWhitespace(rawName)
+
+		openName, ok := nearestOpenTagName(normalized[:start])
+		if !ok || !bytes.Equal(openName, compactName) {
+			cursor = end + 1
+
+			continue
+		}
+
+		replacement := make([]byte, 0, len(compactName)+3)
+		replacement = append(replacement, []byte("</")...)
+		replacement = append(replacement, compactName...)
+		replacement = append(replacement, '>')
+
+		next := make([]byte, 0, len(normalized)-(end-start+1)+len(replacement))
+		next = append(next, normalized[:start]...)
+		next = append(next, replacement...)
+		next = append(next, normalized[end+1:]...)
+		normalized = next
+		replacements++
+		cursor = start + len(replacement)
+	}
+
+	if replacements == 0 {
+		return source, diagnostics
+	}
+
+	return normalized, append(diagnostics, legacyDiagnostic(
+		legacySplitClosingTagCode,
+		"compacted split XML closing tag name in parser-only copy",
+		replacements,
+		document,
+	))
+}
+
+func containsLegacyWhitespace(source []byte) bool {
+	return slices.ContainsFunc(source, legacyWhitespace)
+}
+
+func compactLegacyWhitespace(source []byte) []byte {
+	result := make([]byte, 0, len(source))
+	for _, value := range source {
+		if !legacyWhitespace(value) {
+			result = append(result, value)
+		}
+	}
+
+	return result
 }
 
 func normalizeLegacyTruncatedClosingTag(

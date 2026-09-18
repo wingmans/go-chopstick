@@ -8,6 +8,7 @@ SET_NAME="${SET_NAME:-us-gaap-coverage}"
 FORM_TYPE="${FORM_TYPE:-10-K}"
 FROM_YEAR="${FROM_YEAR:-2015}"
 TO_YEAR="${TO_YEAR:-}"
+REFRESH_LATEST="${REFRESH_LATEST:-0}"
 RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 RUN_DIR="${RUN_DIR:-$ROOT_DIR/data/validation/runs/$RUN_ID}"
 RUN_LOG="$RUN_DIR/run.log"
@@ -55,6 +56,11 @@ MARKDOWN
 YEAR_ARGS=(--from-year "$FROM_YEAR")
 if [[ -n "$TO_YEAR" ]]; then
   YEAR_ARGS+=(--to-year "$TO_YEAR")
+fi
+
+INDEX_REFRESH_ARGS=()
+if [[ "$REFRESH_LATEST" == "1" ]]; then
+  INDEX_REFRESH_ARGS+=(--refresh-latest)
 fi
 
 # Run a step and append both the command and output to the run log.
@@ -444,8 +450,8 @@ MARKDOWN
 run_step "download and stitch SEC indexes" \
   "$CLI_PATH" index \
     --from-year "$FROM_YEAR" \
-    --refresh-latest \
-    --stitch
+    --stitch \
+    "${INDEX_REFRESH_ARGS[@]}"
 
 test -s data/indexes/master.tsv
 

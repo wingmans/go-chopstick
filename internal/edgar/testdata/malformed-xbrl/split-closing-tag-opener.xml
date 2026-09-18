@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<xbrli:xbrl
+  xmlns:xbrli="http://www.xbrl.org/2003/instance"
+  xmlns:t="urn:malformed">
+  <xbrli:context id="c">
+    <xbrli:entity>
+      <xbrli:identifier scheme="urn:cik">0000000000</xbrli:identifier>
+    </xbrli:entity>
+    <xbrli:period>
+      <xbrli:instant>2011-12-31</xbrli:instant>
+    </xbrli:period>
+  </xbrli:context>
+  <t:Disclosure contextRef="c">legacy text<
+/t:Disclosure>
+</xbrli:xbrl>

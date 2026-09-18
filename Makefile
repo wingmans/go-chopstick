@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run integration taxonomy-validation release test clean
+.PHONY: help build constituents lint run integration taxonomy-validation release test clean clean-derived-data
 
 .DEFAULT_GOAL := help
 
@@ -8,15 +8,15 @@ help:
 	@printf '%s\n' \
 		'Available commands:' \
 		'  make help         Display this command list' \
+		'  make clean        Remove build artifacts' \
 		'  make build        Build all command binaries' \
-		'  make constituents Download the current S&P 500 constituent set' \
 		'  make lint         Run golangci-lint with auto-fixes' \
+		'  make test         Run the Go test suite' \
+		'  make serve        Serve locally parsed EDGAR filings' \
+		'  make constituents Download the current S&P 500 constituent set' \
+		'  make clean-derived-data  Remove local EDGAR data while preserving raw filings' \
 		'  make integration  Run the EDGAR end-to-end test' \
 		'  make taxonomy-validation  Run the 19-company taxonomy validation pass' \
-		'  make run          Run the ECB command' \
-		'  make serve        Serve locally parsed EDGAR filings' \
-		'  make test         Run the Go test suite' \
-		'  make clean        Remove build artifacts' \
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -36,6 +36,9 @@ integration: build
 
 taxonomy-validation: build
 	bash scripts/taxonomy-validation.sh
+
+clean-derived-data:
+	bash scripts/clean-derived-data.sh
 
 run:
 	go run ./cmd/ecb

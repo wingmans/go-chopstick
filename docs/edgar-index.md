@@ -97,5 +97,15 @@ referenced files independently. The default paths are
 files, `./data/indexes/master.tsv` for the master index, and `./data/filings`
 for filings.
 
+With no refresh flag, cached quarterly TSV files are reused first, then cached
+ZIP files are extracted if the TSV is missing. `--refresh-latest` only forces a
+network fetch for the newest quarter; older quarters still reuse disk cache.
+With `--stitch`, the command rebuilds `master.tsv` from the available quarterly
+TSV files after the download/extract phase.
+
+The integration and taxonomy-validation scripts are offline by default once
+their index ZIP cache exists. Set `REFRESH_LATEST=1` when a run should refresh
+the newest quarter, for example `REFRESH_LATEST=1 make taxonomy-validation`.
+
 The default user-agent is `wingman paul@wingmen.io`. Set `EDGAR_USER_AGENT` to
 override it. Set `EDGAR_BASE_URL` to override the SEC Archives base URL.
