@@ -65,6 +65,58 @@ func TestDeriveMissingLiabilitiesSkipsMismatchedContexts(t *testing.T) {
 	}
 }
 
+func TestFallbackMissingEquityUsesNCIInclusiveEquity(t *testing.T) {
+	accumulator := &statementAccumulator{Rows: map[string]map[string]*FactSeries{
+		"Instant": {
+			"equity_including_noncontrolling_interest\x00USD": {
+				Key: "equity_including_noncontrolling_interest", Label: "Equity including noncontrolling interest",
+				Namespace: "us-gaap", Concept: "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", Unit: "USD",
+				Values: map[string]FactValue{
+					"2025-12-31": testFactValue("90", "balance"),
+				},
+			},
+		},
+	}}
+
+	fallbackMissingEquity(accumulator)
+
+	fallback := accumulator.Rows["Instant"]["equity\x00USD"]
+	if fallback == nil || fallback.Namespace != "derived" || fallback.Concept != "EquityIncludingNoncontrollingInterestFallback" {
+		t.Fatalf("unexpected equity fallback: %+v", fallback)
+	}
+
+	if got := fallback.Values["2025-12-31"].Value; got != "90" {
+		t.Fatalf("equity fallback = %q, want 90", got)
+	}
+}
+
+func TestFallbackMissingEquityKeepsPlainEquity(t *testing.T) {
+	accumulator := &statementAccumulator{Rows: map[string]map[string]*FactSeries{
+		"Instant": {
+			"equity\x00USD": {
+				Key: "equity", Label: "Shareholders' equity",
+				Namespace: "us-gaap", Concept: "StockholdersEquity", Unit: "USD",
+				Values: map[string]FactValue{
+					"2025-12-31": testFactValue("80", "balance"),
+				},
+			},
+			"equity_including_noncontrolling_interest\x00USD": {
+				Key: "equity_including_noncontrolling_interest", Label: "Equity including noncontrolling interest",
+				Namespace: "us-gaap", Concept: "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", Unit: "USD",
+				Values: map[string]FactValue{
+					"2025-12-31": testFactValue("90", "balance"),
+				},
+			},
+		},
+	}}
+
+	fallbackMissingEquity(accumulator)
+
+	if got := accumulator.Rows["Instant"]["equity\x00USD"].Values["2025-12-31"].Value; got != "80" {
+		t.Fatalf("plain equity changed to %q, want 80", got)
+	}
+}
+
 func testFactValue(value, context string) FactValue {
 	return FactValue{
 		Value: value, Nil: false, ContextRef: context, Decimals: "", UnitRef: "usd",

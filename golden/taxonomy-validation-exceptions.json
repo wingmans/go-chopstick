@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "cik": "18230",
+      "accession": "0000018230-15-000061",
+      "metric": "cash",
+      "status": "accepted",
+      "reason_code": "broader_consolidated_concept",
+      "reason": "The filing reports consolidated cash, cash equivalents, and short-term investments, but no pure cash concept.",
+      "evidence": {
+        "concept": "us-gaap:CashCashEquivalentsAndShortTermInvestments",
+        "report_date": "20141231",
+        "value": "7341000000",
+        "unit": "USD"
+      },
+      "reviewed_by": "human",
+      "reviewed_at": "2026-09-18"
+    },
+    {
+      "cik": "18230",
+      "accession": "0000018230-16-000410",
+      "metric": "cash",
+      "status": "accepted",
+      "reason_code": "broader_consolidated_concept",
+      "reason": "The filing reports consolidated cash, cash equivalents, and short-term investments, but no pure cash concept.",
+      "evidence": {
+        "concept": "us-gaap:CashCashEquivalentsAndShortTermInvestments",
+        "report_date": "20151231",
+        "value": "6460000000",
+        "unit": "USD"
+      },
+      "reviewed_by": "human",
+      "reviewed_at": "2026-09-18"
+    },
+    {
+      "cik": "18230",
+      "accession": "0000018230-17-000041",
+      "metric": "cash",
+      "status": "accepted",
+      "reason_code": "broader_consolidated_concept",
+      "reason": "The filing reports consolidated cash, cash equivalents, and short-term investments, but no pure cash concept.",
+      "evidence": {
+        "concept": "us-gaap:CashCashEquivalentsAndShortTermInvestments",
+        "report_date": "20161231",
+        "value": "7168000000",
+        "unit": "USD"
+      },
+      "reviewed_by": "human",
+      "reviewed_at": "2026-09-18"
+    },
+    {
+      "cik": "18230",
+      "accession": "0000018230-18-000042",
+      "metric": "cash",
+      "status": "accepted",
+      "reason_code": "broader_consolidated_concept",
+      "reason": "The filing reports consolidated cash, cash equivalents, and short-term investments, but no pure cash concept.",
+      "evidence": {
+        "concept": "us-gaap:CashCashEquivalentsAndShortTermInvestments",
+        "report_date": "20171231",
+        "value": "8261000000",
+        "unit": "USD"
+      },
+      "reviewed_by": "human",
+      "reviewed_at": "2026-09-18"
+    },
+    {
+      "cik": "1707925",
+      "accession": "0001707925-18-000004",
+      "metric": "revenue",
+      "status": "accepted",
+      "reason_code": "not_available_in_filing",
+      "reason": "The newly formed acquisition vehicle has no consolidated revenue fact for this reporting period.",
+      "evidence": {
+        "report_date": "20171231",
+        "finding": "No consolidated revenue fact is present in the filing XBRL."
+      },
+      "reviewed_by": "human",
+      "reviewed_at": "2026-09-18"
+    },
+    {
+      "cik": "1707925",
+      "accession": "0001707925-18-000004",
+      "metric": "investing_cash_flow",
+      "status": "accepted",
+      "reason_code": "not_available_in_filing",
+      "reason": "The newly formed acquisition vehicle has no consolidated investing cash-flow fact for this reporting period.",
+      "evidence": {
+        "report_date": "20171231",
+        "finding": "No consolidated investing cash-flow fact is present in the filing XBRL."
+      },
+      "reviewed_by": "human",
+      "reviewed_at": "2026-09-18"
+    }
+  ]
+}

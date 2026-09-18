@@ -80,6 +80,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 	// in the same instant context and normalized unit. This keeps the source
 	// facts untouched and avoids treating liabilities_and_equity as liabilities.
 	deriveMissingLiabilities(accumulators["balance"])
+	fallbackMissingEquity(accumulators["balance"])
 
 	statements := Statements{
 		Income:   StatementView{Title: "Income statement", Groups: statementGroups(accumulators["income"])},
@@ -88,6 +89,55 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 	}
 
 	return statements, buildRatios(accumulators, taxonomy)
+}
+
+// fallbackMissingEquity exposes NCI-inclusive equity as the main equity row
+// only when an issuer does not report plain stockholders' equity. The original
+// NCI-inclusive row remains available, and the derived namespace makes the
+// semantic fallback visible to downstream readers.
+func fallbackMissingEquity(accumulator *statementAccumulator) {
+	rows := accumulator.Rows["Instant"]
+	if rows == nil {
+		return
+	}
+
+	for nciKey, nci := range rows {
+		if !strings.HasPrefix(nciKey, "equity_including_noncontrolling_interest\x00") {
+			continue
+		}
+
+		unit := strings.TrimPrefix(nciKey, "equity_including_noncontrolling_interest\x00")
+
+		equityKey := "equity\x00" + unit
+		if _, exists := rows[equityKey]; exists {
+			continue
+		}
+
+		fallback := &FactSeries{
+			Key: "equity", Label: "Shareholders' equity", Namespace: "derived",
+			Concept: "EquityIncludingNoncontrollingInterestFallback", Unit: unit,
+			Values: map[string]FactValue{},
+		}
+
+		for period, value := range nci.Values {
+			if value.Nil || value.ContextRef == "" {
+				continue
+			}
+
+			fallback.Values[period] = FactValue{
+				Value: value.Value, Nil: false, ContextRef: value.ContextRef,
+				Decimals: value.Decimals, UnitRef: value.UnitRef,
+				priority: 0, concept: edgar.QName{
+					Namespace: "derived", Local: "EquityIncludingNoncontrollingInterestFallback",
+				},
+				id: "", precision: "",
+			}
+		}
+
+		if len(fallback.Values) > 0 {
+			rows[equityKey] = fallback
+		}
+	}
 }
 
 func deriveMissingLiabilities(accumulator *statementAccumulator) {

@@ -9,10 +9,13 @@ FORM_TYPE="${FORM_TYPE:-10-K}"
 FROM_YEAR="${FROM_YEAR:-2015}"
 TO_YEAR="${TO_YEAR:-}"
 REFRESH_LATEST="${REFRESH_LATEST:-0}"
+EXCEPTIONS_FILE="${EXCEPTIONS_FILE:-$ROOT_DIR/golden/taxonomy-validation-exceptions.json}"
 RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 RUN_DIR="${RUN_DIR:-$ROOT_DIR/data/validation/runs/$RUN_ID}"
 RUN_LOG="$RUN_DIR/run.log"
 SOFT_FAILURES=()
+ACCEPTED_HARD_CORE_GAPS=0
+UNEXPLAINED_HARD_CORE_GAPS=0
 
 cd "$ROOT_DIR"
 export LOGLEVEL="${LOGLEVEL:-debug}"
@@ -24,6 +27,18 @@ fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "error: jq is required to build human-readable validation summaries" >&2
+  exit 1
+fi
+
+if [[ ! -f "$EXCEPTIONS_FILE" ]] || ! jq -e '
+  (.schema_version == 1) and
+  (.entries | type == "array") and
+  (all(.entries[]; (.cik | type == "string") and
+    (.accession | type == "string") and
+    (.metric | type == "string") and
+    .status == "accepted"))
+' "$EXCEPTIONS_FILE" >/dev/null; then
+  echo "error: invalid taxonomy validation exceptions file: $EXCEPTIONS_FILE" >&2
   exit 1
 fi
 
@@ -406,6 +421,8 @@ write_run_summary() {
 - Form type: \`$FORM_TYPE\`
 - Year filter: \`$FROM_YEAR\` through \`${TO_YEAR:-latest}\`
 - Status: $status
+- Validation gate: $GATE_STATUS
+- Gate reason: $GATE_REASON
 
 ## Highlights
 
@@ -443,8 +460,63 @@ MARKDOWN
     printf -- '- `constituent-set.json`\n'
     printf -- '- `run.log`\n'
 
+    printf '\n## Gate Review\n\n'
+    printf -- '- accepted reviewed hard-core exceptions: %s\n' "$ACCEPTED_HARD_CORE_GAPS"
+    printf -- '- unexplained hard-core gaps: %s\n' "$UNEXPLAINED_HARD_CORE_GAPS"
+    printf -- '- exception baseline: `%s`\n' "$EXCEPTIONS_FILE"
+
     printf '\nJSON files are for tooling and detailed review. Text files are summaries for quick human triage. This run captures review evidence only; it does not apply taxonomy changes.\n'
   } >> "$RUN_DIR/summary.md"
+}
+
+determine_gate_status() {
+	local coverage_error lint_error taxonomy_error
+
+	coverage_error="$(jq -r '
+		((.summary.missing // 0) > 0) or ((.summary.unparsed // 0) > 0)
+	' "$RUN_DIR/coverage-report.json")"
+	lint_error="$(jq -r '
+		((.summary.failed // 0) > 0) or ((.summary.quality_issues // 0) > 0)
+	' "$RUN_DIR/lint-report.json")"
+	taxonomy_error="$(jq -r '((.summary.failed // 0) > 0)' "$RUN_DIR/taxonomy-coverage.json")"
+	ACCEPTED_HARD_CORE_GAPS="$(jq --slurpfile exceptions "$EXCEPTIONS_FILE" -r '
+		[
+			.filings[] as $filing |
+			($filing.missing_metrics_by_tier.core // [])[] as $metric |
+			select(((($filing.missing_metric_related_evidence // {})[$metric] // []) | length) == 0) |
+			select(((($filing.missing_metric_dimensional_evidence // {})[$metric] // []) | length) == 0) |
+			select(any($exceptions[0].entries[]?;
+				.cik == $filing.cik and .accession == $filing.accession and
+				.metric == $metric and .status == "accepted"))
+		] | length
+	' "$RUN_DIR/coverage-report.json")"
+	UNEXPLAINED_HARD_CORE_GAPS="$(jq --slurpfile exceptions "$EXCEPTIONS_FILE" -r '
+		[
+			.filings[] as $filing |
+			($filing.missing_metrics_by_tier.core // [])[] as $metric |
+			select(((($filing.missing_metric_related_evidence // {})[$metric] // []) | length) == 0) |
+			select(((($filing.missing_metric_dimensional_evidence // {})[$metric] // []) | length) == 0) |
+			select(any($exceptions[0].entries[]?;
+				.cik == $filing.cik and .accession == $filing.accession and
+				.metric == $metric and .status == "accepted") | not)
+		] | length
+	' "$RUN_DIR/coverage-report.json")"
+
+	if [[ "${#SOFT_FAILURES[@]}" -gt 0 || "$coverage_error" == "true" ||
+		"$lint_error" == "true" || "$taxonomy_error" == "true" ]]; then
+		GATE_STATUS="RED"
+		GATE_REASON="processing, coverage, taxonomy, or compact-quality failure"
+		return
+	fi
+
+	if [[ "$UNEXPLAINED_HARD_CORE_GAPS" -gt 0 ]]; then
+		GATE_STATUS="REVIEW"
+		GATE_REASON="operational checks pass, but unexplained hard core gaps remain"
+		return
+	fi
+
+	GATE_STATUS="GREEN"
+	GATE_REASON="operational checks pass and no unexplained hard core gaps remain"
 }
 
 run_step "download and stitch SEC indexes" \
@@ -507,9 +579,16 @@ run_step "human-readable source taxonomy summary" \
 run_step "human-readable compact lint summary" \
   write_lint_text_summary
 
+GATE_STATUS=""
+GATE_REASON=""
+determine_gate_status
+printf 'Validation gate: %s (%s)\n' "$GATE_STATUS" "$GATE_REASON"
+
 RUN_STATUS="complete"
-if [[ "${#SOFT_FAILURES[@]}" -gt 0 ]]; then
-  RUN_STATUS="review"
+if [[ "$GATE_STATUS" == "RED" ]]; then
+	RUN_STATUS="failed"
+elif [[ "$GATE_STATUS" == "REVIEW" ]]; then
+	RUN_STATUS="review"
 fi
 
 write_run_summary "$RUN_STATUS"
@@ -525,3 +604,8 @@ if [[ "${#SOFT_FAILURES[@]}" -gt 0 ]]; then
 fi
 
 echo "Taxonomy validation run completed: $RUN_DIR"
+
+if [[ "$GATE_STATUS" == "RED" ]]; then
+  echo "Validation gate RED: $GATE_REASON" >&2
+  exit 1
+fi

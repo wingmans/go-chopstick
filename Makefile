@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run integration taxonomy-validation release test clean clean-derived-data
+.PHONY: help build constituents lint run integration taxonomy-validation taxonomy-validation-fast release test clean clean-derived-data
 
 .DEFAULT_GOAL := help
 
@@ -17,6 +17,7 @@ help:
 		'  make clean-derived-data  Remove local EDGAR data while preserving raw filings' \
 		'  make integration  Run the EDGAR end-to-end test' \
 		'  make taxonomy-validation  Run the 19-company taxonomy validation pass' \
+		'  make taxonomy-validation-fast  Run the five-company one-year validation pass' \
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -36,6 +37,9 @@ integration: build
 
 taxonomy-validation: build
 	bash scripts/taxonomy-validation.sh
+
+taxonomy-validation-fast: build
+	SET_NAME=golden FROM_YEAR=2024 TO_YEAR=2024 bash scripts/taxonomy-validation.sh
 
 clean-derived-data:
 	bash scripts/clean-derived-data.sh

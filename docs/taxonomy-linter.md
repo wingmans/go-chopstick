@@ -290,6 +290,53 @@ taxonomy findings remain. It is green only when the operational gate passes
 and the configured core-gap and quality thresholds pass. Source-level
 unmapped volume alone should not make the run red.
 
+The validation script now reports this gate in `summary.md` and on stdout:
+
+- `RED`: processing, coverage, taxonomy-command, or compact-quality failure;
+- `REVIEW`: operational checks pass but unexplained hard core metric gaps remain;
+- `GREEN`: operational checks pass and no unexplained hard core gaps remain.
+
+Related-evidence gaps and dimensional-EPS gaps remain visible in the coverage
+reports, but do not block `GREEN` because they are explicitly explained and do
+not represent a safe consolidated mapping failure.
+
+### Human-reviewed hard-gap baseline
+
+The validation gate keeps hard core gaps visible while allowing a human to
+approve narrow, filing-specific exceptions. The canonical baseline is
+`golden/taxonomy-validation-exceptions.json`. It currently contains six
+entries: four Caterpillar `cash` near-matches and two Linde 2018 unavailable
+metrics (`revenue` and `investing_cash_flow`).
+
+An exception matches only the exact `cik`, `accession`, and `metric`. It records
+the reason and source evidence, but never creates a value or changes a filing
+view. Accepted exceptions are reported separately from unexplained gaps. A run
+is `GREEN` only when operational checks pass and the number of unexplained hard
+gaps is zero.
+
+The human review process is deliberate:
+
+1. Run validation and inspect each hard gap in the raw filing and parsed view.
+2. Add only confirmed, filing-specific exceptions to the JSON baseline.
+3. Commit the baseline with the code change and review rationale.
+4. Re-run validation and confirm that accepted exceptions remain visible and
+   no new unexplained gaps are hidden.
+
+Do not add broad issuer, metric, year, or industry wildcards. Do not use the
+baseline to turn a broader concept into a narrower metric. For example,
+Caterpillar's `CashCashEquivalentsAndShortTermInvestments` is accepted as a
+reviewed near-match, not silently mapped to pure cash. Future work may add a
+separate cash-and-short-term-investments metric.
+
+The fast default loop is available as `make taxonomy-validation-fast`. It uses
+the five-company `golden` set, one 2024 10-K year, and local caches. The full
+19-company pass remains `make taxonomy-validation`.
+
+Berkshire's diluted-EPS gap is currently a valid `REVIEW` result: the 2024
+filing has basic EPS facts scoped to share-class dimensions and no consolidated
+diluted-EPS fact. It should not be resolved by selecting one class or mapping
+basic EPS to diluted EPS.
+
 ### Derived liabilities decision
 
 Some filings report a consolidated liabilities-and-equity total and an equity
@@ -301,5 +348,9 @@ derived row is marked with a `derived` namespace and does not alter the raw
 filing or source taxonomy report.
 
 This does not make `LiabilitiesAndStockholdersEquity` a taxonomy alias for
-`liabilities`, and it does not promote dimensional EPS or NCI-inclusive equity
-to their plain metrics. Those remain separate semantic decisions.
+`liabilities`, and it does not promote dimensional EPS to diluted EPS. When
+plain equity is absent, the compact view now exposes the NCI-inclusive value as
+an explicitly derived fallback for the main equity row while retaining the
+original supplemental row. Ratios using the main equity row therefore use the
+reported total available for that filing; readers that require attributable-to-
+parent equity must use the supplemental/source evidence.
