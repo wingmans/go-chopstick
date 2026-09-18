@@ -75,6 +75,12 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 		}
 	}
 
+	// Some issuers report the balance-sheet total and equity but omit a
+	// standalone Liabilities fact. Derive that value only from selected facts
+	// in the same instant context and normalized unit. This keeps the source
+	// facts untouched and avoids treating liabilities_and_equity as liabilities.
+	deriveMissingLiabilities(accumulators["balance"])
+
 	statements := Statements{
 		Income:   StatementView{Title: "Income statement", Groups: statementGroups(accumulators["income"])},
 		Balance:  StatementView{Title: "Balance sheet", Groups: statementGroups(accumulators["balance"])},
@@ -82,6 +88,67 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 	}
 
 	return statements, buildRatios(accumulators, taxonomy)
+}
+
+func deriveMissingLiabilities(accumulator *statementAccumulator) {
+	rows := accumulator.Rows["Instant"]
+	if rows == nil {
+		return
+	}
+
+	for totalKey, total := range rows {
+		if !strings.HasPrefix(totalKey, "liabilities_and_equity\x00") {
+			continue
+		}
+
+		unit := strings.TrimPrefix(totalKey, "liabilities_and_equity\x00")
+
+		liabilitiesKey := "liabilities\x00" + unit
+		if _, exists := rows[liabilitiesKey]; exists {
+			continue
+		}
+
+		equity := rows["equity\x00"+unit]
+		if equity == nil {
+			equity = rows["equity_including_noncontrolling_interest\x00"+unit]
+		}
+
+		if equity == nil {
+			continue
+		}
+
+		derived := &FactSeries{
+			Key: "liabilities", Label: "Liabilities", Namespace: "derived",
+			Concept: "DerivedLiabilities", Unit: unit, Values: map[string]FactValue{},
+		}
+
+		for period, totalValue := range total.Values {
+			equityValue, ok := equity.Values[period]
+			if !ok || totalValue.Nil || equityValue.Nil ||
+				totalValue.ContextRef == "" || totalValue.ContextRef != equityValue.ContextRef {
+				continue
+			}
+
+			totalRat, totalOK := new(big.Rat).SetString(totalValue.Value)
+
+			equityRat, equityOK := new(big.Rat).SetString(equityValue.Value)
+			if !totalOK || !equityOK {
+				continue
+			}
+
+			derived.Values[period] = FactValue{
+				Value: totalRat.Sub(totalRat, equityRat).RatString(),
+				Nil:   false, ContextRef: totalValue.ContextRef,
+				Decimals: "", UnitRef: totalValue.UnitRef,
+				priority: 0, concept: edgar.QName{Namespace: "derived", Local: "DerivedLiabilities"},
+				id: "", precision: "",
+			}
+		}
+
+		if len(derived.Values) > 0 {
+			rows[liabilitiesKey] = derived
+		}
+	}
 }
 
 func statementPeriod(statement, group string) bool {

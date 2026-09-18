@@ -289,3 +289,17 @@ or compact quality failures. It is review-needed when core metric gaps or
 taxonomy findings remain. It is green only when the operational gate passes
 and the configured core-gap and quality thresholds pass. Source-level
 unmapped volume alone should not make the run red.
+
+### Derived liabilities decision
+
+Some filings report a consolidated liabilities-and-equity total and an equity
+total without a standalone liabilities fact. The compact view may derive
+liabilities as `liabilities_and_equity - equity` only when the selected facts
+share the same period, instant context, and normalized unit. Plain equity is
+preferred; NCI-inclusive equity is used only when plain equity is absent. The
+derived row is marked with a `derived` namespace and does not alter the raw
+filing or source taxonomy report.
+
+This does not make `LiabilitiesAndStockholdersEquity` a taxonomy alias for
+`liabilities`, and it does not promote dimensional EPS or NCI-inclusive equity
+to their plain metrics. Those remain separate semantic decisions.

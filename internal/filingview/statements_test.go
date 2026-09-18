@@ -1,0 +1,73 @@
+package filingview
+
+import (
+	"testing"
+
+	"wingman.com/fetch-ecb/internal/edgar"
+)
+
+func TestDeriveMissingLiabilitiesUsesSameContextAndUnit(t *testing.T) {
+	accumulator := &statementAccumulator{Rows: map[string]map[string]*FactSeries{
+		"Instant": {
+			"liabilities_and_equity\x00USD": {
+				Key: "liabilities_and_equity", Label: "Liabilities and equity",
+				Namespace: "us-gaap", Concept: "LiabilitiesAndStockholdersEquity", Unit: "USD",
+				Values: map[string]FactValue{
+					"2025-12-31": testFactValue("150", "balance"),
+				},
+			},
+			"equity\x00USD": {
+				Key: "equity", Label: "Shareholders' equity",
+				Namespace: "us-gaap", Concept: "StockholdersEquity", Unit: "USD",
+				Values: map[string]FactValue{
+					"2025-12-31": testFactValue("90", "balance"),
+				},
+			},
+		},
+	}}
+
+	deriveMissingLiabilities(accumulator)
+
+	derived := accumulator.Rows["Instant"]["liabilities\x00USD"]
+	if derived == nil {
+		t.Fatal("expected derived liabilities row")
+	}
+
+	if got := derived.Values["2025-12-31"].Value; got != "60" {
+		t.Fatalf("derived liabilities = %q, want 60", got)
+	}
+}
+
+func TestDeriveMissingLiabilitiesSkipsMismatchedContexts(t *testing.T) {
+	accumulator := &statementAccumulator{Rows: map[string]map[string]*FactSeries{
+		"Instant": {
+			"liabilities_and_equity\x00USD": {
+				Key: "liabilities_and_equity", Label: "Liabilities and equity",
+				Namespace: "us-gaap", Concept: "LiabilitiesAndStockholdersEquity", Unit: "USD",
+				Values: map[string]FactValue{
+					"2025-12-31": testFactValue("150", "balance"),
+				},
+			},
+			"equity\x00USD": {
+				Key: "equity", Label: "Shareholders' equity",
+				Namespace: "us-gaap", Concept: "StockholdersEquity", Unit: "USD",
+				Values: map[string]FactValue{
+					"2025-12-31": testFactValue("90", "restated-balance"),
+				},
+			},
+		},
+	}}
+
+	deriveMissingLiabilities(accumulator)
+
+	if _, ok := accumulator.Rows["Instant"]["liabilities\x00USD"]; ok {
+		t.Fatal("did not expect derived liabilities for mismatched contexts")
+	}
+}
+
+func testFactValue(value, context string) FactValue {
+	return FactValue{
+		Value: value, Nil: false, ContextRef: context, Decimals: "", UnitRef: "usd",
+		priority: 0, concept: edgar.QName{Namespace: "", Local: ""}, id: "", precision: "",
+	}
+}

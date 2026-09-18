@@ -58,9 +58,9 @@ if [[ -n "$TO_YEAR" ]]; then
   YEAR_ARGS+=(--to-year "$TO_YEAR")
 fi
 
-INDEX_REFRESH_ARGS=()
+INDEX_ARGS=(--from-year "$FROM_YEAR" --stitch)
 if [[ "$REFRESH_LATEST" == "1" ]]; then
-  INDEX_REFRESH_ARGS+=(--refresh-latest)
+	INDEX_ARGS+=(--refresh-latest)
 fi
 
 # Run a step and append both the command and output to the run log.
@@ -448,10 +448,7 @@ MARKDOWN
 }
 
 run_step "download and stitch SEC indexes" \
-  "$CLI_PATH" index \
-    --from-year "$FROM_YEAR" \
-    --stitch \
-    "${INDEX_REFRESH_ARGS[@]}"
+  "$CLI_PATH" index "${INDEX_ARGS[@]}"
 
 test -s data/indexes/master.tsv
 
