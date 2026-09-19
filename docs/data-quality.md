@@ -22,10 +22,33 @@ rewrite the project's definition of correct behavior.
 
 The manually cross-checked company values are kept in
 [`golden/manual-checks.json`](../golden/manual-checks.json). This is a durable
-candidate baseline for the five-company, two-year spot check. It remains marked
-`human-review-pending` until the source labels, fiscal periods, signs, and
-values have been checked. Only then should a comparison test promote it to an
-automated expected-value fixture.
+approved baseline for the five-company, two-year spot check. Its source
+labels, fiscal periods, signs, and values were checked by a human and are
+enforced by `make manual-checks`.
+
+## Current Golden-19 Acceptance Boundary
+
+Run `20260919T092015Z` is the current accepted 19-company baseline:
+
+- 205/205 expected 10-K filings parsed;
+- zero processing or compact-lint failures;
+- zero unexplained hard core gaps;
+- 18 filings still report a missing core metric, all with reviewed evidence or
+  an accepted source limitation.
+
+The remaining gaps are accepted for the current top-level aggregate goal:
+
+- diluted EPS may be absent when the filing exposes only dimensional/basic EPS
+  evidence; the dimensional facts remain preserved in `filing.json`;
+- Caterpillar may report a broader consolidated cash concept instead of the
+  narrow cash concept;
+- the identified Linde filing has no consolidated revenue or investing
+  cash-flow fact available for the selected period.
+
+This acceptance does not mean the taxonomy is complete. It means these cases
+do not block the current product goal of reliable consolidated company-level
+metrics. New parser or taxonomy changes must continue to pass the manual
+baseline and must not increase unexplained hard core gaps.
 
 ## Code Review Discipline
 

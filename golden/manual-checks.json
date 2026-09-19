@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "human-review-pending",
+  "status": "approved-automated-baseline",
   "source_document": "manual checks from validation run 20260918T150014Z",
   "currency": "USD",
   "monetary_unit": "USD billions",

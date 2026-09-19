@@ -8,7 +8,8 @@ This is the current roadmap after the first end-to-end and taxonomy passes.
 - [x] Normalize units and define sign handling.
 - [x] Preserve or explicitly exclude dimensional facts.
 - [x] Add accounting identity checks.
-- Expand and review the taxonomy across the 19-company validation set.
+- [x] Expand and review the taxonomy across the 19-company validation set
+  (core gaps reviewed; accepted limitations documented).
 - [x] Add stronger golden expected-value fixtures.
 
 ## Legacy XBRL Compatibility

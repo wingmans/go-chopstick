@@ -37,6 +37,7 @@ echo "Downloading filings from 2010 onward for set $SET_NAME"
 echo "Reprocessing filings from 2010 onward for set $SET_NAME"
 "$CLI_PATH" parse \
   --set "$SET_NAME" \
+  --form-type 10-K \
   --reprocess
 
 if ! find data/parsed -type f -name filing.json -print -quit | grep -q .; then
