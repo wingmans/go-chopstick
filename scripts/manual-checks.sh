@@ -117,7 +117,7 @@ printf 'Manual baseline: %s\n' "$BASELINE"
 printf 'Parsed views:   %s\n' "$PARSED_DIR"
 printf 'Tolerance:      %s\n\n' "$TOLERANCE"
 
-while IFS=$'\t' read -r ticker cik fiscal_year accession; do
+while IFS=$'\t' read -r ticker cik fiscal_year accession balance_accession; do
   view_path="$(find_view "$cik" "$accession" || true)"
   if [[ -z "$view_path" ]]; then
     echo "FAIL $ticker FY$fiscal_year: no matching 10-K filing-view.json"
@@ -127,6 +127,15 @@ while IFS=$'\t' read -r ticker cik fiscal_year accession; do
 
   report_date="$(jq -r '.metadata.report_date' "$view_path")"
   actual_accession="$(jq -r '.metadata.accession' "$view_path")"
+  balance_path="$view_path"
+  if [[ -n "$balance_accession" && "$balance_accession" != "null" ]]; then
+    balance_path="$(find_view "$cik" "$balance_accession" || true)"
+    if [[ -z "$balance_path" ]]; then
+      echo "FAIL $ticker FY$fiscal_year: balance source $balance_accession not found"
+      failures=$((failures + 1))
+      continue
+    fi
+  fi
   printf '%s FY%s (%s) %s\n' "$ticker" "$fiscal_year" "$report_date" "$actual_accession"
 
   for metric in "${METRICS[@]}"; do
@@ -137,7 +146,13 @@ while IFS=$'\t' read -r ticker cik fiscal_year accession; do
       continue
     fi
 
-    actual_raw="$(actual_value "$view_path" "$metric" "$fiscal_year")"
+    actual_path="$view_path"
+    case "$metric" in
+      total_assets|cash_and_cash_equivalents|total_liabilities|equity)
+        actual_path="$balance_path"
+        ;;
+    esac
+    actual_raw="$(actual_value "$actual_path" "$metric" "$fiscal_year")"
     actual="$actual_raw"
     if [[ "$metric" != "diluted_eps" && -n "$actual_raw" ]]; then
       actual="$(awk -v value="$actual_raw" 'BEGIN { printf "%.12g", value / 1000000000 }')"
@@ -151,7 +166,12 @@ while IFS=$'\t' read -r ticker cik fiscal_year accession; do
       failures=$((failures + 1))
     fi
   done
-done < <(jq -r '.companies[] | . as $company | .fiscal_years | keys[] | [$company.ticker, $company.cik, ., $company.source_accession] | @tsv' "$BASELINE")
+done < <(jq -r '
+  .companies[] | . as $company | .fiscal_years | to_entries[] |
+  [$company.ticker, $company.cik, .key,
+   (.value.source_accession // $company.source_accession),
+   (.value.balance_source_accession // "")] | @tsv
+' "$BASELINE")
 
 printf '\nCompared: %d, exceptions: %d, failures: %d\n' "$comparisons" "$exceptions" "$failures"
 

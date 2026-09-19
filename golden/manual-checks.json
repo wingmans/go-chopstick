@@ -11,6 +11,7 @@
     "NVIDIA reports fiscal years ending in a different calendar year from the other companies.",
     "Apple values use the SEC 10-K concepts exposed by the parser; vendor values with different labels remain out of this baseline.",
     "Berkshire diluted EPS is null because the compact filing view does not currently expose that metric for this filing.",
+    "NVIDIA FY2023 diluted EPS uses the split-adjusted comparative value presented in the selected 2025 10-K.",
     "Verify source labels, cash-flow signs, fiscal periods, and accession numbers before promotion."
   ],
   "companies": [
@@ -21,6 +22,7 @@
       "source_accession": "0000950170-25-100235",
       "fiscal_years": {
         "2024": {
+          "source_accession": "0000950170-24-087843",
           "revenue": 245.122,
           "net_income": 88.136,
           "diluted_eps": 11.8,
@@ -33,6 +35,7 @@
           "financing_cash_flow": -37.757
         },
         "2023": {
+          "source_accession": "0000950170-23-035122",
           "revenue": 211.915,
           "net_income": 72.361,
           "diluted_eps": 9.68,
@@ -53,6 +56,7 @@
       "source_accession": "0000320193-25-000079",
       "fiscal_years": {
         "2024": {
+          "source_accession": "0000320193-24-000123",
           "revenue": 391.035,
           "net_income": 93.736,
           "diluted_eps": 6.08,
@@ -65,6 +69,7 @@
           "financing_cash_flow": -121.983
         },
         "2023": {
+          "source_accession": "0000320193-23-000106",
           "revenue": 383.285,
           "net_income": 96.995,
           "diluted_eps": 6.13,
@@ -85,6 +90,7 @@
       "source_accession": "0001018724-25-000004",
       "fiscal_years": {
         "2024": {
+          "source_accession": "0001018724-25-000004",
           "revenue": 637.959,
           "net_income": 59.248,
           "diluted_eps": 5.53,
@@ -97,6 +103,7 @@
           "financing_cash_flow": -11.812
         },
         "2023": {
+          "source_accession": "0001018724-25-000004",
           "revenue": 574.785,
           "net_income": 30.425,
           "diluted_eps": 2.9,
@@ -117,6 +124,7 @@
       "source_accession": "0001045810-25-000023",
       "fiscal_years": {
         "2024": {
+          "source_accession": "0001045810-25-000023",
           "revenue": 60.922,
           "net_income": 29.76,
           "diluted_eps": 1.19,
@@ -129,9 +137,11 @@
           "financing_cash_flow": -13.633
         },
         "2023": {
+          "source_accession": "0001045810-25-000023",
+          "balance_source_accession": "0001045810-24-000029",
           "revenue": 26.974,
           "net_income": 4.368,
-          "diluted_eps": 0.21,
+          "diluted_eps": 0.17,
           "total_assets": 41.182,
           "cash_and_cash_equivalents": 3.389,
           "total_liabilities": 19.081,
@@ -149,6 +159,7 @@
       "source_accession": "0000950170-25-025210",
       "fiscal_years": {
         "2024": {
+          "source_accession": "0000950170-25-025210",
           "revenue": 371.433,
           "net_income": 88.995,
           "diluted_eps": null,
@@ -161,6 +172,7 @@
           "financing_cash_flow": -10.36
         },
         "2023": {
+          "source_accession": "0000950170-25-025210",
           "revenue": 364.482,
           "net_income": 96.223,
           "diluted_eps": null,
