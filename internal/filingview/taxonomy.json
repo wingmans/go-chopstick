@@ -10,12 +10,12 @@
         {
           "namespace_family": "us-gaap",
           "name": "RevenueFromContractWithCustomerExcludingAssessedTax",
-          "priority": 1
+          "priority": 2
         },
         {
           "namespace_family": "us-gaap",
           "name": "Revenues",
-          "priority": 2
+          "priority": 1
         },
         {
           "namespace_family": "us-gaap",

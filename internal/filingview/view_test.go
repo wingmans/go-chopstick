@@ -172,7 +172,7 @@ func emptyXMLNode() edgar.XMLNode {
 func assertRevenueSelection(t *testing.T, row FactSeries) {
 	t.Helper()
 
-	if row.Key != "revenue" || row.Concept != "RevenueFromContractWithCustomerExcludingAssessedTax" {
+	if row.Key != "revenue" || row.Concept != "Revenues" {
 		t.Fatalf("unexpected selected row identity: %+v", row)
 	}
 
@@ -181,7 +181,7 @@ func assertRevenueSelection(t *testing.T, row FactSeries) {
 	}
 
 	value := row.Values["FY2026"]
-	if value.Value != "100" || value.ContextRef != "fy" || value.UnitRef != "usd" {
+	if value.Value != "999" || value.ContextRef != "fy" || value.UnitRef != "usd" {
 		t.Fatalf("unexpected selected value: %+v", value)
 	}
 }

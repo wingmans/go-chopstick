@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run integration taxonomy-validation taxonomy-validation-fast release test clean clean-derived-data
+.PHONY: help build constituents lint run integration taxonomy-validation taxonomy-validation-fast manual-checks release test clean clean-derived-data
 
 .DEFAULT_GOAL := help
 
@@ -16,8 +16,9 @@ help:
 		'  make constituents Download the current S&P 500 constituent set' \
 		'  make clean-derived-data  Remove local EDGAR data while preserving raw filings' \
 		'  make integration  Run the EDGAR end-to-end test' \
-		'  make taxonomy-validation  Run the 19-company taxonomy validation pass' \
-		'  make taxonomy-validation-fast  Run the five-company one-year validation pass' \
+	  '  make taxonomy-validation  Run the 19-company taxonomy validation pass' \
+	  '  make taxonomy-validation-fast  Run the five-company one-year validation pass' \
+	  '  make manual-checks  Compare the confirmed baseline with local parsed 10-K views' \
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -40,6 +41,9 @@ taxonomy-validation: build
 
 taxonomy-validation-fast: build
 	SET_NAME=golden FROM_YEAR=2024 TO_YEAR=2024 bash scripts/taxonomy-validation.sh
+
+manual-checks:
+	bash scripts/manual-checks.sh
 
 clean-derived-data:
 	bash scripts/clean-derived-data.sh

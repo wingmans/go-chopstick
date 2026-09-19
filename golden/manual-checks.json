@@ -18,6 +18,7 @@
       "ticker": "MSFT",
       "cik": "0000789019",
       "name": "Microsoft Corporation",
+      "source_accession": "0000950170-25-100235",
       "fiscal_years": {
         "2024": {
           "revenue": 245.122,
@@ -37,7 +38,7 @@
           "diluted_eps": 9.68,
           "total_assets": 411.976,
           "cash_and_cash_equivalents": 34.704,
-          "total_liabilities": 205.73,
+          "total_liabilities": 205.753,
           "equity": 206.223,
           "operating_cash_flow": 87.582,
           "investing_cash_flow": -22.68,
@@ -49,6 +50,7 @@
       "ticker": "AAPL",
       "cik": "0000320193",
       "name": "Apple Inc.",
+      "source_accession": "0000320193-25-000079",
       "fiscal_years": {
         "2024": {
           "revenue": 391.035,
@@ -60,7 +62,7 @@
           "equity": 56.95,
           "operating_cash_flow": 118.254,
           "investing_cash_flow": 2.935,
-          "financing_cash_flow": -5.802
+          "financing_cash_flow": -121.983
         },
         "2023": {
           "revenue": 383.285,
@@ -72,7 +74,7 @@
           "equity": 62.146,
           "operating_cash_flow": 110.543,
           "investing_cash_flow": 3.705,
-          "financing_cash_flow": -6.012
+          "financing_cash_flow": -108.488
         }
       }
     },
@@ -80,6 +82,7 @@
       "ticker": "AMZN",
       "cik": "0001018724",
       "name": "Amazon.com, Inc.",
+      "source_accession": "0001018724-25-000004",
       "fiscal_years": {
         "2024": {
           "revenue": 637.959,
@@ -111,6 +114,7 @@
       "ticker": "NVDA",
       "cik": "0001045810",
       "name": "NVIDIA Corporation",
+      "source_accession": "0001045810-25-000023",
       "fiscal_years": {
         "2024": {
           "revenue": 60.922,
@@ -142,6 +146,7 @@
       "ticker": "BRK-B",
       "cik": "0001067983",
       "name": "Berkshire Hathaway Inc.",
+      "source_accession": "0000950170-25-025210",
       "fiscal_years": {
         "2024": {
           "revenue": 371.433,
