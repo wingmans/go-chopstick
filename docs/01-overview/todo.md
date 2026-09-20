@@ -30,6 +30,8 @@ lands would mix parser changes with data churn.
 
 - Perform manual validation across companies and filing years.
 - Improve detail-page formatting and missing-value presentation.
+- Consider lazy-loading detail-page sections with htmx after the simple
+  navigation path is stable.
 - Add stronger expected-set validation to the E2E script.
 
 ## Taxonomy Maintenance

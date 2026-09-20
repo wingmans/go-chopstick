@@ -5,26 +5,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Filing.Metadata.FormType}} {{.Filing.Metadata.Accession}}</title>
-  <style>
-    :root { font: 14px/1.4 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1e293b; background: #f1f5f9; }
-    * { box-sizing: border-box; } body { margin: 0; }
-    header { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; padding: 0 20px; height: 44px; background: white; border-bottom: 1px solid #e2e8f0; }
-    main { max-width: 1600px; margin: auto; padding: 14px 16px 40px; }
-    .back { color: #2563eb; text-decoration: none; font-weight: 600; } .heading { margin: 22px 0 16px; }
-    h1 { margin: 0 0 3px; font-size: 22px; color: #0f172a; } .subtitle { color: #64748b; }
-    .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 14px 0 18px; }
-    .card { min-width: 0; padding: 8px 10px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; } .label { color: #64748b; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-    .value { overflow: hidden; margin-top: 2px; color: #0f172a; font-size: 16px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-    .panel { overflow: hidden; margin-top: 14px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; }
-    .panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 12px 8px; } h2 { margin: 0; font-size: 15px; } .muted { color: #94a3b8; font-size: 11px; }
-    .table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; } thead tr { background: #f8fafc; } th, td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; } th { color: #64748b; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-align: right; text-transform: uppercase; } th:first-child { position: sticky; left: 0; z-index: 2; width: 180px; background: #f8fafc; border-right: 1px solid #e2e8f0; text-align: left; } td.num { overflow: hidden; color: #0f172a; font-variant-numeric: tabular-nums; text-align: right; text-overflow: ellipsis; }
-    .summary-table { width: max-content; min-width: 100%; } .summary-table .line-item-col { width: 180px; } .summary-table .value-col { width: 96px; } .summary-table td:first-child { position: sticky; left: 0; z-index: 1; min-width: 180px; width: 180px; background: white; border-right: 1px solid #e2e8f0; text-align: left; } .summary-table tbody tr:hover td { background: #fafbfc; } .summary-table tbody tr:hover td:first-child { background: #fafbfc; } .summary-table .line-label { display: block; overflow: hidden; color: #475569; font-weight: 500; text-overflow: ellipsis; }
-    .documents { display: grid; gap: 8px; padding: 4px 16px 16px; } .documents a { color: #2563eb; font-weight: 600; text-decoration: none; } .document-meta { color: #64748b; font-size: 12px; }
-    @media (max-width: 800px) { main { padding: 16px; } .summary { grid-template-columns: repeat(2, 1fr); } .heading { margin-top: 16px; } }
-  </style>
+  <link rel="stylesheet" href="/assets/filingweb.css">
+  <script src="/assets/htmx.min.js"></script>
 </head>
-<body>
-  <header><a class="back" href="{{.BackURL}}">&larr; All filings</a></header>
+<body class="detail-page">
+  <header><a class="back" href="{{.BackURL}}" hx-get="{{.BackURL}}"
+    hx-target="body" hx-swap="outerHTML" hx-select="body"
+    hx-push-url="true">&larr; All filings</a></header>
   <main id="filing-detail" data-cik="{{.Filing.Metadata.CIK}}" data-accession="{{.Filing.Metadata.Accession}}">
     <section class="heading">
       <h1 id="filing-company">{{if .Filing.Metadata.Filers}}{{(index .Filing.Metadata.Filers 0).Name}}{{else}}Unknown company{{end}}</h1>

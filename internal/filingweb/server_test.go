@@ -122,7 +122,10 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"id=\"key-ratios\"",
 		"id=\"filing-documents\"",
 		"id=\"financial-summary\"",
+		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
 		"href=\"/?q=MSFT\"",
+		"hx-get=\"/?q=MSFT\"",
+		"hx-target=\"body\"",
 		"data-testid=\"metric-RevenueFromContractWithCustomerExcludingAssessedTax-FY2026\"",
 		"Revenue",
 		"$331.8B",
@@ -176,6 +179,10 @@ func TestIndexPageIncludesSearchBreadcrumb(t *testing.T) {
 		"id=\"search-breadcrumb\"",
 		"aria-label=\"Search breadcrumb\"",
 		"All filings",
+		"hx-get=\"/\"",
+		"hx-target=\"#dashboard\"",
+		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
+		"<script src=\"/assets/htmx.min.js\"></script>",
 		"edgar.search-trail.v1",
 		"const searchTrailLimit = 8",
 		"function rememberSearch(query, form, year)",
@@ -290,5 +297,79 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 
 	if record.Code != 200 || !strings.Contains(record.Body.String(), "XBRL facts") {
 		t.Fatalf("details page failed: status=%d body=%s", record.Code, record.Body.String())
+	}
+
+	record = httptest.NewRecorder()
+	request := httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/?q=MSFT", nil)
+	server.ServeHTTP(record, request)
+
+	body := record.Body.String()
+	for _, marker := range []string{
+		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
+		"<script src=\"/assets/htmx.min.js\"></script>",
+		"value=\"MSFT\"",
+		"id=\"dashboard\"",
+		"0001193125-26-027207",
+		"href=\"/filings/789019/0001193125-26-027207?return_to=%2F%3Fq%3DMSFT\"",
+		"hx-target=\"body\"",
+		"hx-select=\"body\"",
+	} {
+		if record.Code != http.StatusOK || !strings.Contains(body, marker) {
+			t.Fatalf("index page missing %q: status=%d body=%s",
+				marker, record.Code, body)
+		}
+	}
+
+	record = httptest.NewRecorder()
+	request = httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/?q=MSFT", nil)
+	request.Header.Set("HX-Request", "true")
+	request.Header.Set("HX-Target", "div#dashboard")
+	server.ServeHTTP(record, request)
+
+	body = record.Body.String()
+	if record.Code != http.StatusOK || strings.Contains(body, "<!doctype html>") ||
+		!strings.Contains(body, "id=\"dashboard\"") ||
+		!strings.Contains(body, "0001193125-26-027207") {
+		t.Fatalf("htmx dashboard fragment failed: status=%d body=%s",
+			record.Code, body)
+	}
+
+	record = httptest.NewRecorder()
+	request = httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/?q=MSFT", nil)
+	request.Header.Set("HX-Request", "true")
+	request.Header.Set("HX-Target", "body")
+	server.ServeHTTP(record, request)
+
+	body = record.Body.String()
+	if record.Code != http.StatusOK || !strings.Contains(body, "<!doctype html>") ||
+		!strings.Contains(body, "class=\"dashboard-page\"") ||
+		!strings.Contains(body, "0001193125-26-027207") {
+		t.Fatalf("htmx dashboard navigation failed: status=%d body=%s",
+			record.Code, body)
+	}
+
+	record = httptest.NewRecorder()
+	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/assets/htmx.min.js", nil))
+
+	if record.Code != http.StatusOK ||
+		!strings.Contains(record.Header().Get("Content-Type"), "text/javascript") ||
+		!strings.Contains(record.Body.String(), `version="4.0.0"`) {
+		t.Fatalf("htmx asset failed: status=%d headers=%v body=%s",
+			record.Code, record.Header(), record.Body.String())
+	}
+
+	record = httptest.NewRecorder()
+	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/assets/filingweb.css", nil))
+
+	if record.Code != http.StatusOK ||
+		!strings.Contains(record.Header().Get("Content-Type"), "text/css") ||
+		!strings.Contains(record.Body.String(), "body.detail-page") {
+		t.Fatalf("stylesheet asset failed: status=%d headers=%v body=%s",
+			record.Code, record.Header(), record.Body.String())
 	}
 }

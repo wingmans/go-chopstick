@@ -5,51 +5,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{if .Ticker}}{{.Ticker}} - {{end}}{{.History.Company}}</title>
-  <style>
-    :root { font: 14px/1.4 Inter, -apple-system, BlinkMacSystemFont,
-      "Segoe UI", sans-serif; color: #1e293b; background: #f1f5f9; }
-    * { box-sizing: border-box; }
-    body { margin: 0; }
-    header { position: sticky; top: 0; z-index: 3; display: flex;
-      align-items: center; height: 44px; padding: 0 20px; background: white;
-      border-bottom: 1px solid #e2e8f0; }
-    main { max-width: 1600px; margin: auto; padding: 14px 16px 40px; }
-    .back, a { color: #2563eb; font-weight: 600; text-decoration: none; }
-    .heading { margin: 12px 0 16px; }
-    h1 { margin: 0 0 3px; color: #0f172a; font-size: 22px; }
-    .subtitle { color: #64748b; }
-    .section { margin-top: 18px; }
-    .section-label { margin: 0 0 8px; color: #94a3b8; font-size: 10px;
-      font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-    .table-wrap { overflow-x: auto; background: white; border: 1px solid
-      #e2e8f0; border-radius: 6px; }
-    table { width: max-content; min-width: 100%; border-collapse: collapse;
-      table-layout: fixed; font-size: 12px; }
-    .line-item-col { width: 180px; }
-    .value-col { width: 96px; }
-    th, td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9;
-      white-space: nowrap; }
-    th { color: #64748b; background: #f8fafc; font-size: 10px;
-      font-weight: 600; text-align: right; text-transform: uppercase; }
-    th:first-child, td:first-child { position: sticky; left: 0; width: 180px;
-      border-right: 1px solid #e2e8f0; text-align: left; }
-    th:first-child { z-index: 2; background: #f8fafc; }
-    td:first-child { z-index: 1; background: white; color: #475569;
-      font-weight: 500; }
-    td.num { color: #0f172a; font-variant-numeric: tabular-nums;
-      text-align: right; }
-    tbody tr:hover td { background: #fafbfc; }
-    tbody tr:hover td:first-child { background: #fafbfc; }
-    .source { display: block; margin-top: 1px; color: #94a3b8; font-size: 9px;
-      font-weight: 400; }
-    .empty-row { padding: 18px 8px; color: #94a3b8; text-align: left; }
-    @media (max-width: 700px) {
-      main { padding: 12px; }
-      .line-item-col, th:first-child, td:first-child { width: 160px; }
-    }
-  </style>
+  <link rel="stylesheet" href="/assets/filingweb.css">
 </head>
-<body>
+<body class="company-page">
   <header><a class="back" href="/">&larr; Filing search</a></header>
   <main id="company-history" data-cik="{{.History.CIK}}">
     <section class="heading">

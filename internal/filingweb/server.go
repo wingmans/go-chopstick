@@ -25,7 +25,7 @@ import (
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
-//go:embed index.html detail.html company.html
+//go:embed index.html detail.html company.html assets/filingweb.css assets/htmx-4.0.0.min.js
 var templateFiles embed.FS
 
 type Server struct {
@@ -55,8 +55,12 @@ type dashboardData struct {
 	Company     string          `json:"company"`
 	CIK         string          `json:"cik"`
 	Query       string          `json:"query"`
+	FormType    string          `json:"-"`
+	Year        string          `json:"-"`
 	SetName     string          `json:"set_name"`
 	SetAsOf     string          `json:"set_as_of"`
+	HasFilters  bool            `json:"-"`
+	ReturnTo    string          `json:"-"`
 	Filings     []filingSummary `json:"filings"`
 }
 
@@ -193,7 +197,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case r.URL.Path == "/":
-		_ = s.template.ExecuteTemplate(w, "index.html", nil)
+		s.index(w, r)
+	case r.URL.Path == "/assets/filingweb.css":
+		s.asset(w, r, "assets/filingweb.css", "text/css")
+	case r.URL.Path == "/assets/htmx.min.js":
+		s.asset(w, r, "assets/htmx-4.0.0.min.js", "text/javascript")
 	case strings.HasPrefix(r.URL.Path, "/companies/"):
 		s.company(w, r)
 	case strings.HasPrefix(r.URL.Path, "/filings/") && strings.Contains(r.URL.Path, "/documents/"):
@@ -206,6 +214,40 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.apiFiling(w, r)
 	default:
 		http.NotFound(w, r)
+	}
+}
+
+func (s *Server) asset(w http.ResponseWriter, r *http.Request, path, contentType string) {
+	data, err := templateFiles.ReadFile(path)
+	if err != nil {
+		http.NotFound(w, r)
+
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if _, err := w.Write(data); err != nil && s.logger != nil {
+		s.logger.Debug("write asset response failed", "error", err)
+	}
+}
+
+func (s *Server) index(w http.ResponseWriter, r *http.Request) {
+	data, err := s.dashboardData(r)
+	if err != nil {
+		s.writeError(w, err)
+
+		return
+	}
+
+	templateName := "index.html"
+	if r.Header.Get("HX-Request") == "true" &&
+		strings.Contains(r.Header.Get("HX-Target"), "#dashboard") {
+		templateName = "dashboard.html"
+	}
+
+	if err := s.template.ExecuteTemplate(w, templateName, data); err != nil {
+		s.writeError(w, err)
 	}
 }
 
@@ -283,11 +325,20 @@ func (s *Server) loadCompanyHistory(cik string) (filingview.CompanyHistory, erro
 }
 
 func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
-	filings, err := s.loadSummaries()
+	data, err := s.dashboardData(r)
 	if err != nil {
 		s.writeError(w, err)
 
 		return
+	}
+
+	s.writeJSON(w, data)
+}
+
+func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
+	filings, err := s.loadSummaries()
+	if err != nil {
+		return dashboardData{}, err
 	}
 
 	cik := strings.TrimSpace(r.URL.Query().Get("cik"))
@@ -295,14 +346,14 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 	formType := strings.TrimSpace(r.URL.Query().Get("form_type"))
 
 	year := strings.TrimSpace(r.URL.Query().Get("year"))
+	hasFilters := cik != "" || query != "" || formType != "" || year != ""
 	if cik == "" && query == "" && formType == "" && year == "" {
-		s.writeJSON(w, dashboardData{
+		return dashboardData{
 			FilingCount: 0, Company: "", CIK: "", Query: "",
+			FormType: "", Year: "", HasFilters: false, ReturnTo: "/",
 			SetName: s.setName, SetAsOf: s.setAsOf,
 			Filings: []filingSummary{},
-		})
-
-		return
+		}, nil
 	}
 
 	queryCIKs := s.resolveQuery(query)
@@ -344,10 +395,12 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 		filtered = append(filtered, filing)
 	}
 
-	s.writeJSON(w, dashboardData{
+	return dashboardData{
 		FilingCount: len(filtered), Company: company, CIK: selectedCIK,
-		Query: query, SetName: s.setName, SetAsOf: s.setAsOf, Filings: filtered,
-	})
+		Query: query, FormType: formType, Year: year, SetName: s.setName,
+		SetAsOf: s.setAsOf, HasFilters: hasFilters, ReturnTo: r.URL.RequestURI(),
+		Filings: filtered,
+	}, nil
 }
 
 func (s *Server) resolveQuery(query string) map[string]bool {

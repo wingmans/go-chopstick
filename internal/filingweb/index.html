@@ -1,121 +1,34 @@
+{{define "index.html"}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>EDGAR local filings</title>
-  <style>
-    :root { font: 14px/1.4 system-ui, sans-serif; color: #1e293b; background: #f1f5f9; }
-    * { box-sizing: border-box; }
-    body { margin: 0; }
-    header { display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-      padding: 12px 24px; background: white; border-bottom: 1px solid #dbe3ec; }
-    header strong { color: #0f172a; }
-    form { display: flex; gap: 6px; flex: 1; }
-    input, select, button { font: inherit; padding: 7px 10px;
-      border: 1px solid #cbd5e1; border-radius: 5px; }
-    input { min-width: 180px; flex: 1; background: #f8fafc; }
-    select { min-width: 110px; background: white; }
-    button { color: white; background: #2563eb; border-color: #2563eb;
-      cursor: pointer; }
-    main { max-width: 1500px; margin: auto; padding: 20px 24px 40px; }
-    .context { display: flex; justify-content: space-between; gap: 12px;
-      margin-bottom: 12px; color: #64748b; font-size: 12px; }
-    .context strong { color: #334155; }
-    .trail { display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
-      margin-bottom: 10px; padding: 6px 14px; background: white;
-      border: 1px solid #e2e8f0; border-radius: 6px; color: #64748b;
-      font-size: 12px; }
-    .trail strong { color: #64748b; font-weight: 600; }
-    .trail a, .trail span[data-chip] { padding: 3px 8px; background: #f8fafc;
-      border: 1px solid #e2e8f0; border-radius: 4px; color: #334155;
-      font-weight: 600; text-decoration: none; }
-    .trail a:hover { border-color: #93c5fd; color: #2563eb; }
-    .recent { display: none; align-items: center; flex-wrap: wrap; gap: 6px;
-      margin-bottom: 14px; color: #64748b; font-size: 12px; }
-    .recent.visible { display: flex; }
-    .recent a, .recent button { padding: 4px 8px; border: 1px solid #cbd5e1;
-      border-radius: 4px; background: white; color: #2563eb; font: inherit;
-      font-weight: 600; text-decoration: none; cursor: pointer; }
-    .recent button { color: #64748b; font-size: 12px; }
-    .summary { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr));
-      gap: 10px; margin-bottom: 20px; }
-    .card, .panel { background: white; border: 1px solid #dbe3ec; border-radius: 6px; }
-    .card { padding: 12px 14px; }
-    .label { color: #64748b; font-size: 11px; font-weight: 700;
-      letter-spacing: .06em; text-transform: uppercase; }
-    .value { margin-top: 3px; font-size: 20px; font-weight: 700; }
-    .panel { overflow: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 9px 12px; border-bottom: 1px solid #edf1f5;
-      text-align: left; white-space: nowrap; }
-    th { color: #64748b; background: #f8fafc; font-size: 11px;
-      text-transform: uppercase; }
-    td.num { text-align: right; font-variant-numeric: tabular-nums; }
-    a { color: #2563eb; text-decoration: none; font-weight: 600; }
-    .empty { padding: 48px; color: #64748b; text-align: center; }
-    .status-partial { color: #b45309; font-weight: 600; }
-    .status-failed { color: #b91c1c; font-weight: 600; }
-    @media (max-width: 700px) {
-      header { padding: 12px 16px; }
-      form { flex-basis: 100%; }
-      main { padding: 16px; }
-      .context { align-items: flex-start; flex-direction: column; }
-      .summary { grid-template-columns: repeat(2, 1fr); }
-    }
-  </style>
+  <link rel="stylesheet" href="/assets/filingweb.css">
+  <script src="/assets/htmx.min.js"></script>
 </head>
-<body>
+<body class="dashboard-page">
   <header>
     <strong>EDGAR / local filings</strong>
-    <form id="search">
-      <input id="query" placeholder="Search ticker, company, or CIK">
-      <select id="form-type" aria-label="Form type">
+    <form id="search" method="get" action="/"
+      hx-get="/" hx-target="#dashboard" hx-swap="outerHTML"
+      hx-push-url="true">
+      <input id="query" name="q" value="{{.Query}}"
+        placeholder="Search ticker, company, or CIK">
+      <select id="form-type" name="form_type" aria-label="Form type">
         <option value="">All forms</option>
-        <option value="10-K">10-K</option>
-        <option value="10-Q">10-Q</option>
-        <option value="8-K">8-K</option>
+        <option value="10-K"{{if eq .FormType "10-K"}} selected{{end}}>10-K</option>
+        <option value="10-Q"{{if eq .FormType "10-Q"}} selected{{end}}>10-Q</option>
+        <option value="8-K"{{if eq .FormType "8-K"}} selected{{end}}>8-K</option>
       </select>
-      <input id="year" inputmode="numeric" maxlength="4" placeholder="Year"
-        aria-label="Filing year">
+      <input id="year" name="year" value="{{.Year}}" inputmode="numeric"
+        maxlength="4" placeholder="Year" aria-label="Filing year">
       <button type="submit">Search</button>
     </form>
   </header>
   <main>
-    <div class="context" id="dataset-context">
-      <span>Local parsed filings</span>
-      <span id="set-context"></span>
-    </div>
-    <nav class="trail" id="search-breadcrumb" aria-label="Search breadcrumb">
-      <strong>Search</strong>
-      <span id="search-breadcrumb-items"><span data-chip>All filings</span></span>
-    </nav>
-    <nav class="recent" id="recent-filings" aria-label="Recent filings">
-      <span>Recent filings</span>
-      <span id="recent-links"></span>
-      <button id="clear-recent" type="button">Clear</button>
-    </nav>
-    <section class="summary">
-      <div class="card"><div class="label">Company</div>
-        <div class="value" id="company">All</div></div>
-      <div class="card"><div class="label">CIK</div>
-        <div class="value" id="selected-cik">All</div></div>
-      <div class="card"><div class="label">Form</div>
-        <div class="value" id="selected-form">All</div></div>
-      <div class="card"><div class="label">Filings</div>
-        <div class="value" id="count">0</div></div>
-      <div class="card"><div class="label">Source</div>
-        <div class="value">Local</div></div>
-    </section>
-    <section class="panel">
-      <table>
-        <thead><tr><th>Ticker</th><th>Company</th><th>Form</th>
-          <th>Accession</th><th>Filed</th><th>Report period</th>
-          <th>Status</th><th>Facts</th></tr></thead>
-        <tbody id="filings"><tr><td colspan="8" class="empty">
-          Enter a ticker, company, CIK, form, or year to search.</td></tr></tbody>
-      </table>
-    </section>
+    {{template "dashboard.html" .}}
   </main>
   <script>
     const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
@@ -125,59 +38,7 @@
     const searchTrailKey = 'edgar.search-trail.v1';
     const recentLimit = 8;
     const searchTrailLimit = 8;
-    const params = new URLSearchParams();
-    const initialParams = new URLSearchParams(window.location.search);
-    document.getElementById('query').value = initialParams.get('q') || '';
-    document.getElementById('form-type').value = initialParams.get('form_type') || '';
-    document.getElementById('year').value = initialParams.get('year') || '';
-    async function load() {
-      const query = document.getElementById('query').value.trim();
-      const form = document.getElementById('form-type').value;
-      const year = document.getElementById('year').value.trim();
-      params.delete('q'); params.delete('form_type'); params.delete('year');
-      if (query) params.set('q', query);
-      if (form) params.set('form_type', form);
-      if (year) params.set('year', year);
-      const suffix = params.toString() ? '?' + params.toString() : '';
-      window.history.replaceState(null, '', '/' + suffix);
-      const response = await fetch('/api/filings' + suffix);
-      const data = await response.json();
-      document.getElementById('company').textContent = data.company || 'All';
-      document.getElementById('selected-cik').textContent = data.cik || 'All';
-      document.getElementById('selected-form').textContent = form || 'All';
-      document.getElementById('count').textContent = data.filing_count;
-      document.getElementById('set-context').textContent = data.set_name
-        ? 'Lookup set: ' + data.set_name + ' (as of ' + data.set_as_of + ')'
-        : 'Ticker lookup unavailable; search by CIK';
-      rememberSearch(query, form, year);
-      renderSearchBreadcrumb();
-      const rows = data.filings.map(f => {
-        const statusClass = f.status === 'partial' || f.status === 'failed'
-          ? ' class="status-' + esc(f.status) + '"' : '';
-        const returnTo = window.location.pathname + window.location.search;
-        return `<tr><td>${esc(f.ticker || '-')}</td>` +
-          `<td><a href="/companies/${encodeURIComponent(f.cik)}">` +
-          `${esc(f.company || '-')}</a></td>` +
-          `<td><a data-ticker="${esc(f.ticker || '')}" href="/filings/${encodeURIComponent(f.cik)}/` +
-          `${encodeURIComponent(f.accession)}?return_to=${encodeURIComponent(returnTo)}">` +
-          `${esc(f.form_type)}</a></td>` +
-          `<td>${esc(f.accession)}</td><td>${esc(f.filing_date)}</td>` +
-          `<td>${esc(f.report_date)}</td><td${statusClass}>${esc(f.status)}</td>` +
-          `<td class="num">${f.facts}</td></tr>`;
-      }).join('');
-      document.getElementById('filings').innerHTML = rows ||
-        '<tr><td colspan="8" class="empty">No matching parsed filings found.</td></tr>';
-    }
-    document.getElementById('search').addEventListener('submit', event => {
-      event.preventDefault();
-      rememberSearch(
-        document.getElementById('query').value.trim(),
-        document.getElementById('form-type').value,
-        document.getElementById('year').value.trim()
-      );
-      renderSearchBreadcrumb();
-      load();
-    });
+
     function searchTrailEntry(query, form, year) {
       query = String(query || '').trim();
       form = String(form || '').trim();
@@ -204,6 +65,7 @@
         year
       };
     }
+
     function normalizedSearchTrailEntry(entry) {
       if (!entry || typeof entry !== 'object') return null;
 
@@ -215,19 +77,24 @@
 
       return searchTrailEntry(entry.query, entry.form, entry.year);
     }
+
     function readSearchTrail() {
       try {
         const entries = JSON.parse(localStorage.getItem(searchTrailKey) || '[]');
         if (!Array.isArray(entries)) return [];
 
-        return entries.map(normalizedSearchTrailEntry).filter(entry => entry && entry.key);
+        return entries.map(normalizedSearchTrailEntry).filter(entry =>
+          entry && entry.key);
       } catch (error) {
         return [];
       }
     }
+
     function writeSearchTrail(entries) {
-      try { localStorage.setItem(searchTrailKey, JSON.stringify(entries)); } catch (error) {}
+      try { localStorage.setItem(searchTrailKey, JSON.stringify(entries)); }
+      catch (error) {}
     }
+
     function rememberSearch(query, form, year) {
       if (!query && !form && !year) return;
 
@@ -236,8 +103,11 @@
       entries.unshift(next);
       writeSearchTrail(entries.slice(0, searchTrailLimit));
     }
+
     function renderSearchBreadcrumb() {
       const container = document.getElementById('search-breadcrumb-items');
+      if (!container) return;
+
       const entries = readSearchTrail();
       if (!entries.length) {
         container.innerHTML = '<span data-chip>All filings</span>';
@@ -248,6 +118,7 @@
         `<a href="${esc(entry.href)}">${esc(entry.label)}</a>`
       ).join('');
     }
+
     function readRecent() {
       try {
         const entries = JSON.parse(localStorage.getItem(recentKey) || '[]');
@@ -256,12 +127,17 @@
         return [];
       }
     }
+
     function writeRecent(entries) {
-      try { localStorage.setItem(recentKey, JSON.stringify(entries)); } catch (error) {}
+      try { localStorage.setItem(recentKey, JSON.stringify(entries)); }
+      catch (error) {}
     }
+
     function renderRecent() {
       const container = document.getElementById('recent-links');
       const navigation = document.getElementById('recent-filings');
+      if (!container || !navigation) return;
+
       container.replaceChildren();
       const entries = readRecent().filter(entry => entry && entry.ticker &&
         typeof entry.href === 'string' && entry.href.startsWith('/filings/'));
@@ -273,6 +149,7 @@
       });
       navigation.classList.toggle('visible', entries.length > 0);
     }
+
     function rememberFiling(ticker, href) {
       if (!ticker || !href) return;
       const entries = readRecent().filter(entry => entry.href !== href);
@@ -280,18 +157,87 @@
       writeRecent(entries.slice(0, recentLimit));
       renderRecent();
     }
-    document.getElementById('filings').addEventListener('click', event => {
+
+    document.getElementById('search').addEventListener('submit', () => {
+      rememberSearch(
+        document.getElementById('query').value.trim(),
+        document.getElementById('form-type').value,
+        document.getElementById('year').value.trim()
+      );
+      renderSearchBreadcrumb();
+    });
+
+    document.addEventListener('click', event => {
       const link = event.target.closest('a[data-ticker]');
       if (link) rememberFiling(link.dataset.ticker, link.getAttribute('href'));
     });
-    document.getElementById('clear-recent').addEventListener('click', () => {
-      writeRecent([]); renderRecent();
+
+    document.addEventListener('click', event => {
+      if (event.target.id === 'clear-recent') {
+        writeRecent([]);
+        renderRecent();
+      }
     });
+
+    document.body.addEventListener('htmx:after:swap', () => {
+      renderSearchBreadcrumb();
+      renderRecent();
+    });
+
+    renderSearchBreadcrumb();
     renderRecent();
-    load().catch(error => {
-      document.getElementById('filings').innerHTML =
-        `<tr><td colspan="8" class="empty">${esc(error)}</td></tr>`;
-    });
   </script>
 </body>
 </html>
+{{end}}
+
+{{define "dashboard.html"}}
+<div id="dashboard">
+  <div class="context" id="dataset-context">
+    <span>Local parsed filings</span>
+    <span id="set-context">{{if .SetName}}Lookup set: {{.SetName}} (as of {{.SetAsOf}}){{else}}Ticker lookup unavailable; search by CIK{{end}}</span>
+  </div>
+  <nav class="trail" id="search-breadcrumb" aria-label="Search breadcrumb">
+    <strong>Search</strong>
+    <span id="search-breadcrumb-items"><span data-chip>All filings</span></span>
+  </nav>
+  <nav class="recent" id="recent-filings" aria-label="Recent filings">
+    <span>Recent filings</span>
+    <span id="recent-links"></span>
+    <button id="clear-recent" type="button">Clear</button>
+  </nav>
+  <section class="summary">
+    <div class="card"><div class="label">Company</div>
+      <div class="value" id="company">{{if .Company}}{{.Company}}{{else}}All{{end}}</div></div>
+    <div class="card"><div class="label">CIK</div>
+      <div class="value" id="selected-cik">{{if .CIK}}{{.CIK}}{{else}}All{{end}}</div></div>
+    <div class="card"><div class="label">Form</div>
+      <div class="value" id="selected-form">{{if .FormType}}{{.FormType}}{{else}}All{{end}}</div></div>
+    <div class="card"><div class="label">Filings</div>
+      <div class="value" id="count">{{.FilingCount}}</div></div>
+    <div class="card"><div class="label">Source</div>
+      <div class="value">Local</div></div>
+  </section>
+  <section class="panel">
+    <table>
+      <thead><tr><th>Ticker</th><th>Company</th><th>Form</th>
+        <th>Accession</th><th>Filed</th><th>Report period</th>
+        <th>Status</th><th>Facts</th></tr></thead>
+      <tbody id="filings">{{if .Filings}}{{range .Filings}}<tr>
+        <td>{{if .Ticker}}{{.Ticker}}{{else}}-{{end}}</td>
+        <td><a href="/companies/{{.CIK}}">{{if .Company}}{{.Company}}{{else}}-{{end}}</a></td>
+        <td><a data-ticker="{{.Ticker}}"
+          href="/filings/{{.CIK}}/{{.Accession}}?return_to={{$.ReturnTo | urlquery}}"
+          hx-get="/filings/{{.CIK}}/{{.Accession}}?return_to={{$.ReturnTo | urlquery}}"
+          hx-target="body" hx-swap="outerHTML" hx-select="body"
+          hx-push-url="true">{{.FormType}}</a></td>
+        <td>{{.Accession}}</td><td>{{.FilingDate}}</td>
+        <td>{{.ReportDate}}</td>
+        <td{{if or (eq .Status "partial") (eq .Status "failed")}} class="status-{{.Status}}"{{end}}>{{.Status}}</td>
+        <td class="num">{{.Facts}}</td>
+      </tr>{{end}}{{else}}<tr><td colspan="8" class="empty">
+        {{if .HasFilters}}No matching parsed filings found.{{else}}Enter a ticker, company, CIK, form, or year to search.{{end}}</td></tr>{{end}}</tbody>
+    </table>
+  </section>
+</div>
+{{end}}
