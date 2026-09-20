@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run serve integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-derived-data
+.PHONY: help build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-derived-data
 
 .DEFAULT_GOAL := help
 
@@ -24,6 +24,7 @@ help:
 		'  manual-checks           Compare the confirmed baseline with parsed 10-K views' \
 		'  run                     Run the ECB example command' \
 		'  serve                   Serve locally parsed EDGAR filings' \
+		'  serve-dev               Serve filings with Air auto-rebuilds' \
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -62,8 +63,16 @@ run:
 serve: build
 	LOGLEVEL=debug ./bin/edgar serve --set us-gaap-coverage
 
+serve-dev:
+	@command -v air >/dev/null || { \
+		printf '%s\n' 'air is not installed. Install it with:'; \
+		printf '%s\n' '  go install github.com/air-verse/air@latest'; \
+		exit 1; \
+	}
+	air -c .air.toml
+
 test:
 	go test ./...
 
 clean:
-	rm -rf $(BIN_DIR) dist
+	rm -rf $(BIN_DIR) dist tmp

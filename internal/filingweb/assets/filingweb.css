@@ -452,7 +452,7 @@ body.company-page .table-wrap {
 }
 
 body.company-page .line-item-col {
-  width: 420px;
+  width: 294px;
 }
 
 body.company-page .value-col {
@@ -481,9 +481,9 @@ body.company-page th:first-child,
 body.company-page td:first-child {
   position: sticky;
   left: 0;
-  width: 420px;
-  min-width: 420px;
-  max-width: 420px;
+  width: 294px;
+  min-width: 294px;
+  max-width: 294px;
   overflow: hidden;
   border-right: 1px solid #e2e8f0;
   text-align: left;
@@ -554,7 +554,7 @@ body.company-page tbody tr:hover td:first-child {
   }
 
   body.company-page .line-item-col {
-    width: 320px;
+    width: 224px;
   }
 
   body.company-page .value-col {
@@ -569,9 +569,9 @@ body.company-page tbody tr:hover td:first-child {
 
   body.company-page th:first-child,
   body.company-page td:first-child {
-    width: 320px;
-    min-width: 320px;
-    max-width: 320px;
+    width: 224px;
+    min-width: 224px;
+    max-width: 224px;
   }
 }
 

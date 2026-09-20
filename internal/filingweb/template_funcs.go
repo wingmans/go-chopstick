@@ -15,6 +15,7 @@ func mul(left, right int) int {
 	return left * right
 }
 
+// formatFactValue formats a filingview.FactValue for display, including handling units like USD and per share.
 func formatFactValue(value filingview.FactValue, unit string) string {
 	if value.Nil || strings.TrimSpace(value.Value) == "" {
 		return "-"
@@ -47,6 +48,7 @@ func formatFactValue(value filingview.FactValue, unit string) string {
 	return formatted
 }
 
+// compactNumber formats a big.Rat into a compact string representation with suffixes like K, M, B, T.
 func compactNumber(value *big.Rat) string {
 	negative := value.Sign() < 0
 	abs := new(big.Rat).Abs(value)
@@ -78,6 +80,7 @@ func compactNumber(value *big.Rat) string {
 	return formatted
 }
 
+// trimDecimal removes trailing zeros and the decimal point if unnecessary from a numeric string.
 func trimDecimal(value string) string {
 	value = strings.TrimRight(value, "0")
 	value = strings.TrimRight(value, ".")

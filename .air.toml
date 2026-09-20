@@ -1,0 +1,24 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/edgar-air ./cmd/edgar"
+full_bin = "LOGLEVEL=debug ./tmp/edgar-air serve --set us-gaap-coverage"
+delay = 1000
+stop_on_error = true
+send_interrupt = true
+kill_delay = "500ms"
+include_dir = ["cmd", "internal"]
+include_ext = ["go", "html", "css", "svg"]
+exclude_dir = ["bin", "data", "dist", "golden", "tmp"]
+exclude_regex = ["_test\\.go"]
+
+[log]
+time = true
+
+[screen]
+clear_on_rebuild = false
+keep_scroll = true
+
+[misc]
+clean_on_exit = true

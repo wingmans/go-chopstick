@@ -35,6 +35,7 @@ type Server struct {
 	memberByKey map[string][]string
 }
 
+// NewServer creates a server instance with default configuration.
 func NewServer(parsedDir string, logger *slog.Logger) *Server {
 	server, err := NewConfiguredServer(parsedDir, "", "", logger)
 	if err != nil {
