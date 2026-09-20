@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run integration taxonomy-validation taxonomy-validation-fast manual-checks release test clean clean-derived-data
+.PHONY: help build constituents lint run serve integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-derived-data
 
 .DEFAULT_GOAL := help
 
@@ -6,19 +6,24 @@ BIN_DIR := bin
 
 help:
 	@printf '%s\n' \
+		'' \
 		'Available commands:' \
-		'  make help         Display this command list' \
-		'  make clean        Remove build artifacts' \
-		'  make build        Build all command binaries' \
-		'  make lint         Run golangci-lint with auto-fixes' \
-		'  make test         Run the Go test suite' \
-		'  make serve        Serve locally parsed EDGAR filings' \
-		'  make constituents Download the current S&P 500 constituent set' \
-		'  make clean-derived-data  Remove local EDGAR data while preserving raw filings' \
-		'  make integration  Run the EDGAR end-to-end test' \
-	  '  make taxonomy-validation  Run the 19-company taxonomy validation pass' \
-	  '  make taxonomy-validation-fast  Run the five-company one-year validation pass' \
-	  '  make manual-checks  Compare the confirmed baseline with local parsed 10-K views' \
+		'' \
+		'  help                    Display this command list' \
+		'  build                   Build all command binaries' \
+		'  docs-pdf                Build one PDF from the documentation chapters' \
+		'  lint                    Run golangci-lint with auto-fixes' \
+		'  test                    Run the Go test suite' \
+		'  clean                   Remove build artifacts' \
+		'' \
+		'  constituents            Download the current S&P 500 constituent set' \
+		'  clean-derived-data      Remove derived data while preserving raw filings' \
+		'  integration             Run the EDGAR end-to-end test' \
+		'  taxonomy-validation     Run the 19-company taxonomy validation pass' \
+		'  taxonomy-validation-fast Run the five-company one-year validation pass' \
+		'  manual-checks           Compare the confirmed baseline with parsed 10-K views' \
+		'  run                     Run the ECB example command' \
+		'  serve                   Serve locally parsed EDGAR filings' \
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -44,6 +49,9 @@ taxonomy-validation-fast: build
 
 manual-checks:
 	bash scripts/manual-checks.sh
+
+docs-pdf:
+	bash scripts/docs-pdf.sh
 
 clean-derived-data:
 	bash scripts/clean-derived-data.sh

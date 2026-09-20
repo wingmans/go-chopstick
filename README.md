@@ -41,7 +41,9 @@ Use `-h` or `--help` to print the command syntax and available options.
 The exchange-rate series key is built from the two currency inputs as `D.<currency>.<currency-denom>.SP00.A`. The default is daily (`D`) USD/EUR data.
 
 The SEC EDGAR downloader is available as a separate command with independent
-subcommands:
+subcommands. For the EDGAR architecture, parser behavior, XBRL model,
+taxonomy workflow, and data layout, start with the
+[EDGAR project guide](docs/index.md).
 
 ```bash
 go run ./cmd/edgar index --from-year 2025

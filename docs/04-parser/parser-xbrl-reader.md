@@ -331,7 +331,8 @@ available for complete persisted-file inspection.
 
 ## References
 
-- Existing fixture notes: [10-K](10-K.md), [10-Q](10-Q.md), and [8-K](8-K.md).
+- Existing fixture notes: [10-K](../03-forms/10-K.md),
+  [10-Q](../03-forms/10-Q.md), and [8-K](../03-forms/8-K.md).
 - [XBRL 2.1 specification](https://www.xbrl.org/Specification/XBRL-2.1/REC-2003-12-31/XBRL-2.1-REC-2003-12-31%2Bcorrected-errata-2013-02-20.html)
   for instance structure and document-local context/unit references.
 - [SEC webmaster FAQ](https://www.sec.gov/about/webmaster-frequently-asked-questions)
