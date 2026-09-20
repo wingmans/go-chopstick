@@ -1,5 +1,4 @@
-export MSCI_USER='paul@wingmen.io'
-export MSCI_PASSWORD='bus89!Lh:!29RJC'
+
 
 # curl  --user "$MSCI_USER:$MSCI_PASSWORD" \
 #    --request POST \
