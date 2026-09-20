@@ -123,6 +123,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"id=\"filing-documents\"",
 		"id=\"financial-summary\"",
 		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
+		"<link rel=\"icon\" href=\"/assets/chopstick.svg\" type=\"image/svg+xml\">",
 		"href=\"/?q=MSFT\"",
 		"hx-get=\"/?q=MSFT\"",
 		"hx-target=\"body\"",
@@ -154,6 +155,8 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"data-statement=\"Income statement\"",
 		"data-statement=\"Balance sheet\"",
 		"data-statement=\"Cash flow\"",
+		"class=\"history-table\"",
+		"--history-width:",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Errorf("company page is missing %q", marker)
@@ -181,6 +184,7 @@ func TestIndexPageIncludesSearchBreadcrumb(t *testing.T) {
 		"All filings",
 		"hx-get=\"/\"",
 		"hx-target=\"#dashboard\"",
+		"<link rel=\"icon\" href=\"/assets/chopstick.svg\" type=\"image/svg+xml\">",
 		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
 		"<script src=\"/assets/htmx.min.js\"></script>",
 		"edgar.search-trail.v1",
@@ -370,6 +374,17 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 		!strings.Contains(record.Header().Get("Content-Type"), "text/css") ||
 		!strings.Contains(record.Body.String(), "body.detail-page") {
 		t.Fatalf("stylesheet asset failed: status=%d headers=%v body=%s",
+			record.Code, record.Header(), record.Body.String())
+	}
+
+	record = httptest.NewRecorder()
+	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/assets/chopstick.svg", nil))
+
+	if record.Code != http.StatusOK ||
+		!strings.Contains(record.Header().Get("Content-Type"), "image/svg+xml") ||
+		!strings.Contains(record.Body.String(), "<svg") {
+		t.Fatalf("favicon asset failed: status=%d headers=%v body=%s",
 			record.Code, record.Header(), record.Body.String())
 	}
 }

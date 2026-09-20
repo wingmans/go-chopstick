@@ -1,0 +1,8 @@
+{{define "head.html"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Page.Title}}</title>
+<link rel="icon" href="/assets/chopstick.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/filingweb.css">
+{{if .Page.UseHTMX}}<script src="/assets/htmx.min.js"></script>{{end}}
+{{end}}

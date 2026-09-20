@@ -5,16 +5,13 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"html/template"
 	"io"
 	"log/slog"
-	"math/big"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +22,7 @@ import (
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
-//go:embed index.html detail.html company.html assets/filingweb.css assets/htmx-4.0.0.min.js
+//go:embed templates/*.html assets/chopstick.svg assets/filingweb.css assets/htmx-4.0.0.min.js
 var templateFiles embed.FS
 
 type Server struct {
@@ -36,37 +33,6 @@ type Server struct {
 	setAsOf     string
 	memberByCIK map[string]constituents.Member
 	memberByKey map[string][]string
-}
-
-type filingSummary struct {
-	CIK        string `json:"cik"`
-	Ticker     string `json:"ticker"`
-	Company    string `json:"company"`
-	Accession  string `json:"accession"`
-	FormType   string `json:"form_type"`
-	FilingDate string `json:"filing_date"`
-	ReportDate string `json:"report_date"`
-	Status     string `json:"status"`
-	Facts      int    `json:"facts"`
-}
-
-type dashboardData struct {
-	FilingCount int             `json:"filing_count"`
-	Company     string          `json:"company"`
-	CIK         string          `json:"cik"`
-	Query       string          `json:"query"`
-	FormType    string          `json:"-"`
-	Year        string          `json:"-"`
-	SetName     string          `json:"set_name"`
-	SetAsOf     string          `json:"set_as_of"`
-	HasFilters  bool            `json:"-"`
-	ReturnTo    string          `json:"-"`
-	Filings     []filingSummary `json:"filings"`
-}
-
-type companyPageData struct {
-	History filingview.CompanyHistory
-	Ticker  string
 }
 
 func NewServer(parsedDir string, logger *slog.Logger) *Server {
@@ -87,7 +53,8 @@ func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger)
 		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
 			"formatFact": formatFactValue,
 			"add":        add,
-		}).ParseFS(templateFiles, "*.html")),
+			"mul":        mul,
+		}).ParseFS(templateFiles, "templates/*.html")),
 		setName:     setName,
 		setAsOf:     "",
 		memberByCIK: map[string]constituents.Member{},
@@ -116,80 +83,6 @@ func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger)
 	return server, nil
 }
 
-func add(left, right int) int {
-	return left + right
-}
-
-func formatFactValue(value filingview.FactValue, unit string) string {
-	if value.Nil || strings.TrimSpace(value.Value) == "" {
-		return "-"
-	}
-
-	number := strings.ReplaceAll(strings.TrimSpace(value.Value), ",", "")
-
-	rational, ok := new(big.Rat).SetString(number)
-	if !ok {
-		return value.Value
-	}
-
-	currency := strings.Contains(strings.ToLower(unit), "usd")
-	perShare := strings.Contains(strings.ToLower(unit), "pershare") ||
-		strings.Contains(strings.ToLower(unit), "/shares")
-
-	formatted := compactNumber(rational)
-	if !strings.ContainsAny(formatted, "KMBT") && (currency || perShare) {
-		formatted = trimDecimal(rational.FloatString(2))
-	}
-
-	if currency || perShare {
-		if trimmed, ok := strings.CutPrefix(formatted, "("); ok {
-			formatted = "($" + strings.TrimSuffix(trimmed, ")") + ")"
-		} else {
-			formatted = "$" + formatted
-		}
-	}
-
-	return formatted
-}
-
-func compactNumber(value *big.Rat) string {
-	negative := value.Sign() < 0
-	abs := new(big.Rat).Abs(value)
-	suffix := ""
-
-	divisor := big.NewRat(1, 1)
-	for _, scale := range []struct {
-		threshold int64
-		suffix    string
-	}{
-		{1_000_000_000_000, "T"},
-		{1_000_000_000, "B"},
-		{1_000_000, "M"},
-		{1_000, "K"},
-	} {
-		if abs.Cmp(big.NewRat(scale.threshold, 1)) >= 0 {
-			divisor = big.NewRat(scale.threshold, 1)
-			suffix = scale.suffix
-
-			break
-		}
-	}
-
-	formatted := trimDecimal(new(big.Rat).Quo(abs, divisor).FloatString(1)) + suffix
-	if negative {
-		return "(" + formatted + ")"
-	}
-
-	return formatted
-}
-
-func trimDecimal(value string) string {
-	value = strings.TrimRight(value, "0")
-	value = strings.TrimRight(value, ".")
-
-	return value
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.logger != nil {
 		s.logger.Debug("local dashboard request", "method", r.Method, "url", r.URL.String())
@@ -198,6 +91,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/":
 		s.index(w, r)
+	case r.URL.Path == "/assets/chopstick.svg":
+		s.asset(w, r, "assets/chopstick.svg", "image/svg+xml")
 	case r.URL.Path == "/assets/filingweb.css":
 		s.asset(w, r, "assets/filingweb.css", "text/css")
 	case r.URL.Path == "/assets/htmx.min.js":
@@ -240,7 +135,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateName := "index.html"
+	templateName := "dashboard-page.html"
 	if r.Header.Get("HX-Request") == "true" &&
 		strings.Contains(r.Header.Get("HX-Target"), "#dashboard") {
 		templateName = "dashboard.html"
@@ -251,6 +146,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// company handles requests to view a specific company's page.
 func (s *Server) company(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/companies/"), "/")
 	if len(parts) != 1 {
@@ -281,49 +177,22 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) {
 
 	member := s.memberByCIK[cik]
 
-	data := companyPageData{History: history, Ticker: member.Ticker}
-	if err := s.template.ExecuteTemplate(w, "company.html", data); err != nil {
+	title := history.Company
+	if member.Ticker != "" {
+		title = member.Ticker + " - " + title
+	}
+
+	data := companyPageData{
+		Page:    pageChrome{Title: title, BodyClass: "company-page"},
+		History: history,
+		Ticker:  member.Ticker,
+	}
+	if err := s.template.ExecuteTemplate(w, "company-page.html", data); err != nil {
 		s.writeError(w, err)
 	}
 }
 
-func (s *Server) loadCompanyHistory(cik string) (filingview.CompanyHistory, error) {
-	views := make([]filingview.View, 0)
-
-	err := filepath.Walk(s.parsedDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() || info.Name() != "filing-view.json" {
-			return nil
-		}
-
-		view, err := filingview.Load(path)
-		if err != nil {
-			return fmt.Errorf("load %s: %w", path, err)
-		}
-
-		if canonicalCIK(view.Metadata.CIK) == cik {
-			views = append(views, view)
-		}
-
-		return nil
-	})
-	if errors.Is(err, os.ErrNotExist) {
-		return filingview.CompanyHistory{
-			CIK: "", Company: "", Years: []string{},
-			Statements: []filingview.HistoryStatement{},
-		}, nil
-	}
-
-	if err != nil {
-		return filingview.CompanyHistory{}, err
-	}
-
-	return filingview.BuildCompanyHistory(views, cik)
-}
-
+// apiFilings handles requests to the /api/filings endpoint, returning the filtered filings as JSON.
 func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 	data, err := s.dashboardData(r)
 	if err != nil {
@@ -333,97 +202,6 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, data)
-}
-
-func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
-	filings, err := s.loadSummaries()
-	if err != nil {
-		return dashboardData{}, err
-	}
-
-	cik := strings.TrimSpace(r.URL.Query().Get("cik"))
-	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	formType := strings.TrimSpace(r.URL.Query().Get("form_type"))
-
-	year := strings.TrimSpace(r.URL.Query().Get("year"))
-	hasFilters := cik != "" || query != "" || formType != "" || year != ""
-	if cik == "" && query == "" && formType == "" && year == "" {
-		return dashboardData{
-			FilingCount: 0, Company: "", CIK: "", Query: "",
-			FormType: "", Year: "", HasFilters: false, ReturnTo: "/",
-			SetName: s.setName, SetAsOf: s.setAsOf,
-			Filings: []filingSummary{},
-		}, nil
-	}
-
-	queryCIKs := s.resolveQuery(query)
-	filtered := make([]filingSummary, 0, len(filings))
-	company := ""
-
-	selectedCIK := canonicalCIK(cik)
-	if selectedCIK == "" && len(queryCIKs) == 1 {
-		for match := range queryCIKs {
-			selectedCIK = match
-		}
-	}
-
-	for _, filing := range filings {
-		if cik != "" && canonicalCIK(filing.CIK) != canonicalCIK(cik) {
-			continue
-		}
-
-		if query != "" && len(queryCIKs) == 0 {
-			continue
-		}
-
-		if len(queryCIKs) > 0 && !queryCIKs[canonicalCIK(filing.CIK)] {
-			continue
-		}
-
-		if formType != "" && !strings.EqualFold(filing.FormType, formType) {
-			continue
-		}
-
-		if year != "" && !strings.HasPrefix(filing.FilingDate, year) {
-			continue
-		}
-
-		if company == "" {
-			company = filing.Company
-		}
-
-		filtered = append(filtered, filing)
-	}
-
-	return dashboardData{
-		FilingCount: len(filtered), Company: company, CIK: selectedCIK,
-		Query: query, FormType: formType, Year: year, SetName: s.setName,
-		SetAsOf: s.setAsOf, HasFilters: hasFilters, ReturnTo: r.URL.RequestURI(),
-		Filings: filtered,
-	}, nil
-}
-
-func (s *Server) resolveQuery(query string) map[string]bool {
-	if query == "" {
-		return nil
-	}
-
-	if cik := canonicalCIK(query); cik != "" {
-		return map[string]bool{cik: true}
-	}
-
-	matches := map[string]bool{}
-
-	lowerQuery := strings.ToLower(query)
-	for key, ciks := range s.memberByKey {
-		if key == lowerQuery || strings.Contains(key, lowerQuery) {
-			for _, cik := range ciks {
-				matches[cik] = true
-			}
-		}
-	}
-
-	return matches
 }
 
 func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
@@ -445,6 +223,7 @@ func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, filing)
 }
 
+// detail handles requests to the /filings/{accession}/ endpoint, rendering the detailed view of the filing.
 func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/filings/"), "/")
 
@@ -483,6 +262,11 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		Diagnostics: []edgar.ParseDiagnostic{}, Status: view.Counts.Status,
 	}
 	data := detailData{
+		Page: pageChrome{
+			Title:     view.Metadata.FormType + " " + view.Metadata.Accession,
+			BodyClass: "detail-page",
+			UseHTMX:   true,
+		},
 		Filing: filing, Summary: view.Summary,
 		Statements: []filingview.StatementView{
 			view.Statements.Income, view.Statements.Balance, view.Statements.CashFlow,
@@ -493,22 +277,9 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		BackURL: backURL,
 	}
 
-	if err := s.template.ExecuteTemplate(w, "detail.html", data); err != nil {
+	if err := s.template.ExecuteTemplate(w, "detail-page.html", data); err != nil {
 		s.writeError(w, err)
 	}
-}
-
-type detailData struct {
-	Filing        *edgar.ParsedFiling
-	BackURL       string
-	Summary       []filingview.SummaryGroup
-	Statements    []filingview.StatementView
-	Ratios        []filingview.RatioSeries
-	Facts         int
-	DocumentCount int
-	InstanceCount int
-	ContextCount  int
-	Diagnostics   int
 }
 
 func validReturnURL(value string) bool {
@@ -516,6 +287,7 @@ func validReturnURL(value string) bool {
 		!strings.ContainsAny(value, "\r\n")
 }
 
+// document handles requests to view a specific document within a filing.
 func (s *Server) document(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/filings/"), "/")
 	if len(parts) != 4 || parts[2] != "documents" {
@@ -574,114 +346,6 @@ func (s *Server) document(w http.ResponseWriter, r *http.Request) {
 		io.NewSectionReader(file, document.ContentOffset, document.ContentLength))
 }
 
-func (s *Server) sourcePath(filing *edgar.ParsedFiling) (string, error) {
-	var source string
-
-	switch filing.SourceBase {
-	case "absolute":
-		source = filing.SourcePath
-	case "filings":
-		source = filepath.Join(filepath.Dir(s.parsedDir), "filings", filepath.FromSlash(filing.SourcePath))
-	default:
-		return "", os.ErrNotExist
-	}
-
-	if !withinDirectory(filepath.Dir(s.parsedDir), source) {
-		return "", os.ErrNotExist
-	}
-
-	return source, nil
-}
-
-func (s *Server) loadView(parts []string) (filingview.View, error) {
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return filingview.View{}, os.ErrNotExist
-	}
-
-	cik := canonicalCIK(parts[0])
-	if cik == "" {
-		return filingview.View{}, os.ErrNotExist
-	}
-
-	path := filepath.Join(s.parsedDir, cik, parts[1], "filing-view.json")
-	if !withinDirectory(s.parsedDir, path) {
-		return filingview.View{}, os.ErrNotExist
-	}
-
-	return filingview.Load(path)
-}
-
-func (s *Server) loadFiling(parts []string) (*edgar.ParsedFiling, error) {
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return nil, os.ErrNotExist
-	}
-
-	cik := canonicalCIK(parts[0])
-	if cik == "" {
-		return nil, os.ErrNotExist
-	}
-
-	path := filepath.Join(s.parsedDir, cik, parts[1], "filing.json")
-	if !withinDirectory(s.parsedDir, path) {
-		return nil, os.ErrNotExist
-	}
-
-	filing, err := edgar.LoadParsedFiling(path)
-
-	return filing, err
-}
-
-func (s *Server) loadSummaries() ([]filingSummary, error) {
-	var result []filingSummary
-
-	err := filepath.Walk(s.parsedDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() || info.Name() != "filing-view.json" {
-			return nil
-		}
-
-		view, err := filingview.Load(path)
-		if err != nil {
-			return fmt.Errorf("load %s: %w", path, err)
-		}
-
-		result = append(result,
-			filingSummary{
-				CIK:        view.Metadata.CIK,
-				Ticker:     s.memberByCIK[canonicalCIK(view.Metadata.CIK)].Ticker,
-				Company:    view.Metadata.Company,
-				Accession:  view.Metadata.Accession,
-				FormType:   view.Metadata.FormType,
-				FilingDate: view.Metadata.FilingDate,
-				ReportDate: view.Metadata.ReportDate,
-				Status:     view.Counts.Status,
-				Facts:      view.Counts.Facts,
-			})
-
-		return nil
-	})
-	if errors.Is(err, os.ErrNotExist) {
-		return []filingSummary{}, nil
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].FilingDate != result[j].FilingDate {
-			return result[i].FilingDate > result[j].FilingDate
-		}
-
-		return result[i].Accession > result[j].Accession
-	})
-
-	return result, nil
-}
-
 func (s *Server) writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -713,41 +377,4 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	}
 
 	http.Error(w, message, status)
-}
-
-// canonicalCIK preserves significant digits while normalizing leading padding.
-func canonicalCIK(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" || len(value) > 10 {
-		return ""
-	}
-
-	for _, digit := range value {
-		if digit < '0' || digit > '9' {
-			return ""
-		}
-	}
-
-	value = strings.TrimLeft(value, "0")
-	if value == "" {
-		value = "0"
-	}
-
-	return strings.Repeat("0", 10-len(value)) + value
-}
-
-func withinDirectory(directory, path string) bool {
-	directory, err := filepath.Abs(directory)
-	if err != nil {
-		return false
-	}
-
-	path, err = filepath.Abs(path)
-	if err != nil {
-		return false
-	}
-
-	relative, err := filepath.Rel(directory, path)
-
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }

@@ -1,14 +1,8 @@
-{{define "index.html"}}
+{{define "dashboard-page.html"}}
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EDGAR local filings</title>
-  <link rel="stylesheet" href="/assets/filingweb.css">
-  <script src="/assets/htmx.min.js"></script>
-</head>
-<body class="dashboard-page">
+<head>{{template "head.html" .}}</head>
+<body class="{{.Page.BodyClass}}">
   <header>
     <strong>EDGAR / local filings</strong>
     <form id="search" method="get" action="/"

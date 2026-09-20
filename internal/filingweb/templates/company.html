@@ -1,13 +1,8 @@
-{{define "company.html"}}
+{{define "company-page.html"}}
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{if .Ticker}}{{.Ticker}} - {{end}}{{.History.Company}}</title>
-  <link rel="stylesheet" href="/assets/filingweb.css">
-</head>
-<body class="company-page">
+<head>{{template "head.html" .}}</head>
+<body class="{{.Page.BodyClass}}">
   <header><a class="back" href="/">&larr; Filing search</a></header>
   <main id="company-history" data-cik="{{.History.CIK}}">
     <section class="heading">
@@ -18,7 +13,8 @@
     <section class="section" data-statement="{{.Title}}">
       <h2 class="section-label">{{.Title}}</h2>
       <div class="table-wrap">
-        <table>
+        <table class="history-table"
+          style="--history-width: {{add 420 (mul (len $.History.Years) 180)}}px; --history-mobile-width: {{add 320 (mul (len $.History.Years) 150)}}px">
           <colgroup><col class="line-item-col">
             {{range $.History.Years}}<col class="value-col">{{end}}
           </colgroup>

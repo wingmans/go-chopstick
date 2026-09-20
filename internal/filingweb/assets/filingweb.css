@@ -270,33 +270,41 @@ h2 {
   overflow-x: auto;
 }
 
-.line-item-col {
-  width: 180px;
-}
-
-.value-col {
-  width: 96px;
-}
-
 .summary-table {
-  width: max-content;
   min-width: 100%;
 }
 
-.summary-table .line-item-col {
-  width: 180px;
+body.detail-page .statement-table {
+  width: var(--statement-width);
+  min-width: var(--statement-width);
+  max-width: var(--statement-width);
+  table-layout: fixed;
 }
 
-.summary-table .value-col {
-  width: 96px;
+body.detail-page .statement-table .line-item-col {
+  width: 240px;
+}
+
+body.detail-page .statement-table .value-col {
+  width: 120px;
+}
+
+body.detail-page .statement-table th,
+body.detail-page .statement-table td {
+  overflow: hidden;
+}
+
+body.detail-page .statement-table th:first-child,
+body.detail-page .statement-table td:first-child {
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
 }
 
 .summary-table td:first-child {
   position: sticky;
   left: 0;
   z-index: 1;
-  min-width: 180px;
-  width: 180px;
   background: white;
   border-right: 1px solid #e2e8f0;
   text-align: left;
@@ -310,9 +318,11 @@ h2 {
 .summary-table .line-label {
   display: block;
   overflow: hidden;
+  max-width: 100%;
   color: #475569;
   font-weight: 500;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .documents {
@@ -407,7 +417,6 @@ body.detail-page th:first-child {
   position: sticky;
   left: 0;
   z-index: 2;
-  width: 180px;
   background: #f8fafc;
   border-right: 1px solid #e2e8f0;
   text-align: left;
@@ -442,9 +451,24 @@ body.company-page .table-wrap {
   border-radius: 6px;
 }
 
+body.company-page .line-item-col {
+  width: 420px;
+}
+
+body.company-page .value-col {
+  width: 180px;
+}
+
 body.company-page table {
   width: max-content;
   min-width: 100%;
+}
+
+body.company-page .history-table {
+  width: var(--history-width);
+  min-width: var(--history-width);
+  max-width: var(--history-width);
+  table-layout: fixed;
 }
 
 body.company-page th {
@@ -457,9 +481,13 @@ body.company-page th:first-child,
 body.company-page td:first-child {
   position: sticky;
   left: 0;
-  width: 180px;
+  width: 420px;
+  min-width: 420px;
+  max-width: 420px;
+  overflow: hidden;
   border-right: 1px solid #e2e8f0;
   text-align: left;
+  text-overflow: ellipsis;
 }
 
 body.company-page th:first-child {
@@ -525,10 +553,25 @@ body.company-page tbody tr:hover td:first-child {
     padding: 12px;
   }
 
-  body.company-page .line-item-col,
+  body.company-page .line-item-col {
+    width: 320px;
+  }
+
+  body.company-page .value-col {
+    width: 150px;
+  }
+
+  body.company-page .history-table {
+    width: var(--history-mobile-width);
+    min-width: var(--history-mobile-width);
+    max-width: var(--history-mobile-width);
+  }
+
   body.company-page th:first-child,
   body.company-page td:first-child {
-    width: 160px;
+    width: 320px;
+    min-width: 320px;
+    max-width: 320px;
   }
 }
 
