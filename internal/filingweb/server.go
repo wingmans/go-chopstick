@@ -19,6 +19,7 @@ import (
 	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
+	"wingman.com/fetch-ecb/internal/filingweb/filingstore"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
@@ -26,8 +27,8 @@ import (
 var templateFiles embed.FS
 
 type Server struct {
-	parsedDir   string
 	template    *template.Template
+	store       filingstore.Store
 	logger      *slog.Logger
 	setName     string
 	setAsOf     string
@@ -49,8 +50,8 @@ func NewServer(parsedDir string, logger *slog.Logger) *Server {
 // The set is only a human-name lookup; CIK and accession remain filing keys.
 func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger) (*Server, error) {
 	server := &Server{
-		parsedDir: parsedDir,
-		logger:    logger,
+		store:  filingstore.NewJSONDirectory(parsedDir),
+		logger: logger,
 		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
 			"formatFact": formatFactValue,
 			"add":        add,
@@ -163,7 +164,7 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	history, err := s.loadCompanyHistory(cik)
+	history, err := s.store.LoadCompanyHistory(r.Context(), cik)
 	if errors.Is(err, os.ErrNotExist) || len(history.Years) == 0 {
 		http.NotFound(w, r)
 
@@ -207,8 +208,13 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/filings/"), "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
 
-	filing, err := s.loadFiling(parts)
+		return
+	}
+
+	filing, err := s.store.LoadFiling(r.Context(), parts[0], parts[1])
 	if errors.Is(err, os.ErrNotExist) {
 		http.NotFound(w, r)
 
@@ -227,8 +233,13 @@ func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
 // detail handles requests to the /filings/{accession}/ endpoint, rendering the detailed view of the filing.
 func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/filings/"), "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
 
-	view, err := s.loadView(parts)
+		return
+	}
+
+	view, err := s.store.LoadView(r.Context(), parts[0], parts[1])
 	if errors.Is(err, os.ErrNotExist) {
 		http.NotFound(w, r)
 
@@ -246,7 +257,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		backURL = candidate
 	}
 
-	filing := &edgar.ParsedFiling{
+	viewFiling := &edgar.ParsedFiling{
 		SchemaVersion: edgar.ParsedSchemaVersion,
 		ParserVersion: view.ParserVersion,
 		SourcePath:    view.SourcePath,
@@ -268,7 +279,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 			BodyClass: "detail-page",
 			UseHTMX:   true,
 		},
-		Filing: filing, Summary: view.Summary,
+		Filing: viewFiling, Summary: view.Summary,
 		Statements: []filingview.StatementView{
 			view.Statements.Income, view.Statements.Balance, view.Statements.CashFlow,
 		},
@@ -297,7 +308,7 @@ func (s *Server) document(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filing, err := s.loadFiling(parts[:2])
+	filing, err := s.store.LoadFiling(r.Context(), parts[0], parts[1])
 	if errors.Is(err, os.ErrNotExist) {
 		http.NotFound(w, r)
 
@@ -319,7 +330,7 @@ func (s *Server) document(w http.ResponseWriter, r *http.Request) {
 
 	document := filing.Documents[index]
 
-	source, err := s.sourcePath(filing)
+	source, err := s.store.SourcePath(r.Context(), filing)
 	if err != nil {
 		s.writeError(w, err)
 

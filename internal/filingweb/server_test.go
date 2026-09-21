@@ -91,15 +91,6 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	parsedPath, err := filing.ParsedPath(parsedDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.Remove(parsedPath); err != nil {
-		t.Fatal(err)
-	}
-
 	server := NewServer(parsedDir, nil)
 	record := httptest.NewRecorder()
 	request := httptest.NewRequestWithContext(context.Background(),
@@ -194,6 +185,52 @@ func TestIndexPageIncludesSearchBreadcrumb(t *testing.T) {
 		if !strings.Contains(body, marker) {
 			t.Errorf("index page is missing %q", marker)
 		}
+	}
+}
+
+func TestIndexPageWithoutFiltersDoesNotLoadFilings(t *testing.T) {
+	t.Parallel()
+
+	parsedDir := t.TempDir()
+	brokenDir := filepath.Join(parsedDir, "0000789019", "0001193125-26-000001")
+	if err := os.MkdirAll(brokenDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(brokenDir, "filing.json"),
+		[]byte("{not-json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(parsedDir, nil)
+	record := httptest.NewRecorder()
+	request := httptest.NewRequestWithContext(
+		context.Background(), http.MethodGet, "/", nil)
+
+	server.ServeHTTP(record, request)
+
+	if record.Code != http.StatusOK {
+		t.Fatalf("index status=%d body=%s", record.Code, record.Body.String())
+	}
+}
+
+func TestCompanyPageRealNVIDIASmoke(t *testing.T) {
+	t.Parallel()
+
+	parsedDir := filepath.Join("..", "..", "data", "parsed")
+	if _, err := os.Stat(filepath.Join(parsedDir, "0001045810")); err != nil {
+		t.Skip("local NVIDIA parsed data is not available")
+	}
+
+	server := NewServer(parsedDir, nil)
+	record := httptest.NewRecorder()
+	request := httptest.NewRequestWithContext(
+		context.Background(), http.MethodGet, "/companies/0001045810", nil)
+
+	server.ServeHTTP(record, request)
+
+	if record.Code != http.StatusOK {
+		t.Fatalf("company status=%d body=%s", record.Code, record.Body.String())
 	}
 }
 

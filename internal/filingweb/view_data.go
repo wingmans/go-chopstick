@@ -6,6 +6,7 @@ import (
 
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
+	"wingman.com/fetch-ecb/internal/filingweb/filingstore"
 )
 
 type filingSummary struct {
@@ -63,11 +64,6 @@ type detailData struct {
 
 // dashboardData prepares the data needed to render the dashboard page based on the current request.
 func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
-	filings, err := s.loadSummaries()
-	if err != nil {
-		return dashboardData{}, err
-	}
-
 	page := pageChrome{
 		Title:     "EDGAR local filings",
 		BodyClass: "dashboard-page",
@@ -88,6 +84,12 @@ func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
 			Filings: []filingSummary{},
 		}, nil
 	}
+
+	stored, err := s.store.ListSummaries(r.Context())
+	if err != nil {
+		return dashboardData{}, err
+	}
+	filings := s.summaryViewData(stored)
 
 	queryCIKs := s.resolveQuery(query)
 	filtered := make([]filingSummary, 0, len(filings))
@@ -157,4 +159,24 @@ func (s *Server) resolveQuery(query string) map[string]bool {
 	}
 
 	return matches
+}
+
+func (s *Server) summaryViewData(stored []filingstore.Summary) []filingSummary {
+	filings := make([]filingSummary, 0, len(stored))
+	for _, summary := range stored {
+		cik := canonicalCIK(summary.CIK)
+		filings = append(filings, filingSummary{
+			CIK:        summary.CIK,
+			Ticker:     s.memberByCIK[cik].Ticker,
+			Company:    summary.Company,
+			Accession:  summary.Accession,
+			FormType:   summary.FormType,
+			FilingDate: summary.FilingDate,
+			ReportDate: summary.ReportDate,
+			Status:     summary.Status,
+			Facts:      summary.Facts,
+		})
+	}
+
+	return filings
 }
