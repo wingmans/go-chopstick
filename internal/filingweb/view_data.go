@@ -75,6 +75,7 @@ func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
 	formType := strings.TrimSpace(r.URL.Query().Get("form_type"))
 
 	year := strings.TrimSpace(r.URL.Query().Get("year"))
+
 	hasFilters := cik != "" || query != "" || formType != "" || year != ""
 	if cik == "" && query == "" && formType == "" && year == "" {
 		return dashboardData{
@@ -89,6 +90,7 @@ func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
 	if err != nil {
 		return dashboardData{}, err
 	}
+
 	filings := s.summaryViewData(stored)
 
 	queryCIKs := s.resolveQuery(query)

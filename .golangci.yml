@@ -23,6 +23,7 @@ linters:
     - depguard
     - err113   # Enable incrementally after caller-visible sentinels are defined.
     - exhaustruct #deprecated, replaced by exhaustruct_v2
+    - exhaustruct_v5
     - forbidigo
     - funlen
     - gocognit

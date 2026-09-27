@@ -1,4 +1,5 @@
-// Package filingweb serves the local parsed EDGAR dataset.
+// Package filingweb serves the temporary local UI for inspecting generated
+// filing read models.
 package filingweb
 
 import (
@@ -124,6 +125,7 @@ func (s *Server) asset(w http.ResponseWriter, r *http.Request, path, contentType
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+
 	if _, err := w.Write(data); err != nil && s.logger != nil {
 		s.logger.Debug("write asset response failed", "error", err)
 	}
@@ -138,8 +140,8 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	templateName := "dashboard-page.html"
-	if r.Header.Get("HX-Request") == "true" &&
-		strings.Contains(r.Header.Get("HX-Target"), "#dashboard") {
+	if r.Header.Get("Hx-Request") == "true" &&
+		strings.Contains(r.Header.Get("Hx-Target"), "#dashboard") {
 		templateName = "dashboard.html"
 	}
 

@@ -1,3 +1,5 @@
+// Package filingstore reads the generated filing artifacts used by the local
+// filing viewer.
 package filingstore
 
 import (
@@ -13,7 +15,10 @@ import (
 	"wingman.com/fetch-ecb/internal/filingview"
 )
 
-// Store defines the read operations needed by the filing web UI.
+// Store defines the read operations needed by the local filing viewer.
+// List, detail, and history screens read filing-view.json because it is the
+// normalized read model. Raw filing.json is used only where parsed source data
+// or document offsets are required.
 type Store interface {
 	ListSummaries(ctx context.Context) ([]Summary, error)
 	LoadView(ctx context.Context, cik, accession string) (filingview.View, error)
@@ -22,7 +27,7 @@ type Store interface {
 	SourcePath(ctx context.Context, filing *edgar.ParsedFiling) (string, error)
 }
 
-// Summary is storage-level filing metadata for list screens and API responses.
+// Summary is filing-view metadata for list screens and API responses.
 type Summary struct {
 	CIK        string
 	Company    string
@@ -40,11 +45,12 @@ type JSONDirectory struct {
 
 var _ Store = (*JSONDirectory)(nil)
 
-// NewJSONDirectory creates a Store backed by the parsed JSON directory.
+// NewJSONDirectory creates a Store backed by the generated JSON directory.
 func NewJSONDirectory(parsedDir string) *JSONDirectory {
 	return &JSONDirectory{parsedDir: parsedDir}
 }
 
+// LoadCompanyHistory reads filing-view.json files and derives annual history.
 func (s *JSONDirectory) LoadCompanyHistory(
 	ctx context.Context,
 	cik string,
@@ -94,6 +100,7 @@ func (s *JSONDirectory) LoadCompanyHistory(
 	return filingview.BuildCompanyHistory(views, cik)
 }
 
+// LoadView reads one normalized filing-view.json artifact.
 func (s *JSONDirectory) LoadView(
 	ctx context.Context,
 	cik string,
@@ -116,6 +123,7 @@ func (s *JSONDirectory) LoadView(
 	return filingview.Load(path)
 }
 
+// LoadFiling reads one raw parsed filing.json artifact.
 func (s *JSONDirectory) LoadFiling(
 	ctx context.Context,
 	cik string,
@@ -140,6 +148,7 @@ func (s *JSONDirectory) LoadFiling(
 	return filing, err
 }
 
+// ListSummaries reads normalized filing-view.json artifacts for the dashboard.
 func (s *JSONDirectory) ListSummaries(ctx context.Context) ([]Summary, error) {
 	var result []Summary
 
@@ -194,6 +203,7 @@ func (s *JSONDirectory) ListSummaries(ctx context.Context) ([]Summary, error) {
 	return result, nil
 }
 
+// SourcePath resolves the original filing source path for parsed document bytes.
 func (s *JSONDirectory) SourcePath(
 	ctx context.Context,
 	filing *edgar.ParsedFiling,
@@ -223,6 +233,7 @@ func (s *JSONDirectory) SourcePath(
 
 func normalizeFilingKey(cik, accession string) (string, string, error) {
 	cik = canonicalCIK(cik)
+
 	accession = strings.TrimSpace(accession)
 	if cik == "" || accession == "" {
 		return "", "", os.ErrNotExist

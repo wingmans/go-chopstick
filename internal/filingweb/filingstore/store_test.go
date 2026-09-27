@@ -95,6 +95,7 @@ func TestJSONDirectoryLoadsFilingAndSourcePath(t *testing.T) {
 
 	root := t.TempDir()
 	parsedDir := filepath.Join(root, "parsed")
+
 	filingsDir := filepath.Join(root, "filings")
 	if err := os.MkdirAll(filingsDir, 0o750); err != nil {
 		t.Fatal(err)
@@ -141,7 +142,7 @@ func parsedFiling(
 	facts int,
 ) *edgar.ParsedFiling {
 	instance := edgar.XBRLInstance{}
-	for i := 0; i < facts; i++ {
+	for range facts {
 		instance.Facts = append(instance.Facts, edgar.Fact{})
 	}
 

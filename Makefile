@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-derived-data
+.PHONY: help build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-derived-data build-polling run-polling test-polling
 
 .DEFAULT_GOAL := help
 
@@ -31,6 +31,8 @@ build:
 	go build -o $(BIN_DIR)/ecb-fx ./cmd/ecb
 	go build -o $(BIN_DIR)/edgar ./cmd/edgar
 	go build -o $(BIN_DIR)/constituents ./cmd/constituents
+	go build -o $(BIN_DIR)/polling ./cmd/polling
+	go build -o $(BIN_DIR)/polling-reader ./cmd/polling-reader
 
 constituents:
 	mkdir -p data/sets
@@ -76,3 +78,18 @@ test:
 
 clean:
 	rm -rf $(BIN_DIR) dist tmp
+
+build-polling:
+	mkdir -p $(BIN_DIR)
+	go build -o $(BIN_DIR)/polling ./cmd/polling
+	go build -o $(BIN_DIR)/polling-reader ./cmd/polling-reader
+
+run-polling:
+	mkdir -p var
+	go run ./cmd/polling \
+		-interval=1h \
+		-db-path=./var/polling.db \
+		-user-agent="MyMarketPipeline contact@example.com"
+
+test-polling:
+	go test ./cmd/polling ./internal/pollingworker

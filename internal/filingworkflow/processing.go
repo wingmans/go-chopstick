@@ -1,3 +1,5 @@
+// Package filingworkflow coordinates local filing processing and writes both
+// parsed filing artifacts and normalized filing read models.
 package filingworkflow
 
 import (
@@ -35,10 +37,11 @@ type ProcessingResult struct {
 	Filing *edgar.ParsedFiling
 }
 
-// ProcessSubmission is shared by the local command and the download workflow.
-// Noop checks existing results but never parses or persists a stale result.
+// ProcessSubmission parses one SEC submission and writes filing.json plus
+// filing-view.json. Noop checks existing results but never parses or persists a
+// stale result.
 //
-//nolint:nestif // Cache validation and no-op handling are one workflow boundary.
+//nolint:nestif // Reuse validation and no-op handling are one workflow boundary.
 func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (ProcessingResult, error) {
 	var result ProcessingResult
 
@@ -62,23 +65,23 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	}
 
 	if !cfg.Reprocess {
-		cached, reusable, err := reusableFiling(ctx, result.Path, path, identity)
+		stored, reusable, err := reusableFiling(ctx, result.Path, path, identity)
 		if err != nil {
 			return result, err
 		}
 
 		if reusable {
-			result.Action, result.Filing = ActionReused, &cached
+			result.Action, result.Filing = ActionReused, &stored
 
 			if !cfg.Noop {
-				if _, err := filingview.Save(cfg.Directory, &cached); err != nil {
+				if _, err := filingview.Save(cfg.Directory, &stored); err != nil {
 					return result, err
 				}
 			}
 
 			logProcessing(ctx, path, result, cfg, started)
 
-			return result, extractionFailure(&cached)
+			return result, extractionFailure(&stored)
 		}
 	}
 
@@ -186,7 +189,7 @@ func setSourceReference(filing *edgar.ParsedFiling, path, root string) error {
 }
 
 // Unsupported features are limitations, while malformed XML and broken
-// references are processing failures even when their diagnostics are cached.
+// references are processing failures even when their diagnostics are persisted.
 func extractionFailure(filing *edgar.ParsedFiling) error {
 	for _, diagnostic := range filing.Diagnostics {
 		if diagnostic.Code == "xbrl_error" || diagnostic.Code == "xbrl_reference" {

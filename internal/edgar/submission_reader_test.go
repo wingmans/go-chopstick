@@ -1,6 +1,7 @@
 package edgar
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -185,6 +186,48 @@ func TestSubmissionOffsetsAndHeader(t *testing.T) {
 
 	if document.Role != "xbrl_instance" || document.Sequence != "1" || document.Description != "test instance" {
 		t.Fatalf("unexpected document: %+v", document)
+	}
+}
+
+func TestParseSubmissionSourceFromReader(t *testing.T) {
+	source := submissionText(testInstance, testInstanceFilename)
+	reader := bytes.NewReader([]byte(source))
+
+	filing, err := ParseSubmissionSource(t.Context(), SubmissionSource{
+		Name: "memory-submission.txt", Size: int64(len(source)), Reader: reader,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if filing.Metadata.Accession != "0000000123-24-000001" ||
+		filing.Status != ParseComplete ||
+		len(filing.Instances) != 1 {
+		t.Fatalf("unexpected parsed filing: status=%s metadata=%+v instances=%d",
+			filing.Status, filing.Metadata, len(filing.Instances))
+	}
+
+	sum := sha256.Sum256([]byte(source))
+	if filing.SourceSHA256 != hex.EncodeToString(sum[:]) {
+		t.Fatal("checksum mismatch")
+	}
+}
+
+func TestReadSubmissionMetadataSourceFromReader(t *testing.T) {
+	source := submissionText(testInstance, testInstanceFilename)
+	reader := bytes.NewReader([]byte(source))
+
+	metadata, err := ReadSubmissionMetadataSource(t.Context(), SubmissionSource{
+		Name: "memory-submission.txt", Size: int64(len(source)), Reader: reader,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if metadata.Accession != "0000000123-24-000001" ||
+		metadata.CIK != "0000000123" ||
+		metadata.FormType != "10-K" {
+		t.Fatalf("unexpected metadata: %+v", metadata)
 	}
 }
 

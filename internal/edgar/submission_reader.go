@@ -45,22 +45,10 @@ func ParseSubmission(ctx context.Context, path string) (*ParsedFiling, error) {
 		return nil, fmt.Errorf("stat submission: %w", err)
 	}
 
-	hash := sha256.New()
-
-	var result ParsedFiling
-
-	result.SchemaVersion = ParsedSchemaVersion
-
-	result.ParserVersion = ParserVersion
-	result.SourcePath = filepath.Clean(path)
-
-	result.Status = ParseNoXBRL
-	if err := readEnvelope(ctx, io.TeeReader(file, hash), &result); err != nil {
-		return nil, fmt.Errorf("read submission %s: %w", path, err)
-	}
-
-	result.SourceSHA256 = hex.EncodeToString(hash.Sum(nil))
-	if err := result.extractInstances(ctx, file); err != nil {
+	filing, err := ParseSubmissionSource(ctx, SubmissionSource{
+		Name: path, Size: before.Size(), Reader: file,
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -73,7 +61,63 @@ func ParseSubmission(ctx context.Context, path string) (*ParsedFiling, error) {
 		return nil, errors.New("submission changed while being parsed")
 	}
 
+	return filing, nil
+}
+
+// SubmissionSource is an SEC submission source that can be read by byte range.
+type SubmissionSource struct {
+	Name   string
+	Size   int64
+	Reader io.ReaderAt
+}
+
+// ParseSubmissionSource reads a SEC envelope and its extracted XBRL instances
+// without requiring the submission to come from the filesystem.
+func ParseSubmissionSource(ctx context.Context, source SubmissionSource) (*ParsedFiling, error) {
+	if err := validateSubmissionSource(source); err != nil {
+		return nil, err
+	}
+
+	hash := sha256.New()
+
+	var result ParsedFiling
+
+	result.SchemaVersion = ParsedSchemaVersion
+
+	result.ParserVersion = ParserVersion
+	if source.Name != "" {
+		result.SourcePath = filepath.Clean(source.Name)
+	}
+
+	result.Status = ParseNoXBRL
+
+	reader := io.NewSectionReader(source.Reader, 0, source.Size)
+	if err := readEnvelope(ctx, io.TeeReader(reader, hash), &result); err != nil {
+		return nil, fmt.Errorf("read submission %s: %w", source.Name, err)
+	}
+
+	result.SourceSHA256 = hex.EncodeToString(hash.Sum(nil))
+	if err := result.extractInstances(ctx, source.Reader); err != nil {
+		return nil, err
+	}
+
 	return &result, nil
+}
+
+func validateSubmissionSource(source SubmissionSource) error {
+	if source.Reader == nil {
+		return errors.New("submission source reader is nil")
+	}
+
+	if source.Size < 0 {
+		return errors.New("submission source size is negative")
+	}
+
+	if source.Name != "" && filepath.Ext(source.Name) != ".txt" {
+		return errors.New("submission must have a .txt extension")
+	}
+
+	return nil
 }
 
 type envelopeReader struct {
@@ -149,7 +193,7 @@ func finishSubmissionMetadata(metadata *FilingMetadata) error {
 	return nil
 }
 
-// Read only the envelope header to locate a cached result without extracting XBRL.
+// Read only the envelope header to locate a stored result without extracting XBRL.
 func readSubmissionMetadata(ctx context.Context, path string) (FilingMetadata, error) {
 	var result ParsedFiling
 	if filepath.Ext(path) != ".txt" {
@@ -163,7 +207,25 @@ func readSubmissionMetadata(ctx context.Context, path string) (FilingMetadata, e
 
 	defer func() { _ = file.Close() }()
 
-	reader := bufio.NewReader(file)
+	stat, err := file.Stat()
+	if err != nil {
+		return result.Metadata, fmt.Errorf("stat submission: %w", err)
+	}
+
+	return ReadSubmissionMetadataSource(ctx, SubmissionSource{
+		Name: path, Size: stat.Size(), Reader: file,
+	})
+}
+
+// ReadSubmissionMetadataSource reads only the SEC envelope header without
+// requiring the submission to come from the filesystem.
+func ReadSubmissionMetadataSource(ctx context.Context, source SubmissionSource) (FilingMetadata, error) {
+	var result ParsedFiling
+	if err := validateSubmissionSource(source); err != nil {
+		return result.Metadata, err
+	}
+
+	reader := bufio.NewReader(io.NewSectionReader(source.Reader, 0, source.Size))
 
 	var envelope envelopeReader
 

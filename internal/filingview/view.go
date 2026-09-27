@@ -1,4 +1,5 @@
-// Package filingview builds the compact read model used by the local dashboard.
+// Package filingview builds the normalized read model derived from parsed SEC
+// filings.
 package filingview
 
 import (
@@ -15,6 +16,8 @@ import (
 
 const SchemaVersion = 1
 
+// View is the useful filing read model produced from namespace-heavy parsed
+// XBRL data. It is generated data, but it is not a web cache.
 type View struct {
 	SchemaVersion   int                        `json:"schema_version"`
 	ParserVersion   string                     `json:"parser_version"`

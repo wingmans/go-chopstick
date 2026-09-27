@@ -192,6 +192,7 @@ func TestIndexPageWithoutFiltersDoesNotLoadFilings(t *testing.T) {
 	t.Parallel()
 
 	parsedDir := t.TempDir()
+
 	brokenDir := filepath.Join(parsedDir, "0000789019", "0001193125-26-000001")
 	if err := os.MkdirAll(brokenDir, 0o750); err != nil {
 		t.Fatal(err)
@@ -365,8 +366,8 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 	record = httptest.NewRecorder()
 	request = httptest.NewRequestWithContext(context.Background(),
 		http.MethodGet, "/?q=MSFT", nil)
-	request.Header.Set("HX-Request", "true")
-	request.Header.Set("HX-Target", "div#dashboard")
+	request.Header.Set("Hx-Request", "true")
+	request.Header.Set("Hx-Target", "div#dashboard")
 	server.ServeHTTP(record, request)
 
 	body = record.Body.String()
@@ -380,8 +381,8 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 	record = httptest.NewRecorder()
 	request = httptest.NewRequestWithContext(context.Background(),
 		http.MethodGet, "/?q=MSFT", nil)
-	request.Header.Set("HX-Request", "true")
-	request.Header.Set("HX-Target", "body")
+	request.Header.Set("Hx-Request", "true")
+	request.Header.Set("Hx-Target", "body")
 	server.ServeHTTP(record, request)
 
 	body = record.Body.String()
