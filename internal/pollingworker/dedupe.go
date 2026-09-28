@@ -20,6 +20,14 @@ type FilingEvent struct {
 	Timestamp       time.Time `json:"timestamp"`
 }
 
+type DeadLetter struct {
+	FeedURL  string
+	Title    string
+	Link     string
+	RawEntry string
+	Reason   string
+}
+
 type DedupeService struct {
 	db *sql.DB
 	mu sync.Mutex
@@ -41,14 +49,36 @@ func NewDedupeService(dbPath string) (*DedupeService, error) {
 		source_feed TEXT NOT NULL,
 		processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
+	deadLetterQuery := `
+	CREATE TABLE IF NOT EXISTS polling_dead_letters (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		feed_url TEXT NOT NULL,
+		title TEXT NOT NULL,
+		link TEXT NOT NULL,
+		raw_entry TEXT NOT NULL,
+		reason TEXT NOT NULL
+	);`
 
 	if _, err := db.ExecContext(context.Background(), query); err != nil {
 		_ = db.Close()
 
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
+	if _, err := db.ExecContext(context.Background(), deadLetterQuery); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to create dead-letter schema: %w", err)
+	}
 
 	return &DedupeService{db: db}, nil
+}
+
+func (s *DedupeService) SaveDeadLetter(ctx context.Context, letter DeadLetter) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO polling_dead_letters (feed_url, title, link, raw_entry, reason)
+		VALUES (?, ?, ?, ?, ?);`, letter.FeedURL, letter.Title, letter.Link,
+		letter.RawEntry, letter.Reason)
+	return err
 }
 
 // NewSQLiteStore is the name used by the polling command. Keep the storage

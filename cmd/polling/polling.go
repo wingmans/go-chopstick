@@ -42,9 +42,10 @@ type AtomEntry struct {
 
 // SEC Atom Parser / Fetcher Worker.
 type SECFetcher struct {
-	client    *http.Client
-	userAgent string
-	feedURL   string
+	client      *http.Client
+	userAgent   string
+	feedURL     string
+	deadLetters []pw.DeadLetter
 }
 
 func NewSECFetcher(userHeader string) *SECFetcher {
@@ -72,6 +73,7 @@ var (
 )
 
 func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pw.FilingEvent, error) {
+	f.deadLetters = nil
 	ctxlog.FromContext(ctx).Debug("fetching SEC Atom feed", "url", f.feedURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.feedURL, nil)
@@ -114,12 +116,22 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pw.FilingEvent, error) 
 			events = append(events, event)
 		} else {
 			skipped++
+			f.deadLetters = append(f.deadLetters, pw.DeadLetter{
+				FeedURL: f.feedURL,
+				Title:   entry.Title,
+				Link:    entry.Link.Href,
+				Reason:  "entry could not be normalized",
+			})
 		}
 	}
 	ctxlog.FromContext(ctx).Debug("SEC Atom feed parsed", "entries", len(feed.Entries),
 		"events", len(events), "skipped", skipped)
 
 	return events, nil
+}
+
+func (f *SECFetcher) DeadLetters() []pw.DeadLetter {
+	return append([]pw.DeadLetter(nil), f.deadLetters...)
 }
 
 // Extracts metadata fields out of raw Atom HTML summary string.

@@ -3,5 +3,6 @@ fetch-ecb
 bin/
 data/
 tmp/
+testoutput/
 *.test
 coverage.out

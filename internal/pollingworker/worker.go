@@ -16,6 +16,14 @@ type Deduper interface {
 	FilterNew(ctx context.Context, events []FilingEvent) ([]FilingEvent, error)
 }
 
+type DeadLetterSink interface {
+	SaveDeadLetter(context.Context, DeadLetter) error
+}
+
+type DeadLetterProvider interface {
+	DeadLetters() []DeadLetter
+}
+
 type Worker struct {
 	fetcher  Fetcher
 	deduper  Deduper
@@ -70,6 +78,15 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		logger.Debug("polling fetch failed", "error", err)
 
 		return err
+	}
+	if provider, ok := w.fetcher.(DeadLetterProvider); ok {
+		if sink, ok := w.deduper.(DeadLetterSink); ok {
+			for _, letter := range provider.DeadLetters() {
+				if err := sink.SaveDeadLetter(ctx, letter); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	logger.Debug("polling feed fetched", "events", len(events))

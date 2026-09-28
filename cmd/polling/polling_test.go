@@ -1,11 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	_ "github.com/mattn/go-sqlite3"
 	pw "wingman.com/fetch-ecb/internal/pollingworker"
 )
 
@@ -22,6 +27,21 @@ func TestParseAtomEntryAcceptsNumericAccessionPath(t *testing.T) {
 	if event.AccessionNumber != "0000320193-26-000001" {
 		t.Fatalf("accession = %q", event.AccessionNumber)
 	}
+}
+
+func testDatabasePath(t *testing.T) string {
+	t.Helper()
+
+	if err := os.MkdirAll("./testoutput", 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	name := strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+	path := filepath.Join("./testoutput", name+"-"+
+		time.Now().Format("20060102-150405.000")+".db")
+	t.Logf("test database: %s", path)
+
+	return path
 }
 
 func TestParseAtomEntryExtractsSECMetadata(t *testing.T) {
@@ -85,7 +105,7 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 
 	fetcher := NewSECFetcherWithURL("test-agent", server.URL)
 
-	store, err := pw.NewSQLiteStore(t.TempDir() + "/polling.db")
+	store, err := pw.NewSQLiteStore(testDatabasePath(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,5 +135,98 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 	case event := <-out:
 		t.Fatalf("unexpected duplicate event: %+v", event)
 	default:
+	}
+}
+
+func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
+	feed, err := os.ReadFile(filepath.Join("..", "..", "golden", "sec-current.atom.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/atom+xml")
+		_, _ = w.Write(feed)
+	}))
+	defer server.Close()
+
+	dbPath := testDatabasePath(t)
+	store, err := pw.NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+
+	worker := pw.NewWorker(
+		NewSECFetcherWithURL("test-agent", server.URL),
+		store,
+		make(chan pw.FilingEvent, 32),
+		time.Minute,
+	)
+	if err := worker.RunOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var records, missing, deadLetters int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM processed_accessions`).Scan(&records); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM processed_accessions WHERE cik = '' OR form_type = ''`).Scan(&missing); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM polling_dead_letters`).Scan(&deadLetters); err != nil {
+		t.Fatal(err)
+	}
+	if records != 5 || missing != 0 || deadLetters != 0 {
+		t.Fatalf("records=%d missing_metadata=%d dead_letters=%d", records, missing, deadLetters)
+	}
+}
+
+func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
+	feed, err := os.ReadFile(filepath.Join("..", "..", "golden", "sec-current-dead-letter.atom.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/atom+xml")
+		_, _ = w.Write(feed)
+	}))
+	defer server.Close()
+
+	dbPath := testDatabasePath(t)
+	store, err := pw.NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+
+	worker := pw.NewWorker(NewSECFetcherWithURL("test-agent", server.URL), store,
+		make(chan pw.FilingEvent, 2), time.Minute)
+	if err := worker.RunOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var processed, deadLetters int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM processed_accessions`).Scan(&processed); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM polling_dead_letters`).Scan(&deadLetters); err != nil {
+		t.Fatal(err)
+	}
+	if processed != 1 || deadLetters != 1 {
+		t.Fatalf("processed=%d dead_letters=%d", processed, deadLetters)
 	}
 }
