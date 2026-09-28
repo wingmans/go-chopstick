@@ -5,6 +5,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_PATH="$ROOT_DIR/bin/edgar"
 SET_NAME="us-gaap-coverage"
+FORM_TYPE="${FORM_TYPE:-10-K}"
 REFRESH_LATEST="${REFRESH_LATEST:-0}"
 
 cd "$ROOT_DIR"
@@ -32,12 +33,12 @@ test -s data/indexes/master.tsv
 echo "Downloading filings from 2010 onward for set $SET_NAME"
 "$CLI_PATH" filings \
   --set "$SET_NAME" \
-  --form-type 10-K
+  --form-type "$FORM_TYPE"
 
 echo "Reprocessing filings from 2010 onward for set $SET_NAME"
 "$CLI_PATH" parse \
   --set "$SET_NAME" \
-  --form-type 10-K \
+  --form-type "$FORM_TYPE" \
   --reprocess
 
 if ! find data/parsed -type f -name filing.json -print -quit | grep -q .; then

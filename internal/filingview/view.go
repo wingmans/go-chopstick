@@ -385,6 +385,10 @@ func classifyPeriod(context edgar.FactContext, reportDate string) (string, strin
 	months := (end.Year()-start.Year())*12 + int(end.Month()) - int(start.Month()) + 1
 
 	fiscalYear := end.Year()
+	if fiscalEnd.Month() != time.December && end.Month() > fiscalEnd.Month() {
+		fiscalYear++
+	}
+
 	if months >= 10 {
 		label := fmt.Sprintf("FY%d", fiscalYear)
 

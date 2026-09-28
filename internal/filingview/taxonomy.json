@@ -311,6 +311,11 @@
           "namespace_family": "us-gaap",
           "name": "PaymentsToAcquirePropertyPlantAndEquipment",
           "priority": 1
+        },
+        {
+          "namespace_family": "us-gaap",
+          "name": "PaymentsToAcquireProductiveAssets",
+          "priority": 2
         }
       ]
     }
