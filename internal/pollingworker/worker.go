@@ -2,7 +2,6 @@ package pollingworker
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
@@ -17,7 +16,7 @@ type Deduper interface {
 }
 
 type DeadLetterSink interface {
-	SaveDeadLetter(context.Context, DeadLetter) error
+	SaveDeadLetter(ctx context.Context, letter DeadLetter) error
 }
 
 type DeadLetterProvider interface {
@@ -51,7 +50,7 @@ func NewWorker(
 
 func (w *Worker) Run(ctx context.Context) error {
 	if err := w.RunOnce(ctx); err != nil {
-		return err
+		ctxlog.FromContext(ctx).Warn("polling cycle failed", "error", err)
 	}
 
 	ticker := time.NewTicker(w.interval)
@@ -63,7 +62,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.RunOnce(ctx); err != nil {
-				log.Printf("polling cycle failed: %v", err)
+				ctxlog.FromContext(ctx).Warn("polling cycle failed", "error", err)
 			}
 		}
 	}
@@ -75,10 +74,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 
 	events, err := w.fetcher.FetchLatest(ctx)
 	if err != nil {
-		logger.Debug("polling fetch failed", "error", err)
-
 		return err
 	}
+
 	if provider, ok := w.fetcher.(DeadLetterProvider); ok {
 		if sink, ok := w.deduper.(DeadLetterSink); ok {
 			for _, letter := range provider.DeadLetters() {
@@ -93,8 +91,6 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 
 	fresh, err := w.deduper.FilterNew(ctx, events)
 	if err != nil {
-		logger.Debug("polling deduplication failed", "error", err)
-
 		return err
 	}
 

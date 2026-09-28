@@ -35,6 +35,10 @@ type DedupeService struct {
 
 // NewDedupeService initializes SQLite with WAL mode for performance.
 func NewDedupeService(dbPath string) (*DedupeService, error) {
+	return NewDedupeServiceContext(context.Background(), dbPath)
+}
+
+func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService, error) {
 	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite db: %w", err)
@@ -60,17 +64,24 @@ func NewDedupeService(dbPath string) (*DedupeService, error) {
 		reason TEXT NOT NULL
 	);`
 
-	if _, err := db.ExecContext(context.Background(), query); err != nil {
+	if _, err := db.ExecContext(ctx, query); err != nil {
 		_ = db.Close()
 
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
-	if _, err := db.ExecContext(context.Background(), deadLetterQuery); err != nil {
+
+	if _, err := db.ExecContext(ctx, deadLetterQuery); err != nil {
 		_ = db.Close()
+
 		return nil, fmt.Errorf("failed to create dead-letter schema: %w", err)
 	}
 
 	return &DedupeService{db: db}, nil
+}
+
+// NewSQLiteStore is the name used by the polling command.
+func NewSQLiteStore(dbPath string) (*DedupeService, error) {
+	return NewDedupeService(dbPath)
 }
 
 func (s *DedupeService) SaveDeadLetter(ctx context.Context, letter DeadLetter) error {
@@ -78,13 +89,8 @@ func (s *DedupeService) SaveDeadLetter(ctx context.Context, letter DeadLetter) e
 		INSERT INTO polling_dead_letters (feed_url, title, link, raw_entry, reason)
 		VALUES (?, ?, ?, ?, ?);`, letter.FeedURL, letter.Title, letter.Link,
 		letter.RawEntry, letter.Reason)
-	return err
-}
 
-// NewSQLiteStore is the name used by the polling command. Keep the storage
-// constructor here so the command does not need to know the implementation.
-func NewSQLiteStore(dbPath string) (*DedupeService, error) {
-	return NewDedupeService(dbPath)
+	return err
 }
 
 // IsDuplicate performs a fast check against the index.

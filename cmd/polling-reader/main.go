@@ -33,6 +33,7 @@ type config struct {
 
 func main() {
 	logger := ctxlog.New()
+
 	ctx := ctxlog.WithLogger(context.Background(), logger)
 	if err := run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -47,6 +48,7 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	logger := ctxlog.FromContext(ctx)
+
 	files, err := selectFiles(cfg)
 	if err != nil {
 		return err
@@ -60,13 +62,14 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	logger.Info("read quarterly index events", "files", len(files), "events", len(events))
+
 	if cfg.dryRun {
 		logger.Info("dry run complete", "events", len(events))
 
 		return nil
 	}
 
-	store, err := pw.NewSQLiteStore(cfg.dbPath)
+	store, err := pw.NewDedupeServiceContext(ctx, cfg.dbPath)
 	if err != nil {
 		return err
 	}
@@ -100,21 +103,27 @@ func parseConfig(args []string) (config, error) {
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
 	}
+
 	if flags.NArg() != 0 {
 		return config{}, errors.New("unexpected positional arguments")
 	}
+
 	if cfg.file != "" && (cfg.latest || cfg.year != 0 || cfg.fromYear != 0 || cfg.toYear != 0) {
 		return config{}, errors.New("--file cannot be combined with --latest or year filters")
 	}
+
 	if cfg.latest && (cfg.year != 0 || cfg.fromYear != 0 || cfg.toYear != 0) {
 		return config{}, errors.New("--latest cannot be combined with year filters")
 	}
+
 	if cfg.year != 0 && (cfg.fromYear != 0 || cfg.toYear != 0) {
 		return config{}, errors.New("--year cannot be combined with --from-year or --to-year")
 	}
+
 	if cfg.fromYear != 0 && cfg.toYear != 0 && cfg.fromYear > cfg.toYear {
 		return config{}, errors.New("--from-year must not be after --to-year")
 	}
+
 	if cfg.file == "" && !cfg.latest && cfg.year == 0 && cfg.fromYear == 0 && cfg.toYear == 0 {
 		return config{}, errors.New("one of --file, --latest, --year, --from-year, or --to-year is required")
 	}
@@ -133,6 +142,7 @@ func selectFiles(cfg config) ([]string, error) {
 	}
 
 	var files []string
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -147,9 +157,11 @@ func selectFiles(cfg config) ([]string, error) {
 		if cfg.year != 0 && year != cfg.year {
 			continue
 		}
+
 		if cfg.fromYear != 0 && year < cfg.fromYear {
 			continue
 		}
+
 		if cfg.toYear != 0 && year > cfg.toYear {
 			continue
 		}
@@ -158,6 +170,7 @@ func selectFiles(cfg config) ([]string, error) {
 	}
 
 	sort.Strings(files)
+
 	if cfg.latest {
 		if len(files) == 0 {
 			return nil, errors.New("no quarterly index files found")
@@ -165,6 +178,7 @@ func selectFiles(cfg config) ([]string, error) {
 
 		return files[len(files)-1:], nil
 	}
+
 	if len(files) == 0 {
 		return nil, errors.New("no quarterly index files matched")
 	}
@@ -187,8 +201,10 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			if err != nil {
 				_ = file.Close()
+
 				return nil, fmt.Errorf("read %s: %w", path, err)
 			}
 
@@ -201,6 +217,7 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 				Timestamp:       record.DateFiled,
 			})
 		}
+
 		if err := file.Close(); err != nil {
 			return nil, fmt.Errorf("close %s: %w", path, err)
 		}
@@ -212,10 +229,12 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 func accessionFromPath(path string) string {
 	base := filepath.Base(path)
 	base = strings.TrimSuffix(base, "-index.htm")
+
 	base = strings.TrimSuffix(base, ".txt")
 	if len(base) == 20 && base[10] == '-' && base[13] == '-' {
 		return base
 	}
+
 	if len(base) == 18 {
 		return base[:10] + "-" + base[10:12] + "-" + base[12:]
 	}

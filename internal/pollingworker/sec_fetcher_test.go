@@ -1,4 +1,4 @@
-package main
+package pollingworker
 
 import (
 	"database/sql"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	pw "wingman.com/fetch-ecb/internal/pollingworker"
 )
 
 func TestParseAtomEntryAcceptsNumericAccessionPath(t *testing.T) {
@@ -24,15 +23,17 @@ func TestParseAtomEntryAcceptsNumericAccessionPath(t *testing.T) {
 	if !ok {
 		t.Fatal("parseAtomEntry rejected numeric accession path")
 	}
+
 	if event.AccessionNumber != "0000320193-26-000001" {
 		t.Fatalf("accession = %q", event.AccessionNumber)
 	}
 }
 
+// testDatabasePath returns a unique file path for a test SQLite database.
 func testDatabasePath(t *testing.T) string {
 	t.Helper()
 
-	if err := os.MkdirAll("./testoutput", 0o755); err != nil {
+	if err := os.MkdirAll("./testoutput", 0o750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,9 +54,11 @@ func TestParseAtomEntryExtractsSECMetadata(t *testing.T) {
 	if !ok {
 		t.Fatal("parseAtomEntry rejected SEC summary")
 	}
+
 	if event.CIK != "0000320193" {
 		t.Fatalf("CIK = %q", event.CIK)
 	}
+
 	if event.FormType != "8-K" {
 		t.Fatalf("form type = %q", event.FormType)
 	}
@@ -72,9 +75,11 @@ func TestParseAtomEntryExtractsSECAtomMetadata(t *testing.T) {
 	if !ok {
 		t.Fatal("parseAtomEntry rejected SEC Atom entry")
 	}
+
 	if event.CIK != "0002045034" {
 		t.Fatalf("CIK = %q", event.CIK)
 	}
+
 	if event.FormType != "4" {
 		t.Fatalf("form type = %q", event.FormType)
 	}
@@ -105,14 +110,14 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 
 	fetcher := NewSECFetcherWithURL("test-agent", server.URL)
 
-	store, err := pw.NewSQLiteStore(testDatabasePath(t))
+	store, err := NewSQLiteStore(testDatabasePath(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
 
-	out := make(chan pw.FilingEvent, 2)
-	worker := pw.NewWorker(fetcher, store, out, 0)
+	out := make(chan FilingEvent, 2)
+	worker := NewWorker(fetcher, store, out, 0)
 
 	if err := worker.RunOnce(t.Context()); err != nil {
 		t.Fatal(err)
@@ -151,16 +156,18 @@ func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 	defer server.Close()
 
 	dbPath := testDatabasePath(t)
-	store, err := pw.NewSQLiteStore(dbPath)
+
+	store, err := NewSQLiteStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = store.Close() }()
 
-	worker := pw.NewWorker(
+	worker := NewWorker(
 		NewSECFetcherWithURL("test-agent", server.URL),
 		store,
-		make(chan pw.FilingEvent, 32),
+		make(chan FilingEvent, 32),
 		time.Minute,
 	)
 	if err := worker.RunOnce(t.Context()); err != nil {
@@ -174,15 +181,18 @@ func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	var records, missing, deadLetters int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM processed_accessions`).Scan(&records); err != nil {
+	if err := db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM processed_accessions`).Scan(&records); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(`SELECT COUNT(*) FROM processed_accessions WHERE cik = '' OR form_type = ''`).Scan(&missing); err != nil {
+
+	if err := db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM processed_accessions WHERE cik = '' OR form_type = ''`).Scan(&missing); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(`SELECT COUNT(*) FROM polling_dead_letters`).Scan(&deadLetters); err != nil {
+
+	if err := db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM polling_dead_letters`).Scan(&deadLetters); err != nil {
 		t.Fatal(err)
 	}
+
 	if records != 5 || missing != 0 || deadLetters != 0 {
 		t.Fatalf("records=%d missing_metadata=%d dead_letters=%d", records, missing, deadLetters)
 	}
@@ -201,14 +211,16 @@ func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
 	defer server.Close()
 
 	dbPath := testDatabasePath(t)
-	store, err := pw.NewSQLiteStore(dbPath)
+
+	store, err := NewSQLiteStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = store.Close() }()
 
-	worker := pw.NewWorker(NewSECFetcherWithURL("test-agent", server.URL), store,
-		make(chan pw.FilingEvent, 2), time.Minute)
+	worker := NewWorker(NewSECFetcherWithURL("test-agent", server.URL), store,
+		make(chan FilingEvent, 2), time.Minute)
 	if err := worker.RunOnce(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -220,12 +232,14 @@ func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	var processed, deadLetters int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM processed_accessions`).Scan(&processed); err != nil {
+	if err := db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM processed_accessions`).Scan(&processed); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(`SELECT COUNT(*) FROM polling_dead_letters`).Scan(&deadLetters); err != nil {
+
+	if err := db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM polling_dead_letters`).Scan(&deadLetters); err != nil {
 		t.Fatal(err)
 	}
+
 	if processed != 1 || deadLetters != 1 {
 		t.Fatalf("processed=%d dead_letters=%d", processed, deadLetters)
 	}

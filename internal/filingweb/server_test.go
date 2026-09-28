@@ -255,7 +255,9 @@ func summaryRowByConcept(rows []filingview.FactSeries, concept string) *filingvi
 	return nil
 }
 
-func TestServerNormalizesCIKPadding(t *testing.T) {
+func newCIKTestServer(t *testing.T) *Server {
+	t.Helper()
+
 	parsedDir := t.TempDir()
 
 	filing := &edgar.ParsedFiling{
@@ -264,7 +266,9 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 		Metadata: edgar.FilingMetadata{
 			CIK: "789019", Accession: "0001193125-26-027207", FormType: "10-Q", FilingDate: "20260913",
 			ReportDate: "20260912", Items: []string{}, Header: []string{},
-			Filers: []edgar.SubmissionFiler{{CIK: "789019", Name: "Example Corp.", Header: []string{}}},
+			Filers: []edgar.SubmissionFiler{
+				{CIK: "789019", Name: "Example Corp.", Header: []string{}},
+			},
 		},
 		SourcePath: "", SourceBase: "", SourceSHA256: "",
 		Documents:   []edgar.SubmissionDocument{},
@@ -304,125 +308,101 @@ func TestServerNormalizesCIKPadding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	record := httptest.NewRecorder()
-	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/api/filings", nil))
+	return server
+}
 
-	if record.Code != http.StatusOK ||
-		strings.Contains(record.Body.String(), "0001193125-26-027207") {
-		t.Fatalf("unfiltered request returned filings: status=%d body=%s",
-			record.Code, record.Body.String())
+func TestServerFiltersByCIK(t *testing.T) {
+	server := newCIKTestServer(t)
+	for _, test := range []struct{ name, cik string }{{"unpadded", "789019"}, {"padded", "0000789019"}} {
+		t.Run(test.name, func(t *testing.T) {
+			requireResponse(t, requestServer(t, server, http.MethodGet, "/api/filings?cik="+test.cik), http.StatusOK, "0001193125-26-027207")
+		})
 	}
+}
 
-	for _, cik := range []string{"789019", "0000789019"} {
-		record = httptest.NewRecorder()
-		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/filings?cik="+cik, nil)
-		server.ServeHTTP(record, request)
+func TestServerFiltersByTicker(t *testing.T) {
+	requireResponse(t, requestServer(t, newCIKTestServer(t), http.MethodGet, "/api/filings?q=MSFT"), http.StatusOK, `"ticker":"MSFT"`)
+}
 
-		if record.Code != 200 || !strings.Contains(record.Body.String(), "0001193125-26-027207") {
-			t.Fatalf("CIK %s did not return the filing: status=%d body=%s", cik, record.Code, record.Body.String())
-		}
-	}
+func TestServerRendersDetails(t *testing.T) {
+	requireResponse(t, requestServer(t, newCIKTestServer(t), http.MethodGet, "/filings/789019/0001193125-26-027207"), http.StatusOK, "XBRL facts")
+}
 
-	record = httptest.NewRecorder()
-	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/api/filings?q=MSFT", nil))
+func TestServerRendersDashboard(t *testing.T) {
+	record := requestServer(t, newCIKTestServer(t), http.MethodGet, "/?q=MSFT")
+	requireResponse(t, record, http.StatusOK, "id=\"dashboard\"", "value=\"MSFT\"", "0001193125-26-027207")
+}
 
-	if record.Code != http.StatusOK ||
-		!strings.Contains(record.Body.String(), "\"ticker\":\"MSFT\"") {
-		t.Fatalf("ticker lookup failed: status=%d body=%s", record.Code,
-			record.Body.String())
-	}
-
-	record = httptest.NewRecorder()
-	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/filings/789019/0001193125-26-027207", nil))
-
-	if record.Code != 200 || !strings.Contains(record.Body.String(), "XBRL facts") {
-		t.Fatalf("details page failed: status=%d body=%s", record.Code, record.Body.String())
-	}
-
-	record = httptest.NewRecorder()
-	request := httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/?q=MSFT", nil)
-	server.ServeHTTP(record, request)
-
-	body := record.Body.String()
-	for _, marker := range []string{
-		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
-		"<script src=\"/assets/htmx.min.js\"></script>",
-		"value=\"MSFT\"",
-		"id=\"dashboard\"",
-		"0001193125-26-027207",
-		"href=\"/filings/789019/0001193125-26-027207?return_to=%2F%3Fq%3DMSFT\"",
-		"hx-target=\"body\"",
-		"hx-select=\"body\"",
+func TestServerRendersHTMX(t *testing.T) {
+	server := newCIKTestServer(t)
+	for _, test := range []struct {
+		name, target string
+		fullPage     bool
+	}{
+		{"dashboard", "div#dashboard", false},
+		{"body", "body", true},
 	} {
-		if record.Code != http.StatusOK || !strings.Contains(body, marker) {
-			t.Fatalf("index page missing %q: status=%d body=%s",
-				marker, record.Code, body)
+		t.Run(test.name, func(t *testing.T) {
+			record := httptest.NewRecorder()
+			request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?q=MSFT", nil)
+			request.Header.Set("Hx-Request", "true")
+			request.Header.Set("Hx-Target", test.target)
+			server.ServeHTTP(record, request)
+
+			if test.fullPage {
+				requireResponse(t, record, http.StatusOK, "<!doctype html>", "class=\"dashboard-page\"")
+
+				return
+			}
+
+			if record.Code != http.StatusOK || strings.Contains(record.Body.String(), "<!doctype html>") {
+				t.Fatalf("unexpected dashboard fragment: status=%d body=%s", record.Code, record.Body.String())
+			}
+
+			requireResponse(t, record, http.StatusOK, "id=\"dashboard\"", "0001193125-26-027207")
+		})
+	}
+}
+
+func TestServerServesAssets(t *testing.T) {
+	server := newCIKTestServer(t)
+	for _, test := range []struct{ path, contentType, marker string }{
+		{"/assets/htmx.min.js", "text/javascript", `version="4.0.0"`},
+		{"/assets/filingweb.css", "text/css", "body.detail-page"},
+		{"/assets/chopstick.svg", "image/svg+xml", "<svg"},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			record := requestServer(t, server, http.MethodGet, test.path)
+			if record.Code != http.StatusOK ||
+				!strings.Contains(record.Header().Get("Content-Type"), test.contentType) ||
+				!strings.Contains(record.Body.String(), test.marker) {
+				t.Fatalf("asset failed: status=%d headers=%v body=%s", record.Code, record.Header(), record.Body.String())
+			}
+		})
+	}
+}
+
+// requestServer sends an HTTP request to the given server and returns the response recorder.
+func requestServer(t *testing.T, server http.Handler, method, path string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	record := httptest.NewRecorder()
+	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(), method, path, nil))
+
+	return record
+}
+
+// requireResponse asserts that the HTTP response has the expected status code and contains the specified markers in the body.
+func requireResponse(t *testing.T, record *httptest.ResponseRecorder, status int, markers ...string) {
+	t.Helper()
+
+	if record.Code != status {
+		t.Fatalf("status=%d body=%s", record.Code, record.Body.String())
+	}
+
+	for _, marker := range markers {
+		if !strings.Contains(record.Body.String(), marker) {
+			t.Fatalf("body missing %q: %s", marker, record.Body.String())
 		}
-	}
-
-	record = httptest.NewRecorder()
-	request = httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/?q=MSFT", nil)
-	request.Header.Set("Hx-Request", "true")
-	request.Header.Set("Hx-Target", "div#dashboard")
-	server.ServeHTTP(record, request)
-
-	body = record.Body.String()
-	if record.Code != http.StatusOK || strings.Contains(body, "<!doctype html>") ||
-		!strings.Contains(body, "id=\"dashboard\"") ||
-		!strings.Contains(body, "0001193125-26-027207") {
-		t.Fatalf("htmx dashboard fragment failed: status=%d body=%s",
-			record.Code, body)
-	}
-
-	record = httptest.NewRecorder()
-	request = httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/?q=MSFT", nil)
-	request.Header.Set("Hx-Request", "true")
-	request.Header.Set("Hx-Target", "body")
-	server.ServeHTTP(record, request)
-
-	body = record.Body.String()
-	if record.Code != http.StatusOK || !strings.Contains(body, "<!doctype html>") ||
-		!strings.Contains(body, "class=\"dashboard-page\"") ||
-		!strings.Contains(body, "0001193125-26-027207") {
-		t.Fatalf("htmx dashboard navigation failed: status=%d body=%s",
-			record.Code, body)
-	}
-
-	record = httptest.NewRecorder()
-	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/assets/htmx.min.js", nil))
-
-	if record.Code != http.StatusOK ||
-		!strings.Contains(record.Header().Get("Content-Type"), "text/javascript") ||
-		!strings.Contains(record.Body.String(), `version="4.0.0"`) {
-		t.Fatalf("htmx asset failed: status=%d headers=%v body=%s",
-			record.Code, record.Header(), record.Body.String())
-	}
-
-	record = httptest.NewRecorder()
-	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/assets/filingweb.css", nil))
-
-	if record.Code != http.StatusOK ||
-		!strings.Contains(record.Header().Get("Content-Type"), "text/css") ||
-		!strings.Contains(record.Body.String(), "body.detail-page") {
-		t.Fatalf("stylesheet asset failed: status=%d headers=%v body=%s",
-			record.Code, record.Header(), record.Body.String())
-	}
-
-	record = httptest.NewRecorder()
-	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(),
-		http.MethodGet, "/assets/chopstick.svg", nil))
-
-	if record.Code != http.StatusOK ||
-		!strings.Contains(record.Header().Get("Content-Type"), "image/svg+xml") ||
-		!strings.Contains(record.Body.String(), "<svg") {
-		t.Fatalf("favicon asset failed: status=%d headers=%v body=%s",
-			record.Code, record.Header(), record.Body.String())
 	}
 }

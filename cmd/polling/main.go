@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"log"
 	"os"
@@ -34,40 +33,15 @@ func main() {
 	ctx = ctxlog.WithLogger(ctx, logger)
 	logger.Debug("polling service starting", "interval", interval.String(), "db_path", *dbPath)
 
-	out := make(chan pw.FilingEvent, 256)
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case ev := <-out:
-				logger.Debug("polling event emitted", "accession", ev.AccessionNumber,
-					"cik", ev.CIK, "form", ev.FormType, "date", ev.FilingDate)
-			}
-		}
-	}()
-
-	fetcher := NewSECFetcher(*userAgent)
-
-	store, err := pw.NewSQLiteStore(*dbPath)
-	if err != nil {
+	if err := pw.Run(ctx, pw.ServiceConfig{
+		Interval:  *interval,
+		DBPath:    *dbPath,
+		UserAgent: *userAgent,
+	}); err != nil {
 		stop()
-		log.Fatal(err)
-	}
-
-	worker := pw.NewWorker(fetcher, store, out, *interval)
-
-	if err := worker.Run(ctx); err != nil &&
-		!errors.Is(err, context.Canceled) {
-		stop()
-
-		_ = store.Close()
 
 		log.Fatal(err)
 	}
-
-	_ = store.Close()
 
 	stop()
 	logger.Debug("polling service stopped")

@@ -1,4 +1,4 @@
-package main
+package pollingworker
 
 import (
 	"bytes"
@@ -15,10 +15,7 @@ import (
 	"golang.org/x/net/html/charset"
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
-	pw "wingman.com/fetch-ecb/internal/pollingworker"
 )
-
-type FilingEvent = pw.FilingEvent
 
 // Atom Feed XML Schema Mapping.
 type AtomFeed struct {
@@ -45,7 +42,7 @@ type SECFetcher struct {
 	client      *http.Client
 	userAgent   string
 	feedURL     string
-	deadLetters []pw.DeadLetter
+	deadLetters []DeadLetter
 }
 
 func NewSECFetcher(userHeader string) *SECFetcher {
@@ -56,7 +53,12 @@ const defaultFeedURL = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurre
 
 func NewSECFetcherWithURL(userHeader, feedURL string) *SECFetcher {
 	return &SECFetcher{
-		client:    &http.Client{Timeout: 10 * time.Second},
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
+		},
 		userAgent: userHeader,
 		feedURL:   feedURL,
 	}
@@ -72,7 +74,7 @@ var (
 	atomTagRegex         = regexp.MustCompile(`<[^>]+>`)
 )
 
-func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pw.FilingEvent, error) {
+func (f *SECFetcher) FetchLatest(ctx context.Context) ([]FilingEvent, error) {
 	f.deadLetters = nil
 	ctxlog.FromContext(ctx).Debug("fetching SEC Atom feed", "url", f.feedURL)
 
@@ -108,6 +110,7 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pw.FilingEvent, error) 
 	}
 
 	var events []FilingEvent
+
 	skipped := 0
 
 	for _, entry := range feed.Entries {
@@ -116,7 +119,8 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pw.FilingEvent, error) 
 			events = append(events, event)
 		} else {
 			skipped++
-			f.deadLetters = append(f.deadLetters, pw.DeadLetter{
+
+			f.deadLetters = append(f.deadLetters, DeadLetter{
 				FeedURL: f.feedURL,
 				Title:   entry.Title,
 				Link:    entry.Link.Href,
@@ -124,20 +128,22 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pw.FilingEvent, error) 
 			})
 		}
 	}
+
 	ctxlog.FromContext(ctx).Debug("SEC Atom feed parsed", "entries", len(feed.Entries),
 		"events", len(events), "skipped", skipped)
 
 	return events, nil
 }
 
-func (f *SECFetcher) DeadLetters() []pw.DeadLetter {
-	return append([]pw.DeadLetter(nil), f.deadLetters...)
+func (f *SECFetcher) DeadLetters() []DeadLetter {
+	return append([]DeadLetter(nil), f.deadLetters...)
 }
 
 // Extracts metadata fields out of raw Atom HTML summary string.
 func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
 	accMatch := accessionRegex.FindStringSubmatch(entry.Link.Href)
-	accessionNo := ""
+
+	var accessionNo string
 	if len(accMatch) >= 2 {
 		accessionNo = accMatch[1]
 	} else if digitsMatch := accessionDigitsRegex.FindStringSubmatch(entry.Link.Href); len(digitsMatch) >= 2 {
@@ -160,7 +166,7 @@ func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
 
 	formMatch := formTypeRegex.FindStringSubmatch(summary)
 
-	formType := ""
+	var formType string
 	if len(formMatch) >= 2 {
 		formType = strings.TrimSpace(formMatch[1])
 	} else {
