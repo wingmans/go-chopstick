@@ -50,7 +50,7 @@ func TestParseSubmissionFlags(t *testing.T) {
 }
 
 func TestParseCommandNoopAndPersistence(t *testing.T) {
-	source, err := filepath.Abs(filepath.Join("..", "..", "golden", "sample_8-K.txt"))
+	source, err := filepath.Abs(filepath.Join("..", "..", "golden", "formtypes", "sample_8-K.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -74,7 +74,7 @@ func TestParseGoldenSubmissions(t *testing.T) {
 		{form: "8-K", documents: 10, accession: "0001193125-26-191457", facts: 28, contexts: 4, units: 0},
 	} {
 		t.Run(test.form, func(t *testing.T) {
-			path := filepath.Join("..", "..", "golden", "sample_"+test.form+".txt")
+			path := filepath.Join("..", "..", "golden", "formtypes", "sample_"+test.form+".txt")
 
 			filing, err := ParseSubmission(t.Context(), path)
 			if err != nil {

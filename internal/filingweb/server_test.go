@@ -24,7 +24,7 @@ type goldenDetailResults struct {
 }
 
 func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
-	filingPath := filepath.Join("..", "..", "golden", "sample_10-K.txt")
+	filingPath := filepath.Join("..", "..", "golden", "formtypes", "sample_10-K.txt")
 
 	filing, err := edgar.ParseSubmission(t.Context(), filingPath)
 	if err != nil {

@@ -339,12 +339,14 @@ func (s *Server) document(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := os.Open(source)
+	file, err := os.Open(source) // #nosec G703 -- SourcePath validates the
+	// resolved path is inside the configured filings directory.
 	if err != nil {
 		s.writeError(w, err)
 
 		return
 	}
+
 	defer func() { _ = file.Close() }()
 
 	if document.ContentLength <= 0 {

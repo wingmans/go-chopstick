@@ -1,6 +1,7 @@
 package filingstore
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -128,8 +129,47 @@ func TestJSONDirectoryLoadsFilingAndSourcePath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if source != sourcePath {
-		t.Fatalf("source=%q, want %q", source, sourcePath)
+	expectedSource, err := filepath.EvalSymlinks(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if source != expectedSource {
+		t.Fatalf("source=%q, want %q", source, expectedSource)
+	}
+}
+
+func TestJSONDirectoryRejectsSymlinkedSourceOutsideRoot(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	parsedDir := filepath.Join(root, "parsed")
+
+	filingsDir := filepath.Join(root, "filings")
+	if err := os.MkdirAll(filingsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(filingsDir, "linked.txt")
+
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	filing := parsedFiling(
+		"789019", "0001193125-26-000001", "10-Q", "20260914", "Alpha Corp.", 0,
+	)
+	filing.SourceBase = "filings"
+	filing.SourcePath = "linked.txt"
+
+	_, err := NewJSONDirectory(parsedDir).SourcePath(t.Context(), filing)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("SourcePath error = %v, want os.ErrNotExist", err)
 	}
 }
 

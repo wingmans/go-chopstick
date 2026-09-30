@@ -51,10 +51,7 @@ func NewJSONDirectory(parsedDir string) *JSONDirectory {
 }
 
 // LoadCompanyHistory reads filing-view.json files and derives annual history.
-func (s *JSONDirectory) LoadCompanyHistory(
-	ctx context.Context,
-	cik string,
-) (filingview.CompanyHistory, error) {
+func (s *JSONDirectory) LoadCompanyHistory(ctx context.Context, cik string) (filingview.CompanyHistory, error) {
 	cik = canonicalCIK(cik)
 	if cik == "" {
 		return filingview.CompanyHistory{}, os.ErrNotExist
@@ -204,10 +201,7 @@ func (s *JSONDirectory) ListSummaries(ctx context.Context) ([]Summary, error) {
 }
 
 // SourcePath resolves the original filing source path for parsed document bytes.
-func (s *JSONDirectory) SourcePath(
-	ctx context.Context,
-	filing *edgar.ParsedFiling,
-) (string, error) {
+func (s *JSONDirectory) SourcePath(ctx context.Context, filing *edgar.ParsedFiling) (string, error) {
 	if err := checkContext(ctx); err != nil {
 		return "", err
 	}
@@ -224,11 +218,19 @@ func (s *JSONDirectory) SourcePath(
 		return "", os.ErrNotExist
 	}
 
-	if !withinDirectory(filepath.Dir(s.parsedDir), source) {
+	root := filepath.Dir(s.parsedDir)
+
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
 		return "", os.ErrNotExist
 	}
 
-	return source, nil
+	resolvedSource, err := filepath.EvalSymlinks(source)
+	if err != nil || !withinDirectory(resolvedRoot, resolvedSource) {
+		return "", os.ErrNotExist
+	}
+
+	return resolvedSource, nil
 }
 
 func normalizeFilingKey(cik, accession string) (string, string, error) {
@@ -251,6 +253,7 @@ func checkContext(ctx context.Context) error {
 	}
 }
 
+// canonicalCIK normalizes a CIK value to a 10-digit string, returning an empty string for invalid input.
 func canonicalCIK(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || len(value) > 10 {
@@ -271,6 +274,8 @@ func canonicalCIK(value string) string {
 	return strings.Repeat("0", 10-len(value)) + value
 }
 
+// withinDirectory checks if the given path is within the specified directory.
+// This is to eliminate security warnings related to path traversal attacks.
 func withinDirectory(directory, path string) bool {
 	directory, err := filepath.Abs(directory)
 	if err != nil {

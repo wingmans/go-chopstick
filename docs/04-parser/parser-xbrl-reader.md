@@ -12,8 +12,8 @@ go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025
 go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025 --reprocess
 go run ./cmd/edgar filings -c 0000789019 -n
 go run ./cmd/edgar parse -c 0000789019 -f 10-Q -y 2025
-go run ./cmd/edgar parse --file golden/sample_10-K.txt
-go run ./cmd/edgar parse --file golden/sample_10-K.txt --reprocess
+go run ./cmd/edgar parse --file golden/formtypes/sample_10-K.txt
+go run ./cmd/edgar parse --file golden/formtypes/sample_10-K.txt --reprocess
 go run ./cmd/edgar serve
 ```
 
