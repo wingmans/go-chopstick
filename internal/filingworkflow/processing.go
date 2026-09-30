@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
+	"wingman.com/fetch-ecb/internal/dividendview"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
 )
@@ -29,6 +30,7 @@ type ProcessingConfig struct {
 	FormType         string
 	Reprocess        bool
 	Noop             bool
+	SkipDividendView bool
 }
 
 type ProcessingResult struct {
@@ -77,6 +79,12 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 				if _, err := filingview.Save(cfg.Directory, &stored); err != nil {
 					return result, err
 				}
+
+				if !cfg.SkipDividendView {
+					if err := rebuildDividendView(ctx, cfg, &stored); err != nil {
+						return result, err
+					}
+				}
 			}
 
 			logProcessing(ctx, path, result, cfg, started)
@@ -114,10 +122,40 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 		return result, err
 	}
 
+	if !cfg.SkipDividendView {
+		if err := rebuildDividendView(ctx, cfg, result.Filing); err != nil {
+			return result, err
+		}
+	}
+
 	result.Action = ActionProcessed
 	logProcessing(ctx, path, result, cfg, started)
 
 	return result, extractionFailure(result.Filing)
+}
+
+func rebuildDividendView(ctx context.Context, cfg ProcessingConfig, filing *edgar.ParsedFiling) error {
+	if _, err := dividendview.Rebuild(ctx, cfg.Directory, cfg.FilingsDirectory,
+		filing.Metadata.CIK); err != nil {
+		return fmt.Errorf("build dividend view for %s: %w", filing.Metadata.CIK, err)
+	}
+
+	return nil
+}
+
+func rebuildDividendViews(ctx context.Context, cfg ProcessingConfig, ciks map[string]struct{}) error {
+	for cik := range ciks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		filing := &edgar.ParsedFiling{Metadata: edgar.FilingMetadata{CIK: cik}}
+		if err := rebuildDividendView(ctx, cfg, filing); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func reusableFiling(ctx context.Context, destination, source string, identity edgar.ParsedFiling) (edgar.ParsedFiling, bool, error) {
@@ -275,16 +313,30 @@ func ProcessLocalSubmissions(ctx context.Context, paths []string, cfg Processing
 	var summary ProcessingSummary
 	defer func() { summary.log(ctx, cfg.Noop) }()
 
+	batchConfig := cfg
+	batchConfig.SkipDividendView = true
+	ciks := map[string]struct{}{}
+
 	for _, path := range paths {
 		if err := ctx.Err(); err != nil {
 			return summary, err
 		}
 
-		result, err := ProcessSubmission(ctx, path, cfg)
+		result, err := ProcessSubmission(ctx, path, batchConfig)
 		summary.record(ctx, path, result, err)
+
+		if result.Filing != nil {
+			ciks[result.Filing.Metadata.CIK] = struct{}{}
+		}
 
 		if err := ctx.Err(); err != nil {
 			return summary, err
+		}
+	}
+
+	if !cfg.Noop {
+		if err := rebuildDividendViews(ctx, cfg, ciks); err != nil {
+			return summary, errors.Join(summary.failure(), err)
 		}
 	}
 

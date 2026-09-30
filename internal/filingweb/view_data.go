@@ -2,8 +2,11 @@ package filingweb
 
 import (
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 
+	"wingman.com/fetch-ecb/internal/dividendview"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
 	"wingman.com/fetch-ecb/internal/filingweb/filingstore"
@@ -43,9 +46,22 @@ type dashboardData struct {
 }
 
 type companyPageData struct {
-	Page    pageChrome
-	History filingview.CompanyHistory
-	Ticker  string
+	Page          pageChrome
+	History       filingview.CompanyHistory
+	Ticker        string
+	Dividends     dividendview.View
+	DividendTable companyDividendTable
+	HasDividends  bool
+}
+
+type companyDividendTable struct {
+	Years []string
+	Rows  []companyDividendRow
+}
+
+type companyDividendRow struct {
+	Label  string
+	Values map[string][]string
 }
 
 type detailData struct {
@@ -60,6 +76,87 @@ type detailData struct {
 	InstanceCount int
 	ContextCount  int
 	Diagnostics   int
+	Dividends     dividendview.View
+	HasDividends  bool
+}
+
+func buildCompanyDividendTable(view dividendview.View, years []string) companyDividendTable {
+	rows := map[string]map[string][]string{}
+	add := func(label, year, value string) {
+		if year == "" || value == "" {
+			return
+		}
+
+		if rows[label] == nil {
+			rows[label] = map[string][]string{}
+		}
+
+		rows[label][year] = append(rows[label][year], value)
+	}
+
+	for _, event := range view.Events {
+		year := dividendYear(event.DeclarationDate)
+		value := formatFactValue(filingview.FactValue{Value: event.AmountPerShare},
+			event.Currency+"/share") + "/share"
+
+		if event.PayableDate != "" {
+			value += " · payable " + event.PayableDate
+		}
+
+		add("Declared cash dividends", year, value)
+	}
+
+	for _, observation := range view.Observations {
+		label := "Dividend observation"
+
+		switch observation.Kind {
+		case "cash_paid":
+			label = "Common-stock cash dividends paid"
+		case "per_share_declared":
+			label = "Declared dividends per share"
+		}
+
+		unit := "USD"
+		if observation.Kind == "per_share_declared" {
+			unit = "USD/share"
+		}
+
+		add(label, dividendYear(observation.Period), formatFactValue(
+			filingview.FactValue{Value: observation.Value}, unit))
+	}
+
+	labels := make([]string, 0, len(rows))
+	for label := range rows {
+		labels = append(labels, label)
+	}
+
+	sort.Strings(labels)
+
+	result := companyDividendTable{Years: append([]string(nil), years...)}
+
+	for _, label := range labels {
+		result.Rows = append(result.Rows, companyDividendRow{
+			Label: label, Values: rows[label],
+		})
+	}
+
+	return result
+}
+
+func dividendYear(value string) string {
+	if len(value) >= 4 && value[0] >= '0' && value[0] <= '9' &&
+		value[1] >= '0' && value[1] <= '9' &&
+		value[2] >= '0' && value[2] <= '9' &&
+		value[3] >= '0' && value[3] <= '9' {
+		return value[:4]
+	}
+
+	date, err := time.Parse("January 2, 2006", value)
+	if err != nil {
+		return ""
+	}
+
+	return date.Format("2006")
 }
 
 // dashboardData prepares the data needed to render the dashboard page based on the current request.

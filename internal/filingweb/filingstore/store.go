@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"wingman.com/fetch-ecb/internal/dividendview"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
 )
@@ -24,6 +25,7 @@ type Store interface {
 	LoadView(ctx context.Context, cik, accession string) (filingview.View, error)
 	LoadFiling(ctx context.Context, cik, accession string) (*edgar.ParsedFiling, error)
 	LoadCompanyHistory(ctx context.Context, cik string) (filingview.CompanyHistory, error)
+	LoadDividendView(ctx context.Context, cik string) (dividendview.View, error)
 	SourcePath(ctx context.Context, filing *edgar.ParsedFiling) (string, error)
 }
 
@@ -48,6 +50,25 @@ var _ Store = (*JSONDirectory)(nil)
 // NewJSONDirectory creates a Store backed by the generated JSON directory.
 func NewJSONDirectory(parsedDir string) *JSONDirectory {
 	return &JSONDirectory{parsedDir: parsedDir}
+}
+
+// LoadDividendView reads the company-level dividend register.
+func (s *JSONDirectory) LoadDividendView(ctx context.Context, cik string) (dividendview.View, error) {
+	if err := checkContext(ctx); err != nil {
+		return dividendview.View{}, err
+	}
+
+	cik = canonicalCIK(cik)
+	if cik == "" {
+		return dividendview.View{}, os.ErrNotExist
+	}
+
+	path := filepath.Join(s.parsedDir, cik, "dividend-view.json")
+	if !withinDirectory(s.parsedDir, path) {
+		return dividendview.View{}, os.ErrNotExist
+	}
+
+	return dividendview.Load(path)
 }
 
 // LoadCompanyHistory reads filing-view.json files and derives annual history.

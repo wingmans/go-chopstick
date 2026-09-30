@@ -1,0 +1,32 @@
+{{define "company-dividends.html"}}
+{{if .HasDividends}}
+<section class="section" id="dividend-register">
+  <h2 class="section-label">Dividends</h2>
+  <div class="table-wrap">
+    <table class="history-table dividend-history-table"
+      style="--history-width: {{add 294 (mul (len .DividendTable.Years) 180)}}px; --history-mobile-width: {{add 224 (mul (len .DividendTable.Years) 150)}}px">
+      <colgroup><col class="line-item-col">
+        {{range .DividendTable.Years}}<col class="value-col">{{end}}
+      </colgroup>
+      <thead><tr><th>Line item</th>
+        {{range .DividendTable.Years}}<th>{{.}}</th>{{end}}
+      </tr></thead>
+      <tbody>
+        {{range $row := .DividendTable.Rows}}
+        <tr data-concept="{{$row.Label}}">
+          <td>{{$row.Label}}</td>
+          {{range $year := $.DividendTable.Years}}
+          <td class="num" data-year="{{$year}}">
+            {{with index $row.Values $year}}
+              {{range .}}<div>{{.}}</div>{{end}}
+            {{else}}-{{end}}
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+{{end}}

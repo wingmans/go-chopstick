@@ -20,6 +20,8 @@ reader extracts:
 - [10-K: annual reports](03-forms/10-K.md)
 - [10-Q: quarterly reports](03-forms/10-Q.md)
 - [8-K: current reports and exhibits](03-forms/8-K.md)
+- [Dividend register](06-dividends/dividend-register.md): processing and
+  company-level dividend data.
 
 The current product validation target is consolidated `10-K` data. `10-Q` and
 `8-K` remain documented and supported as filing shapes, but they are not part
@@ -66,6 +68,7 @@ SEC EDGAR
   -> downloaded filing submissions
   -> parsed filing.json
   -> compact filing-view.json
+  -> company dividend-view.json
   -> web pages, lint, coverage, and validation
 ```
 

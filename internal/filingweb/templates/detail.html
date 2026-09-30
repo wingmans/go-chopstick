@@ -12,6 +12,7 @@
     {{template "detail-summary-cards.html" .}}
     {{template "detail-financial-summary.html" .}}
     {{template "detail-ratios.html" .}}
+    {{template "detail-dividends.html" .}}
     {{template "detail-documents.html" .}}
     {{template "detail-parsed-summary.html" .}}
   </main>
@@ -126,6 +127,59 @@
     </table>
   </div>
 </section>
+{{end}}
+
+{{define "detail-dividends.html"}}
+{{if .HasDividends}}
+<section class="panel" id="dividend-register">
+  <div class="panel-heading">
+    <h2>Dividends</h2>
+    <span class="muted">Company register from local filings</span>
+  </div>
+  {{if .Dividends.Events}}
+  <div class="table-wrap">
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th>Declared</th><th>Ex-dividend</th><th>Record</th>
+          <th>Payable</th><th>Amount/share</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Dividends.Events}}
+        <tr data-dividend-id="{{.ID}}">
+          <td>{{.DeclarationDate}}</td><td>{{.ExDate}}</td>
+          <td>{{.RecordDate}}</td><td>{{.PayableDate}}</td>
+          <td class="num">{{.Currency}} {{.AmountPerShare}}</td>
+          <td>{{.Status}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+  {{if .Dividends.Observations}}
+  <details class="dividend-observations">
+    <summary>Reconciliation observations</summary>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead><tr><th>Kind</th><th>Period</th><th>Value</th>
+          <th>Form</th><th>Filing date</th></tr></thead>
+        <tbody>
+          {{range .Dividends.Observations}}
+          <tr>
+            <td>{{.Kind}}</td><td>{{.Period}}</td>
+            <td class="num">{{.Value}}</td><td>{{.FormType}}</td>
+            <td>{{.FilingDate}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {{end}}
+</section>
+{{end}}
 {{end}}
 
 {{define "detail-documents.html"}}

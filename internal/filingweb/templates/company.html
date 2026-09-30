@@ -9,6 +9,7 @@
       <h1>{{if .Ticker}}{{.Ticker}} - {{end}}{{.History.Company}}</h1>
       <div class="subtitle">CIK {{.History.CIK}} · local 10-K history</div>
     </section>
+    {{template "company-dividends.html" .}}
     {{range .History.Statements}}
     <section class="section" data-statement="{{.Title}}">
       <h2 class="section-label">{{.Title}}</h2>

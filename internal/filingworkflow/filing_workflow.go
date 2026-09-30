@@ -33,6 +33,9 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 	defer func() { _ = file.Close() }()
 
 	processing.FilingsDirectory, processing.Noop = download.Directory, download.Noop
+	batchProcessing := processing
+	batchProcessing.SkipDividendView = true
+	ciks := map[string]struct{}{}
 
 	if client == nil {
 		client = http.DefaultClient
@@ -66,13 +69,20 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 			"path", record.FilingPath,
 		)
 
-		recordProcessing := processing
+		recordProcessing := batchProcessing
 		recordProcessing.FormType = record.FormType
 		result, err := processIndexRecord(ctx, downloader, download.Directory, recordProcessing, record)
 		summary.record(ctx, record.FilingPath, result, err)
+		ciks[record.CIK] = struct{}{}
 
 		if err := ctx.Err(); err != nil {
 			return summary, err
+		}
+	}
+
+	if !processing.Noop {
+		if err := rebuildDividendViews(ctx, processing, ciks); err != nil {
+			return summary, errors.Join(summary.failure(), err)
 		}
 	}
 
@@ -95,6 +105,10 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 	}
 
 	defer func() { _ = file.Close() }()
+
+	batchProcessing := processing
+	batchProcessing.SkipDividendView = true
+	ciks := map[string]struct{}{}
 
 	reader := edgar.NewIndexReader(file, filter)
 
@@ -158,10 +172,17 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 			}
 		}
 
-		recordProcessing := processing
+		recordProcessing := batchProcessing
 		recordProcessing.FormType = record.FormType
 		result, err := ProcessSubmission(ctx, path, recordProcessing)
 		summary.record(ctx, record.FilingPath, result, err)
+		ciks[record.CIK] = struct{}{}
+	}
+
+	if !processing.Noop {
+		if err := rebuildDividendViews(ctx, processing, ciks); err != nil {
+			return summary, errors.Join(summary.failure(), err)
+		}
 	}
 
 	return summary, summary.failure()

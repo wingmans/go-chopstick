@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"wingman.com/fetch-ecb/internal/constituents"
+	"wingman.com/fetch-ecb/internal/dividendview"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/filingview"
 )
@@ -91,6 +92,29 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	dividendPath := filepath.Join(parsedDir, "0000789019", "dividend-view.json")
+	dividends := dividendview.View{
+		SchemaVersion: dividendview.SchemaVersion, CIK: "0000789019",
+		Company: expected.Company,
+		Events: []dividendview.Event{{
+			ID: "test-dividend", DeclarationDate: "20260401",
+			AmountPerShare: "0.83", Currency: "USD", Type: "cash_common",
+			Status: "announced", Confidence: "medium",
+		}},
+		Observations: []dividendview.Observation{{
+			Kind: "cash_paid", Period: "2026-06-30", Value: "1234000000",
+		}},
+	}
+
+	data, err := json.MarshalIndent(dividends, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(dividendPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	server := NewServer(parsedDir, nil)
 	record := httptest.NewRecorder()
 	request := httptest.NewRequestWithContext(context.Background(),
@@ -113,6 +137,9 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"id=\"key-ratios\"",
 		"id=\"filing-documents\"",
 		"id=\"financial-summary\"",
+		"id=\"dividend-register\"",
+		"data-dividend-id=\"test-dividend\"",
+		"USD 0.83",
 		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
 		"<link rel=\"icon\" href=\"/assets/chopstick.svg\" type=\"image/svg+xml\">",
 		"href=\"/?q=MSFT\"",
@@ -138,7 +165,16 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 	server.ServeHTTP(record, request)
 
 	if record.Code != http.StatusOK {
-		t.Fatalf("company page status=%d body=%s", record.Code, record.Body.String())
+		t.Fatalf("company page status=%d body=%s", record.Code,
+			record.Body.String())
+	}
+
+	for _, marker := range []string{
+		"id=\"dividend-register\"", "$0.83/share", "$1.2B",
+	} {
+		if !strings.Contains(record.Body.String(), marker) {
+			t.Errorf("company page is missing %q", marker)
+		}
 	}
 
 	body = record.Body.String()

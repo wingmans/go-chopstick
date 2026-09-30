@@ -181,15 +181,25 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) {
 
 	member := s.memberByCIK[cik]
 
+	dividends, dividendErr := s.store.LoadDividendView(r.Context(), cik)
+	if dividendErr != nil && !errors.Is(dividendErr, os.ErrNotExist) {
+		s.writeError(w, dividendErr)
+
+		return
+	}
+
 	title := history.Company
 	if member.Ticker != "" {
 		title = member.Ticker + " - " + title
 	}
 
 	data := companyPageData{
-		Page:    pageChrome{Title: title, BodyClass: "company-page"},
-		History: history,
-		Ticker:  member.Ticker,
+		Page:          pageChrome{Title: title, BodyClass: "company-page"},
+		History:       history,
+		Ticker:        member.Ticker,
+		Dividends:     dividends,
+		DividendTable: buildCompanyDividendTable(dividends, history.Years),
+		HasDividends:  len(dividends.Events) > 0 || len(dividends.Observations) > 0,
 	}
 	if err := s.template.ExecuteTemplate(w, "company-page.html", data); err != nil {
 		s.writeError(w, err)
@@ -275,6 +285,7 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		Documents: view.Documents, Instances: []edgar.XBRLInstance{},
 		Diagnostics: []edgar.ParseDiagnostic{}, Status: view.Counts.Status,
 	}
+
 	data := detailData{
 		Page: pageChrome{
 			Title:     view.Metadata.FormType + " " + view.Metadata.Accession,
@@ -289,6 +300,14 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		DocumentCount: view.Counts.Documents, InstanceCount: view.Counts.Instances,
 		ContextCount: view.Counts.Contexts, Diagnostics: len(view.Diagnostics),
 		BackURL: backURL,
+	}
+	if dividends, dividendErr := s.store.LoadDividendView(r.Context(), view.Metadata.CIK); dividendErr == nil {
+		data.Dividends = dividends
+		data.HasDividends = len(dividends.Events) > 0 || len(dividends.Observations) > 0
+	} else if !errors.Is(dividendErr, os.ErrNotExist) {
+		s.writeError(w, dividendErr)
+
+		return
 	}
 
 	if err := s.template.ExecuteTemplate(w, "detail-page.html", data); err != nil {
