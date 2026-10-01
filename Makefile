@@ -63,7 +63,7 @@ run:
 	go run ./cmd/ecb
 
 serve: build
-	LOGLEVEL=debug ./bin/edgar serve --set us-gaap-coverage
+	LOGLEVEL=debug ./bin/edgar serve --set us-gaap
 
 serve-dev:
 	@command -v air >/dev/null || { \

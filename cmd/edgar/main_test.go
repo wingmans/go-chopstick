@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingview"
+	filingview "wingman.com/fetch-ecb/internal/filing"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
@@ -23,7 +23,7 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
-	if cfg.index.Directory != "./data/indexes/quarterly" {
+	if cfg.index.Directory != "./data/cache/indexes/quarterly" {
 		t.Fatalf("unexpected index directory %q", cfg.index.Directory)
 	}
 
@@ -31,7 +31,7 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 		t.Fatalf("unexpected ZIP directory %q", cfg.index.ZipDirectory)
 	}
 
-	if cfg.index.MasterPath != "./data/indexes/master.tsv" {
+	if cfg.index.MasterPath != "./data/cache/indexes/master.tsv" {
 		t.Fatalf("unexpected master path %q", cfg.index.MasterPath)
 	}
 
@@ -79,11 +79,11 @@ func TestParseDownloadFilingsConfigSupportsRepeatedFormTypes(t *testing.T) {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
-	if cfg.filings.masterPath != "./data/indexes/master.tsv" {
+	if cfg.filings.masterPath != "./data/cache/indexes/master.tsv" {
 		t.Fatalf("unexpected master path %q", cfg.filings.masterPath)
 	}
 
-	if cfg.filings.config.Directory != "./data/filings" {
+	if cfg.filings.config.Directory != "./data/cache/filings" {
 		t.Fatalf("unexpected filing directory %q", cfg.filings.config.Directory)
 	}
 

@@ -10,7 +10,7 @@ import (
 	"wingman.com/fetch-ecb/internal/coverage"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingview"
+	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
 func parseCoverageConfig(args []string) (appConfig, error) {
@@ -18,8 +18,8 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 
 	cfg.command = "coverage"
 
-	cfg.coverage.masterPath = "./data/indexes/master.tsv"
-	cfg.coverage.indexesDir = "./data/indexes/quarterly"
+	cfg.coverage.masterPath = "./data/cache/indexes/master.tsv"
+	cfg.coverage.indexesDir = "./data/cache/indexes/quarterly"
 	cfg.coverage.filingsDir = edgar.DefaultFilingsDirectory
 	cfg.coverage.parsedDir = edgar.DefaultParsedDirectory
 	cfg.coverage.out = "./data/validation/coverage-report.json"
@@ -33,7 +33,7 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"    --from-year <year>", "First filing year to include."},
 			{"    --to-year <year>", "Last filing year to include."},
-			{"-m, --master <path>", "Master TSV; default ./data/indexes/master.tsv."},
+			{"-m, --master <path>", "Master TSV; default ./data/cache/indexes/master.tsv."},
 			{"    --indexes-dir <path>", "Quarterly indexes directory."},
 			{"    --filings-dir <path>", "Downloaded filings directory."},
 			{"-d, --parsed-dir <path>", "Parsed filing directory."},

@@ -1,7 +1,7 @@
 # EDGAR Indexes and Filing Downloads
 
-The EDGAR downloader stores quarterly index files under `data/indexes/` and
-stores downloaded filing files under `data/filings/` by default.
+The EDGAR downloader stores quarterly index files under `data/cache/indexes/` and
+stores downloaded filing files under `data/cache/filings/` by default.
 
 ## Index records
 
@@ -93,9 +93,10 @@ edgar filings [options]
 `index` downloads quarterly indexes and stitches `master.tsv` by
 default. `filings` reads the existing `master.tsv` and downloads the
 referenced files independently. The default paths are
-`./data/indexes/quarterly` for TSV indexes, `./data/cache/index-zips` for ZIP
-files, `./data/indexes/master.tsv` for the master index, and `./data/filings`
-for filings.
+`./data/cache/indexes/quarterly` for TSV indexes,
+`./data/cache/index-zips` for ZIP files,
+`./data/cache/indexes/master.tsv` for the master index, and
+`./data/cache/filings` for filings.
 
 With no refresh flag, cached quarterly TSV files are reused first, then cached
 ZIP files are extracted if the TSV is missing. `--refresh-latest` only forces a

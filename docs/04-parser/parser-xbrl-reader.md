@@ -18,13 +18,16 @@ go run ./cmd/edgar serve
 ```
 
 `filings` is the normal download-and-process command. Existing CIK, form-type,
-and filing-year filters select records from `data/indexes/master.tsv`; an empty
+and filing-year filters select records from `data/cache/indexes/master.tsv`;
+an empty
 year selects all filing years. The source submission and any referenced HTML
 index are downloaded only when missing. Processing then uses the local submission.
 
 `parse` is also batch-oriented. With no `--file`, it reads the default
-`data/indexes/master.tsv`, applies the same `--cik`, `--form-type`, and `--year`
-filters, and processes submissions already present under `data/filings`. It never
+`data/cache/indexes/master.tsv`, applies the same `--cik`, `--form-type`, and
+`--year`
+filters, and processes submissions already present under `data/cache/filings`.
+It never
 downloads missing submissions. Missing local sources are skipped and logged, so
 the command naturally processes all downloaded but unprocessed filings selected
 by the master index. The default year is empty, meaning all years.
@@ -51,7 +54,7 @@ No separate skip-processed flag is needed: reuse is the default.
 
 To reset local EDGAR outputs while keeping downloaded raw SEC submissions, run
 `make clean-derived-data`. The underlying `scripts/clean-derived-data.sh`
-preserves `data/filings` and cached SEC index ZIPs under
+preserves `data/cache/filings` and cached SEC index ZIPs under
 `data/cache/index-zips`; it removes parsed filings, validation runs, generated
 local sets, and stitched/extracted index files. This lets `edgar index
 --stitch` rebuild `master.tsv` from disk without network traffic unless
@@ -238,7 +241,7 @@ Downloads retain their SEC-relative paths and original filenames. Parsed results
 use a ten-digit, zero-padded CIK and the hyphenated accession number. For example:
 
 ```text
-data/filings/edgar/data/789019/0000950170-25-010491.txt
+data/cache/filings/edgar/data/789019/0000950170-25-010491.txt
 data/parsed/0000789019/0000950170-25-010491/filing.json
 ```
 
@@ -252,7 +255,8 @@ The JSON connects the two layouts explicitly:
 ```
 
 Resolve that path relative to the configured filings directory (normally
-`data/filings`). Explicit inputs outside that directory, such as golden files,
+`data/cache/filings`). Explicit inputs outside that directory, such as golden
+files,
 use `source_base: "absolute"` and an absolute `source_path`. This avoids relying
 on the working directory when downstream code locates the original bytes.
 

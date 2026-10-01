@@ -168,9 +168,14 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 			"duration_ms", time.Since(started).Milliseconds(),
 		}
 		if network {
-			logger.Debug("fetched EDGAR index", append(attrs, "source", "network", "url", archive.URL)...)
+			logger.Debug("downloaded and extracted EDGAR index",
+				append(attrs, "source", "network", "url", archive.URL)...)
+		} else if sourcePath == archive.FileName {
+			logger.Debug("reused cached EDGAR index",
+				append(attrs, "source", "cache", "path", sourcePath)...)
 		} else {
-			logger.Debug("fetched EDGAR index", append(attrs, "source", "cache", "path", sourcePath)...)
+			logger.Debug("extracted cached EDGAR index",
+				append(attrs, "source", "cache", "path", sourcePath)...)
 		}
 
 		if network && i < len(archives)-1 {

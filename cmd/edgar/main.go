@@ -22,8 +22,8 @@ import (
 	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingview"
-	"wingman.com/fetch-ecb/internal/filingworkflow"
+	filingview "wingman.com/fetch-ecb/internal/filing"
+	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
@@ -44,6 +44,7 @@ type appConfig struct {
 		files      stringList
 		formTypes  stringList
 		masterPath string
+		analysisDB string
 		filter     edgar.IndexFilter
 		setName    string
 		year       string
@@ -54,6 +55,7 @@ type appConfig struct {
 	}
 	filings struct {
 		masterPath string
+		analysisDB string
 		config     edgar.FilingDownloadConfig
 		filter     edgar.IndexFilter
 		setName    string
@@ -63,9 +65,10 @@ type appConfig struct {
 		reprocess  bool
 	}
 	serve struct {
-		address   string
-		parsedDir string
-		setName   string
+		address    string
+		parsedDir  string
+		analysisDB string
+		setName    string
 	}
 	taxonomy struct {
 		operation string
@@ -212,6 +215,7 @@ func run(ctx context.Context, args []string) error {
 		_, err := filingworkflow.ProcessFilings(ctx, client, cfg.filings.masterPath, cfg.filings.config, filingworkflow.ProcessingConfig{
 			Directory:        edgar.DefaultParsedDirectory,
 			FilingsDirectory: cfg.filings.config.Directory,
+			AnalysisDBPath:   cfg.filings.analysisDB,
 			FormType:         "",
 			Reprocess:        cfg.filings.reprocess,
 			Noop:             cfg.filings.config.Noop,
@@ -223,7 +227,7 @@ func run(ctx context.Context, args []string) error {
 			"parsed_directory", cfg.serve.parsedDir, "set", cfg.serve.setName)
 
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir,
-			cfg.serve.setName)
+			cfg.serve.setName, cfg.serve.analysisDB)
 	case "taxonomy":
 		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
 			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter,
@@ -776,9 +780,9 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 
 	cfg.command = "index"
 	cfg.index = edgar.Config{
-		Directory:     "./data/indexes/quarterly",
+		Directory:     "./data/cache/indexes/quarterly",
 		ZipDirectory:  "./data/cache/index-zips",
-		MasterPath:    "./data/indexes/master.tsv",
+		MasterPath:    "./data/cache/indexes/master.tsv",
 		SinceYear:     edgar.EarliestYear,
 		UserAgent:     environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		RefreshLatest: false,
@@ -827,7 +831,8 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
 	cfg.command = "filings"
-	cfg.filings.masterPath = "./data/indexes/master.tsv"
+	cfg.filings.masterPath = "./data/cache/indexes/master.tsv"
+	cfg.filings.analysisDB = "./data/analysis.db"
 	cfg.filings.config = edgar.FilingDownloadConfig{
 		Directory: edgar.DefaultFilingsDirectory,
 		UserAgent: environmentValue(edgarUserAgentEnv, defaultUserAgent),
@@ -851,6 +856,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.filings.filter.CIK, "c", "", "only download filings for this CIK")
 	flags.StringVar(&cfg.filings.filter.CIK, "cik", "", "only download filings for this CIK")
 	flags.StringVar(&cfg.filings.setName, "set", "", "only download filings for this constituent set")
+	flags.StringVar(&cfg.filings.analysisDB, "analysis-db", cfg.filings.analysisDB, "SQLite analysis database")
 	flags.Var(&formTypes, "form-type", "only download this form type; may be repeated")
 	flags.Var(&formTypes, "f", "only download this form type; may be repeated")
 	flags.BoolVar(&cfg.filings.config.Noop, "noop", false, "show actions without downloading or writing files")

@@ -91,7 +91,7 @@ func parseConfig(args []string) (config, error) {
 	flags.SetOutput(os.Stderr)
 
 	cfg := config{}
-	flags.StringVar(&cfg.indexesDir, "indexes-dir", "./data/indexes/quarterly", "quarterly index directory")
+	flags.StringVar(&cfg.indexesDir, "indexes-dir", "./data/cache/indexes/quarterly", "quarterly index directory")
 	flags.StringVar(&cfg.dbPath, "db-path", "./data/polling.db", "SQLite database path")
 	flags.StringVar(&cfg.file, "file", "", "import one quarterly TSV file")
 	flags.BoolVar(&cfg.latest, "latest", false, "import the newest local quarterly TSV")

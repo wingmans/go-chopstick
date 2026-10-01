@@ -27,7 +27,7 @@ are:
 - `golden/`: test filings and expected results;
 - `data/sets/`: constituent memberships;
 - `data/parsed/`: generated parsed results;
-- `data/filings/`: pristine downloaded filings.
+- `data/cache/filings/`: pristine downloaded filings.
 
 Experimental or manually trimmed registries can be stored elsewhere and
 selected explicitly with `--taxonomy`:

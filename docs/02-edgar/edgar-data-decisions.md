@@ -39,32 +39,32 @@ filing resources themselves are not archive files.
 
 ### Quarterly TSV files
 
-Extracted quarterly TSV files are stored under `data/indexes/quarterly`.
+Extracted quarterly TSV files are stored under `data/cache/indexes/quarterly`.
 They are not considered raw because extraction removes the SEC header lines and
 adds the derived `IndexPath` field.
 
 ### Master TSV
 
-The stitched `master.tsv` is stored under `data/indexes`, next to its source
+The stitched `master.tsv` is stored under `data/cache/indexes`, next to its source
 quarterly indexes. It is derived data, but it is still an index/catalog rather
 than application output. Keeping it there makes its relationship to the
 quarterly files clear and avoids cluttering the `data` root.
 
 ## Filing paths
 
-Downloaded filing files are stored under `data/filings` while preserving the
+Downloaded filing files are stored under `data/cache/filings` while preserving the
 SEC-relative path:
 
 ```text
-data/filings/edgar/data/<CIK>/<accession>.txt
-data/filings/edgar/data/<CIK>/<accession>-index.html
+data/cache/filings/edgar/data/<CIK>/<accession>.txt
+data/cache/filings/edgar/data/<CIK>/<accession>-index.html
 ```
 
 The `edgar/data` portion is retained. This mirrors the SEC URL layout and makes
 the mapping straightforward:
 
 ```text
-data/filings/edgar/data/...
+data/cache/filings/edgar/data/...
 https://www.sec.gov/Archives/edgar/data/...
 ```
 
@@ -104,7 +104,7 @@ The download process is intentionally single-threaded.
 
 For each referenced filing path:
 
-1. Resolve the SEC-relative path to its local path under `data/filings`.
+1. Resolve the SEC-relative path to its local path under `data/cache/filings`.
 2. Check whether a valid local file already exists.
 3. Skip the network request when the file is already present.
 4. Wait for the request budget before making a new SEC request.
@@ -149,13 +149,13 @@ The planned defaults are:
 
 ```text
 index:
-  quarterly indexes: ./data/indexes/quarterly
+  quarterly indexes: ./data/cache/indexes/quarterly
   ZIP files:         ./data/cache/index-zips
-  master index:      ./data/indexes/master.tsv
+  master index:      ./data/cache/indexes/master.tsv
 
 filings:
-  master index:      ./data/indexes/master.tsv
-  filings:           ./data/filings
+  master index:      ./data/cache/indexes/master.tsv
+  filings:           ./data/cache/filings
 ```
 
 Stitching is enabled by default for `index`. Filing downloads remain a

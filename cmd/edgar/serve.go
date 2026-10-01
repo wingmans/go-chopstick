@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingweb"
+	filingweb "wingman.com/fetch-ecb/internal/web"
 )
 
 func parseServeConfig(args []string) (appConfig, error) {
@@ -20,6 +20,7 @@ func parseServeConfig(args []string) (appConfig, error) {
 	cfg.command = "serve"
 	cfg.serve.address = "127.0.0.1:8080"
 	cfg.serve.parsedDir = edgar.DefaultParsedDirectory
+	cfg.serve.analysisDB = "./data/analysis.db"
 
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
@@ -35,6 +36,7 @@ func parseServeConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.serve.address, "address", cfg.serve.address, "HTTP listen address")
 	flags.StringVar(&cfg.serve.parsedDir, "d", cfg.serve.parsedDir, "parsed filing directory")
 	flags.StringVar(&cfg.serve.parsedDir, "parsed-dir", cfg.serve.parsedDir, "parsed filing directory")
+	flags.StringVar(&cfg.serve.analysisDB, "analysis-db", cfg.serve.analysisDB, "SQLite analysis database")
 	flags.StringVar(&cfg.serve.setName, "s", "", "resolve human-readable company searches from a set")
 	flags.StringVar(&cfg.serve.setName, "set", "", "resolve human-readable company searches from a set")
 
@@ -61,11 +63,12 @@ func parseServeConfig(args []string) (appConfig, error) {
 	return cfg, nil
 }
 
-func runServe(ctx context.Context, logger *slog.Logger, address, parsedDir, setName string) error {
-	server, err := filingweb.NewConfiguredServer(parsedDir, defaultSetDir, setName, logger)
+func runServe(ctx context.Context, logger *slog.Logger, address, parsedDir, setName, analysisDB string) error {
+	server, err := filingweb.NewConfiguredServerWithDB(parsedDir, analysisDB, defaultSetDir, setName, logger)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = server.Close() }()
 
 	httpServer := &http.Server{ //nolint:exhaustruct_v5 // standard library server has many optional fields.
 		Addr:              address,

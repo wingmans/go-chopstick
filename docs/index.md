@@ -75,7 +75,7 @@ SEC EDGAR
 ### 1. Index
 
 `edgar index` downloads quarterly SEC index archives, extracts their TSV
-records, and can stitch them into `data/indexes/master.tsv`.
+records, and can stitch them into `data/cache/indexes/master.tsv`.
 
 Older index files are reused from disk. `--refresh-latest` is deliberately
 explicit: it refreshes the newest available quarter while older quarters stay
@@ -198,7 +198,7 @@ while parsing succeeds and the filing remains usable.
 
 The reader's durable evidence is:
 
-- raw bytes under `data/filings`;
+- raw bytes under `data/cache/filings`;
 - verbose parsed facts and diagnostics in `filing.json`;
 - compact selected facts and quality findings in `filing-view.json`.
 
@@ -228,8 +228,8 @@ derived and disposable.
 ```text
 data/
   cache/index-zips/       downloaded SEC index ZIPs
-  indexes/quarterly/     extracted quarterly index TSVs
-  indexes/master.tsv     stitched filing catalog
+  cache/indexes/quarterly/ extracted quarterly index TSVs
+  cache/indexes/master.tsv stitched filing catalog
   filings/edgar/data/    pristine downloaded SEC submissions
   parsed/<cik>/<acc>/
     filing.json           verbose parsed submission and XBRL facts

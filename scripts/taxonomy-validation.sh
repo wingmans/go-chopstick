@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_PATH="${CLI_PATH:-$ROOT_DIR/bin/edgar}"
-SET_NAME="${SET_NAME:-us-gaap-coverage}"
+SET_NAME="${SET_NAME:-us-gaap}"
 FORM_TYPE="${FORM_TYPE:-10-K}"
 FROM_YEAR="${FROM_YEAR:-2015}"
 TO_YEAR="${TO_YEAR:-}"
@@ -522,7 +522,7 @@ determine_gate_status() {
 run_step "download and stitch SEC indexes" \
   "$CLI_PATH" index "${INDEX_ARGS[@]}"
 
-test -s data/indexes/master.tsv
+test -s data/cache/indexes/master.tsv
 
 run_step_allow_failure "download $FORM_TYPE filings for $SET_NAME" \
   "$CLI_PATH" filings \
@@ -537,13 +537,19 @@ run_step_allow_failure "reprocess parsed filings and compact views" \
     "${YEAR_ARGS[@]}" \
     --reprocess
 
-if ! find data/parsed -type f -name filing.json -print -quit | grep -q .; then
-  echo "error: no parsed filings were produced" >&2
+if [[ ! -s data/analysis.db ]]; then
+  echo "error: analysis database was not produced" >&2
+	exit 1
+fi
+
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  echo "error: sqlite3 is required to inspect analysis.db" >&2
   exit 1
 fi
 
-if ! find data/parsed -type f -name filing-view.json -print -quit | grep -q .; then
-  echo "error: no compact filing views were produced" >&2
+if [[ "$(sqlite3 data/analysis.db \
+  'SELECT COUNT(*) FROM filing_views;')" -eq 0 ]]; then
+  echo "error: analysis database contains no filing views" >&2
   exit 1
 fi
 

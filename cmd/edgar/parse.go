@@ -10,14 +10,15 @@ import (
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingworkflow"
+	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
 )
 
 func parseSubmissionConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
 	cfg.command = parseCommand
-	cfg.parse.masterPath = "./data/indexes/master.tsv"
+	cfg.parse.masterPath = "./data/cache/indexes/master.tsv"
+	cfg.parse.analysisDB = "./data/analysis.db"
 	flags := flag.NewFlagSet(parseCommand, flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
@@ -37,6 +38,7 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.parse.filter.CIK, "c", "", "select filings for this CIK")
 	flags.StringVar(&cfg.parse.filter.CIK, "cik", "", "select filings for this CIK")
 	flags.StringVar(&cfg.parse.setName, "set", "", "select filings for this constituent set")
+	flags.StringVar(&cfg.parse.analysisDB, "analysis-db", cfg.parse.analysisDB, "SQLite analysis database")
 	flags.Var(&cfg.parse.formTypes, "f", "select this form type; may be repeated")
 	flags.Var(&cfg.parse.formTypes, "form-type", "select this form type; may be repeated")
 	flags.StringVar(&cfg.parse.year, "y", "", "select filings filed in this year")
@@ -101,6 +103,7 @@ func runParse(ctx context.Context, cfg appConfig) error {
 	processing := filingworkflow.ProcessingConfig{
 		Directory:        edgar.DefaultParsedDirectory,
 		FilingsDirectory: edgar.DefaultFilingsDirectory,
+		AnalysisDBPath:   cfg.parse.analysisDB,
 		FormType:         "",
 		Reprocess:        cfg.parse.reprocess,
 		Noop:             cfg.parse.noop,

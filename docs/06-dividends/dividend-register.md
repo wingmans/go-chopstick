@@ -68,7 +68,7 @@ The `filings` command downloads missing submissions and processes them into
 
 ## Process filings already downloaded
 
-If the submissions already exist in `data/filings/`, process them without
+If the submissions already exist in `data/cache/filings/`, process them without
 downloading again:
 
 ```bash
@@ -94,7 +94,7 @@ To process one local SEC submission, use `--file`:
 
 ```bash
 go run ./cmd/edgar parse \
-  --file data/filings/edgar/data/789019/example.txt
+  --file data/cache/filings/edgar/data/789019/example.txt
 ```
 
 Processing a single file still rebuilds the complete company register from

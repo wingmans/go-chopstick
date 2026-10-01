@@ -15,7 +15,7 @@ import (
 
 	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingview"
+	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
 const SchemaVersion = 1
@@ -321,6 +321,7 @@ func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[str
 	return metrics, missing, missingByTier, relatedEvidence
 }
 
+// metricCoverageTier determines the coverage tier of a given metric. If the tier is not specified, it defaults to "core".
 func metricCoverageTier(metric filingview.MetricDefinition) string {
 	tier := strings.TrimSpace(metric.CoverageTier)
 	if tier == "" {
@@ -330,6 +331,7 @@ func metricCoverageTier(metric filingview.MetricDefinition) string {
 	return tier
 }
 
+// presentRelatedMetrics returns a list of related metrics that are present for a given metric.
 func presentRelatedMetrics(metric string, present map[string]string) []string {
 	candidates := relatedCoverageMetrics(metric)
 
@@ -343,6 +345,7 @@ func presentRelatedMetrics(metric string, present map[string]string) []string {
 	return result
 }
 
+// relatedCoverageMetrics returns a list of metrics that are related to the given metric for coverage purposes.
 func relatedCoverageMetrics(metric string) []string {
 	switch metric {
 	case "eps_diluted":
