@@ -297,6 +297,41 @@ func (s *Store) SaveFilingView(ctx context.Context, view filingview.View) error 
 	return tx.Commit()
 }
 
+// HasFilingView reports whether one filing has been fully materialized.
+func (s *Store) HasFilingView(ctx context.Context, cik, accession string) (bool, error) {
+	cik = canonicalCIK(cik)
+
+	var exists int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM filing_views WHERE cik = ? AND accession = ?
+		)`, cik, accession).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check filing view: %w", err)
+	}
+
+	return exists != 0, nil
+}
+
+// HasSuccessfulFilingView reports whether a filing completed without parser
+// extraction errors.
+func (s *Store) HasSuccessfulFilingView(ctx context.Context, cik, accession string) (bool, error) {
+	cik = canonicalCIK(cik)
+
+	var status string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT status FROM filing_views WHERE cik = ? AND accession = ?`,
+		cik, accession).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check filing view status: %w", err)
+	}
+
+	return status == "complete" || status == "no_xbrl" || status == "unsupported", nil
+}
+
 // SaveParsedFiling stores the source-level parser result for database-backed
 // quality checks and document lookup.
 func (s *Store) SaveParsedFiling(ctx context.Context, filing *edgar.ParsedFiling) error {

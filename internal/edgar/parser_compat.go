@@ -60,6 +60,18 @@ func SaveParsedFiling(directory string, filing *ParsedFiling) (string, error) {
 	return parser.SaveParsedFiling(directory, filing)
 }
 
+func FingerprintPath(source string) string {
+	return parser.FingerprintPath(source)
+}
+
+func WriteSourceFingerprint(source string) error {
+	return parser.WriteSourceFingerprint(source)
+}
+
+func SourceFingerprintMatches(ctx context.Context, source string) (bool, error) {
+	return parser.SourceFingerprintMatches(ctx, source)
+}
+
 func LoadParsedFiling(path string) (*ParsedFiling, error) {
 	return parser.LoadParsedFiling(path)
 }

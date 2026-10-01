@@ -75,7 +75,29 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	}
 
 	if !cfg.Reprocess {
-		stored, reusable, err := reusableFiling(ctx, result.Path, path, identity)
+		if !cfg.Noop {
+			matches, err := edgar.SourceFingerprintMatches(ctx, path)
+			if err != nil {
+				return result, err
+			}
+
+			if matches {
+				materialized, err := filingMaterializedFor(ctx, cfg,
+					metadata.CIK, metadata.Accession)
+				if err != nil {
+					return result, err
+				}
+				if materialized {
+					result.Action = ActionReused
+					logProcessing(ctx, path, result, cfg, started)
+
+					return result, nil
+				}
+			}
+		}
+
+		stored, reusable, err := reusableFiling(
+			ctx, result.Path, path, identity)
 		if err != nil {
 			return result, err
 		}
@@ -84,8 +106,25 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 			result.Action, result.Filing = ActionReused, &stored
 
 			if !cfg.Noop {
+				materialized, err := filingMaterialized(ctx, cfg, &stored)
+				if err != nil {
+					return result, err
+				}
+
+				if materialized {
+					logProcessing(ctx, path, result, cfg, started)
+
+					return result, extractionFailure(&stored)
+				}
+
 				if err := saveParsedFiling(ctx, cfg, &stored); err != nil {
 					return result, err
+				}
+
+				if !cfg.SkipDividendView {
+					if err := updateDividendView(ctx, cfg, &stored); err != nil {
+						return result, err
+					}
 				}
 
 				if _, err := filingview.Save(cfg.Directory, &stored); err != nil {
@@ -94,12 +133,6 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 				if err := saveFilingView(ctx, cfg, &stored); err != nil {
 					return result, err
-				}
-
-				if !cfg.SkipDividendView {
-					if err := updateDividendView(ctx, cfg, &stored); err != nil {
-						return result, err
-					}
 				}
 			}
 
@@ -137,12 +170,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	if err != nil {
 		return result, err
 	}
-
-	if _, err := filingview.Save(cfg.Directory, result.Filing); err != nil {
-		return result, err
-	}
-
-	if err := saveFilingView(ctx, cfg, result.Filing); err != nil {
+	if err := edgar.WriteSourceFingerprint(path); err != nil {
 		return result, err
 	}
 
@@ -150,6 +178,14 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 		if err := updateDividendView(ctx, cfg, result.Filing); err != nil {
 			return result, err
 		}
+	}
+
+	if _, err := filingview.Save(cfg.Directory, result.Filing); err != nil {
+		return result, err
+	}
+
+	if err := saveFilingView(ctx, cfg, result.Filing); err != nil {
+		return result, err
 	}
 
 	result.Action = ActionProcessed
@@ -222,6 +258,30 @@ func saveFilingView(ctx context.Context, cfg ProcessingConfig, filing *edgar.Par
 	return nil
 }
 
+func filingMaterialized(ctx context.Context, cfg ProcessingConfig,
+	filing *edgar.ParsedFiling,
+) (bool, error) {
+	return filingMaterializedFor(ctx, cfg, filing.Metadata.CIK,
+		filing.Metadata.Accession)
+}
+
+func filingMaterializedFor(ctx context.Context, cfg ProcessingConfig,
+	cik, accession string,
+) (bool, error) {
+	store, closeStore, err := storeForConfig(ctx, cfg)
+	if err != nil {
+		return false, err
+	}
+	defer closeStore()
+
+	exists, err := store.HasSuccessfulFilingView(ctx, cik, accession)
+	if err != nil {
+		return false, fmt.Errorf("check filing view: %w", err)
+	}
+
+	return exists, nil
+}
+
 func storeForConfig(ctx context.Context, cfg ProcessingConfig) (*analysisstore.Store, func(), error) {
 	if cfg.AnalysisStore != nil {
 		return cfg.AnalysisStore, func() {}, nil
@@ -255,8 +315,18 @@ func attachAnalysisStore(ctx context.Context, cfg ProcessingConfig) (ProcessingC
 	return cfg, closeStore, nil
 }
 
-func reusableFiling(ctx context.Context, destination, source string, identity edgar.ParsedFiling) (edgar.ParsedFiling, bool, error) {
+func reusableFiling(ctx context.Context, destination, source string,
+	identity edgar.ParsedFiling,
+) (edgar.ParsedFiling, bool, error) {
 	var missing edgar.ParsedFiling
+
+	matches, err := edgar.SourceFingerprintMatches(ctx, source)
+	if err != nil {
+		return missing, false, err
+	}
+	if !matches {
+		return missing, false, nil
+	}
 
 	filing, err := edgar.LoadParsedFiling(destination)
 	if err != nil {
@@ -279,15 +349,6 @@ func reusableFiling(ctx context.Context, destination, source string, identity ed
 	switch filing.Status {
 	case edgar.ParseComplete, edgar.ParseNoXBRL, edgar.ParsePartial, edgar.ParseUnsupported:
 	default:
-		return missing, false, nil
-	}
-
-	matches, err := filing.MatchesSource(ctx, source)
-	if err != nil {
-		return missing, false, err
-	}
-
-	if !matches {
 		return missing, false, nil
 	}
 

@@ -127,6 +127,9 @@ func TestProcessingInvalidatesStaleResults(t *testing.T) {
 			if err := os.WriteFile(first.Path, data, 0o600); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.Remove(path + ".fingerprint.json"); err != nil {
+				t.Fatal(err)
+			}
 
 			result, err := ProcessSubmission(t.Context(), path, cfg)
 			if err != nil || result.Action != ActionProcessed {

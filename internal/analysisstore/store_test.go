@@ -53,6 +53,16 @@ func TestFilingViewRoundTripAndReplacement(t *testing.T) {
 	if got.Metadata.CIK != "0000789019" || got.Counts.Facts != 4 {
 		t.Fatalf("unexpected filing view: %+v", got)
 	}
+
+	exists, err := store.HasFilingView(t.Context(), "789019", view.Metadata.Accession)
+	if err != nil || !exists {
+		t.Fatalf("materialized filing view: exists=%v error=%v", exists, err)
+	}
+
+	exists, err = store.HasFilingView(t.Context(), "789019", "missing")
+	if err != nil || exists {
+		t.Fatalf("missing filing view: exists=%v error=%v", exists, err)
+	}
 }
 
 func TestParsedFilingRoundTrip(t *testing.T) {

@@ -2,6 +2,14 @@
 
 set -Eeuo pipefail
 
+SECONDS=0
+on_exit() {
+	local status=$?
+	echo "EDGAR end-to-end duration: ${SECONDS}s"
+	return "$status"
+}
+trap on_exit EXIT
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_PATH="$ROOT_DIR/bin/edgar"
 SET_NAME="us-gaap"
@@ -37,18 +45,11 @@ fi
 test -s data/cache/indexes/master.tsv
 
 for form_type in "${FORM_TYPES[@]}"; do
-	echo "Downloading $form_type filings from $FROM_YEAR onward for set $SET_NAME"
+	echo "Downloading and processing $form_type filings from $FROM_YEAR onward"
 	"$CLI_PATH" filings \
 		--set "$SET_NAME" \
 		--form-type "$form_type" \
 		--from-year "$FROM_YEAR"
-
-	echo "Reprocessing $form_type filings from $FROM_YEAR onward for set $SET_NAME"
-	"$CLI_PATH" parse \
-		--set "$SET_NAME" \
-		--form-type "$form_type" \
-		--from-year "$FROM_YEAR" \
-		--reprocess
 done
 
 if [[ ! -s data/analysis.db ]]; then

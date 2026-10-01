@@ -10,16 +10,17 @@ import (
 
 func TestParsedFilingRoundTrip(t *testing.T) {
 	source := writeSubmission(t, submissionText(testInstance, testInstanceFilename))
-
 	filing, err := ParseSubmission(t.Context(), source)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	directory := t.TempDir()
 
 	path, err := SaveParsedFiling(directory, filing)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteSourceFingerprint(source); err != nil {
 		t.Fatal(err)
 	}
 

@@ -2,8 +2,6 @@ package parser
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -131,39 +129,11 @@ func LoadParsedFiling(path string) (*ParsedFiling, error) {
 	return &filing, nil
 }
 
-// MatchesSource checks whether versions and source bytes permit reuse.
+// MatchesSource checks whether versions and source fingerprints permit reuse.
 // A matching partial result still needs its Status and Diagnostics inspected.
 func (f *ParsedFiling) MatchesSource(ctx context.Context, path string) (bool, error) {
 	if f.SchemaVersion != ParsedSchemaVersion || f.ParserVersion != ParserVersion {
 		return false, nil
 	}
-
-	file, err := os.Open(path)
-	if err != nil {
-		return false, fmt.Errorf("open source for checksum: %w", err)
-	}
-
-	defer func() { _ = file.Close() }()
-
-	hash := sha256.New()
-	buffer := make([]byte, 64*1024)
-
-	for {
-		if err := ctx.Err(); err != nil {
-			return false, err
-		}
-
-		n, err := file.Read(buffer)
-		_, _ = hash.Write(buffer[:n])
-
-		if errors.Is(err, io.EOF) {
-			break
-		}
-
-		if err != nil {
-			return false, fmt.Errorf("hash source: %w", err)
-		}
-	}
-
-	return f.SourceSHA256 == hex.EncodeToString(hash.Sum(nil)), nil
+	return SourceFingerprintMatches(ctx, path)
 }

@@ -3,8 +3,8 @@
 package parser
 
 const (
-	ParsedSchemaVersion     = 2
-	ParserVersion           = "2"
+	ParsedSchemaVersion     = 4
+	ParserVersion           = "4"
 	DefaultParsedDirectory  = "./data/parsed"
 	DefaultFilingsDirectory = "./data/cache/filings"
 	ParseComplete           = "complete"

@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-derived-data build-polling run-polling test-polling
+.PHONY: help build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-analysis-data build-polling run-polling test-polling
 
 .DEFAULT_GOAL := help
 
@@ -17,7 +17,7 @@ help:
 		'  clean                   Remove build artifacts' \
 		'' \
 		'  constituents            Download the current S&P 500 constituent set' \
-		'  clean-derived-data      Remove derived data while preserving raw filings' \
+		'  clean-analysis-data     Remove analysis data while preserving raw filings' \
 		'  integration             Run the EDGAR end-to-end test' \
 		'  taxonomy-validation     Run the 19-company taxonomy validation pass' \
 		'  taxonomy-validation-fast Run the five-company one-year validation pass' \
@@ -56,8 +56,8 @@ manual-checks:
 docs-pdf:
 	bash scripts/docs-pdf.sh
 
-clean-derived-data:
-	bash scripts/clean-derived-data.sh
+clean-analysis-data:
+	bash scripts/clean-analysis-data.sh
 
 run:
 	go run ./cmd/ecb

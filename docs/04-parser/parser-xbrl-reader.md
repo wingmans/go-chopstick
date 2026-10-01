@@ -53,7 +53,7 @@ rebuilds parsed output; it does not force redownloading or refresh the HTML inde
 No separate skip-processed flag is needed: reuse is the default.
 
 To reset local EDGAR outputs while keeping downloaded raw SEC submissions, run
-`make clean-derived-data`. The underlying `scripts/clean-derived-data.sh`
+`make clean-analysis-data`. The underlying `scripts/clean-analysis-data.sh`
 preserves `data/cache/filings` and cached SEC index ZIPs under
 `data/cache/index-zips`; it removes parsed filings, validation runs, generated
 local sets, and stitched/extracted index files. This lets `edgar index
