@@ -89,6 +89,7 @@ type appConfig struct {
 		indexesDir string
 		filingsDir string
 		parsedDir  string
+		analysisDB string
 		out        string
 		filter     edgar.IndexFilter
 		formTypes  stringList

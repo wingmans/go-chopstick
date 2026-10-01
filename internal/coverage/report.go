@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/analysisstore"
 	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/edgar"
 	filingview "wingman.com/fetch-ecb/internal/filing"
@@ -25,6 +26,7 @@ type Config struct {
 	IndexesDir  string
 	FilingsDir  string
 	ParsedDir   string
+	AnalysisDB  string
 	Filter      edgar.IndexFilter
 	SetName     string
 	FromYear    int
@@ -70,6 +72,7 @@ type Filing struct {
 	FilingPath                 string              `json:"filing_path"`
 	SourcePath                 string              `json:"source_path"`
 	ParsedPath                 string              `json:"parsed_path"`
+	RawAvailable               bool                `json:"raw_available"`
 	Status                     string              `json:"status"`
 	MissingMetric              []string            `json:"missing_metrics,omitempty"`
 	MissingByTier              map[string][]string `json:"missing_metrics_by_tier,omitempty"`
@@ -94,8 +97,8 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		return Report{}, errors.New("master index is required")
 	}
 
-	if config.FilingsDir == "" || config.ParsedDir == "" {
-		return Report{}, errors.New("filings and parsed directories are required")
+	if config.AnalysisDB == "" {
+		return Report{}, errors.New("analysis database is required")
 	}
 
 	if config.Taxonomy.TaxonomyVersion == "" {
@@ -111,6 +114,12 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		return Report{}, fmt.Errorf("open master index: %w", err)
 	}
 	defer func() { _ = file.Close() }()
+
+	analysis, err := analysisstore.Open(ctx, config.AnalysisDB)
+	if err != nil {
+		return Report{}, fmt.Errorf("open analysis database: %w", err)
+	}
+	defer func() { _ = analysis.Close() }()
 
 	selection := Selection{
 		SetName: config.SetName, CIK: config.Filter.CIK,
@@ -162,7 +171,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 
 		seen[key] = struct{}{}
 
-		filing, inspectErr := inspectFiling(ctx, config, record)
+		filing, inspectErr := inspectFiling(ctx, config, analysis, record)
 		if inspectErr != nil {
 			return Report{}, inspectErr
 		}
@@ -170,9 +179,12 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		report.Filings = append(report.Filings, filing)
 		report.Summary.Expected++
 
+		if filing.RawAvailable {
+			report.Summary.Downloaded++
+		}
+
 		switch filing.Status {
 		case "parsed":
-			report.Summary.Downloaded++
 			report.Summary.Parsed++
 		case "downloaded":
 			report.Summary.Downloaded++
@@ -202,14 +214,25 @@ func Build(ctx context.Context, config Config) (Report, error) {
 }
 
 // inspectFiling inspects a single filing and returns its status and metrics.
-func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) (Filing, error) {
+func inspectFiling(
+	ctx context.Context,
+	config Config,
+	analysis *analysisstore.Store,
+	record edgar.EdgarIndex,
+) (Filing, error) {
 	if err := ctx.Err(); err != nil {
 		return Filing{}, err
 	}
 
 	accession := accessionFromPath(record.FilingPath)
-	sourcePath, sourceErr := edgar.LocalFilingPath(config.FilingsDir, record.FilingPath)
-	parsedPath := parsedViewPath(config.ParsedDir, record.CIK, accession)
+	var sourcePath, parsedPath string
+	var sourceErr error
+	if config.FilingsDir != "" {
+		sourcePath, sourceErr = edgar.LocalFilingPath(config.FilingsDir, record.FilingPath)
+	}
+	if config.ParsedDir != "" {
+		parsedPath = parsedViewPath(config.ParsedDir, record.CIK, accession)
+	}
 
 	result := Filing{
 		CIK: record.CIK, Company: record.CompanyName, Accession: accession,
@@ -226,28 +249,39 @@ func inspectFiling(ctx context.Context, config Config, record edgar.EdgarIndex) 
 		return result, sourceErr
 	}
 
-	if _, err := os.Stat(sourcePath); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			result.Status = "source_error"
+	if sourcePath != "" {
+		if _, err := os.Stat(sourcePath); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				result.Status = "source_error"
+			}
+
+			if result.Status == "source_error" {
+				return result, nil
+			}
+		} else {
+			result.RawAvailable = true
+		}
+	}
+
+	view, err := analysis.LoadFilingView(ctx, record.CIK, accession)
+	if err == nil {
+		result.Status = "parsed"
+		result.Metrics, result.MissingMetric, result.MissingByTier, result.MissingRelatedEvidence = metricPresence(view, config.Taxonomy)
+		if parsedPath != "" {
+			result.MissingDimensionalEvidence = metricDimensionalEvidence(parsedSourcePath(parsedPath), result.MissingMetric)
 		}
 
 		return result, nil
 	}
-
-	result.Status = "downloaded"
-
-	view, err := filingview.Load(parsedPath)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			result.Status = "parsed_error"
-		}
+	if !errors.Is(err, os.ErrNotExist) {
+		result.Status = "parsed_error"
 
 		return result, nil
 	}
 
-	result.Status = "parsed"
-	result.Metrics, result.MissingMetric, result.MissingByTier, result.MissingRelatedEvidence = metricPresence(view, config.Taxonomy)
-	result.MissingDimensionalEvidence = metricDimensionalEvidence(parsedSourcePath(parsedPath), result.MissingMetric)
+	if result.RawAvailable {
+		result.Status = "downloaded"
+	}
 
 	return result, nil
 }

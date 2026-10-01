@@ -1,6 +1,7 @@
 package coverage
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/analysisstore"
 	"wingman.com/fetch-ecb/internal/edgar"
 	filingview "wingman.com/fetch-ecb/internal/filing"
 )
@@ -28,6 +30,7 @@ func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {
 	report, err := Build(t.Context(), Config{
 		MasterPath: master, IndexesDir: filepath.Join(root, "indexes"),
 		FilingsDir: filepath.Join(root, "filings"), ParsedDir: filepath.Join(root, "parsed"),
+		AnalysisDB: filepath.Join(root, "analysis.db"),
 		Filter: edgar.IndexFilter{
 			CIK: "789019", CIKs: nil,
 			FormTypes: []string{"10-K"}, Year: 0, FromYear: 0, ToYear: 0,
@@ -113,6 +116,7 @@ func TestGoldenExpectedCoverageFixture(t *testing.T) {
 	report, err := Build(t.Context(), Config{
 		MasterPath: master, IndexesDir: filepath.Join(root, "indexes"),
 		FilingsDir: filepath.Join(root, "filings"), ParsedDir: filepath.Join(root, "parsed"),
+		AnalysisDB: filepath.Join(root, "analysis.db"),
 		Filter: edgar.IndexFilter{
 			CIK: "", CIKs: nil, FormTypes: []string{"10-K"},
 			Year: 0, FromYear: 0, ToYear: 0,
@@ -167,6 +171,84 @@ func TestGoldenExpectedCoverageFixture(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildUsesAnalysisDatabaseWithoutParserArtifacts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	testCase := expectedCoverageCase{
+		Name: "database-only", CIK: "789019", Company: "Example Corp.",
+		Accession: "0001193125-24-123456", DateFiled: "2024-07-30",
+		PresentMetrics: []string{"revenue"},
+	}
+	filingPath := "edgar/data/789019/0001193125-24-123456.txt"
+	writeSourceFiling(t, root, filingPath)
+	writeParsedFixture(t, root, testCase)
+
+	master := filepath.Join(root, "master.tsv")
+	contents := strings.Join([]string{
+		testCase.CIK, testCase.Company, "10-K", testCase.DateFiled,
+		filingPath, strings.TrimSuffix(filingPath, ".txt") + "-index.html",
+	}, "|") + "\n"
+	if err := os.WriteFile(master, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(filepath.Join(root, "parsed")); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Build(t.Context(), Config{
+		MasterPath: master, FilingsDir: filepath.Join(root, "filings"),
+		ParsedDir:  filepath.Join(root, "parsed"),
+		AnalysisDB: filepath.Join(root, "analysis.db"),
+		Filter: edgar.IndexFilter{
+			FormTypes: []string{"10-K"}, FromYear: 2024, ToYear: 2024,
+		},
+		SetName: "database-only", FromYear: 2024, ToYear: 2024,
+		Taxonomy: expectedCoverageTaxonomy(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if report.Summary.Parsed != 1 || report.Summary.Downloaded != 1 ||
+		report.Summary.Missing != 0 || report.Summary.Unparsed != 0 {
+		t.Fatalf("unexpected summary: %+v", report.Summary)
+	}
+	if len(report.Filings) != 1 || report.Filings[0].Status != "parsed" {
+		t.Fatalf("unexpected filing report: %+v", report.Filings)
+	}
+	if report.Filings[0].Metrics["revenue"] != "present" {
+		t.Fatalf("database metric was not loaded: %+v", report.Filings[0].Metrics)
+	}
+
+	if err := os.RemoveAll(filepath.Join(root, "filings")); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err = Build(t.Context(), Config{
+		MasterPath: master, FilingsDir: filepath.Join(root, "filings"),
+		ParsedDir:  filepath.Join(root, "parsed"),
+		AnalysisDB: filepath.Join(root, "analysis.db"),
+		Filter: edgar.IndexFilter{
+			FormTypes: []string{"10-K"}, FromYear: 2024, ToYear: 2024,
+		},
+		SetName: "database-only", FromYear: 2024, ToYear: 2024,
+		Taxonomy: expectedCoverageTaxonomy(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if report.Summary.Parsed != 1 || report.Summary.Downloaded != 0 ||
+		report.Summary.Missing != 0 || report.Summary.Unparsed != 0 {
+		t.Fatalf("unexpected database-only summary: %+v", report.Summary)
+	}
+	if report.Filings[0].Status != "parsed" || report.Filings[0].RawAvailable {
+		t.Fatalf("database-only filing=%+v", report.Filings[0])
 	}
 }
 
@@ -335,13 +417,27 @@ func writeParsedFixture(t *testing.T, root string, testCase expectedCoverageCase
 		t.Fatalf("create filing view directory: %v", err)
 	}
 
-	viewData, err := json.Marshal(filingViewFixture(testCase))
+	view := filingViewFixture(testCase)
+	viewData, err := json.Marshal(view)
 	if err != nil {
 		t.Fatalf("encode filing view: %v", err)
 	}
 
 	if err := os.WriteFile(viewPath, viewData, 0o600); err != nil {
 		t.Fatalf("write filing view: %v", err)
+	}
+
+	analysis, err := analysisstore.Open(context.Background(),
+		filepath.Join(root, "analysis.db"))
+	if err != nil {
+		t.Fatalf("open analysis database: %v", err)
+	}
+	if err := analysis.SaveFilingView(t.Context(), view); err != nil {
+		_ = analysis.Close()
+		t.Fatalf("save filing view: %v", err)
+	}
+	if err := analysis.Close(); err != nil {
+		t.Fatalf("close analysis database: %v", err)
 	}
 }
 

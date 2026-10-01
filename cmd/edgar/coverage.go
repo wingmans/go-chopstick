@@ -22,6 +22,7 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 	cfg.coverage.indexesDir = "./data/cache/indexes/quarterly"
 	cfg.coverage.filingsDir = edgar.DefaultFilingsDirectory
 	cfg.coverage.parsedDir = edgar.DefaultParsedDirectory
+	cfg.coverage.analysisDB = "./data/analysis.db"
 	cfg.coverage.out = "./data/validation/coverage-report.json"
 
 	flags := flag.NewFlagSet("coverage", flag.ContinueOnError)
@@ -36,7 +37,8 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 			{"-m, --master <path>", "Master TSV; default ./data/cache/indexes/master.tsv."},
 			{"    --indexes-dir <path>", "Quarterly indexes directory."},
 			{"    --filings-dir <path>", "Downloaded filings directory."},
-			{"-d, --parsed-dir <path>", "Parsed filing directory."},
+			{"-d, --parsed-dir <path>", "Optional parser artifact directory."},
+			{"    --analysis-db <path>", "Analysis database; default ./data/analysis.db."},
 			{"-o, --out <path>", "JSON report path."},
 			{"-h, --help", "Show command help."},
 		})
@@ -55,6 +57,7 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.coverage.filingsDir, "filings-dir", cfg.coverage.filingsDir, "downloaded filings directory")
 	flags.StringVar(&cfg.coverage.parsedDir, "d", cfg.coverage.parsedDir, "parsed filing directory")
 	flags.StringVar(&cfg.coverage.parsedDir, "parsed-dir", cfg.coverage.parsedDir, "parsed filing directory")
+	flags.StringVar(&cfg.coverage.analysisDB, "analysis-db", cfg.coverage.analysisDB, "analysis database path")
 	flags.StringVar(&cfg.coverage.out, "o", cfg.coverage.out, "JSON report path")
 	flags.StringVar(&cfg.coverage.out, "out", cfg.coverage.out, "JSON report path")
 
@@ -105,7 +108,8 @@ func runCoverageCommand(ctx context.Context, cfg appConfig) error {
 	report, err := coverage.Build(ctx, coverage.Config{
 		MasterPath: cfg.coverage.masterPath, IndexesDir: cfg.coverage.indexesDir,
 		FilingsDir: cfg.coverage.filingsDir, ParsedDir: cfg.coverage.parsedDir,
-		Filter: cfg.coverage.filter, SetName: cfg.coverage.setName,
+		AnalysisDB: cfg.coverage.analysisDB,
+		Filter:     cfg.coverage.filter, SetName: cfg.coverage.setName,
 		FromYear: cfg.coverage.fromYear, ToYear: cfg.coverage.toYear,
 		Taxonomy: taxonomy, GeneratedAt: time.Now().UTC(),
 	})
