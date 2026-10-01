@@ -186,12 +186,14 @@
 <section class="panel" id="filing-documents">
   <div class="panel-heading">
     <h2>Filing documents</h2>
-    <span class="muted">Local source documents</span>
+    <span class="muted">Optional raw filing inspector</span>
   </div>
+  <p><a href="/debug/raw/filings/{{.Filing.Metadata.CIK}}/{{.Filing.Metadata.Accession}}"
+    target="_blank" rel="noopener">Raw Filing Inspector</a></p>
   <div class="documents">
     {{range $index, $document := .Filing.Documents}}
     <div>
-      <a href="/filings/{{$.Filing.Metadata.CIK}}/{{$.Filing.Metadata.Accession}}/documents/{{$index}}"
+      <a href="/debug/raw/filings/{{$.Filing.Metadata.CIK}}/{{$.Filing.Metadata.Accession}}/documents/{{$index}}"
         target="_blank" rel="noopener">{{$document.Filename}}</a>
       <div class="document-meta">
         {{$document.Type}}{{if $document.Description}} &middot; {{$document.Description}}{{end}}

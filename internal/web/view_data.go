@@ -80,6 +80,11 @@ type detailData struct {
 	HasDividends  bool
 }
 
+type rawInspectorData struct {
+	Page   pageChrome
+	Filing *edgar.ParsedFiling
+}
+
 func buildCompanyDividendTable(view dividendview.View, years []string) companyDividendTable {
 	rows := map[string]map[string][]string{}
 	add := func(label, year, value string) {

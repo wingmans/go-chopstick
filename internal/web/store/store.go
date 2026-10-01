@@ -16,17 +16,21 @@ import (
 	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
-// Store defines the read operations needed by the local filing viewer.
-// List, detail, and history screens read filing-view.json because it is the
-// normalized read model. Raw filing.json is used only where parsed source data
-// or document offsets are required.
+// Store defines the read operations needed by the analytical web application.
+// These operations read normalized data and must not require raw filing files.
 type Store interface {
 	ListSummaries(ctx context.Context) ([]Summary, error)
 	LoadView(ctx context.Context, cik, accession string) (filingview.View, error)
-	LoadFiling(ctx context.Context, cik, accession string) (*edgar.ParsedFiling, error)
 	LoadCompanyHistory(ctx context.Context, cik string) (filingview.CompanyHistory, error)
 	LoadDividendView(ctx context.Context, cik string) (dividendview.View, error)
+}
+
+// RawStore defines the optional read operations for the raw filing inspector.
+// It deliberately remains separate from Store so normal pages can work after
+// raw SEC files and parser artifacts have been archived or removed.
+type RawStore interface {
 	SourcePath(ctx context.Context, filing *edgar.ParsedFiling) (string, error)
+	LoadFiling(ctx context.Context, cik, accession string) (*edgar.ParsedFiling, error)
 }
 
 // Summary is filing-view metadata for list screens and API responses.
@@ -46,6 +50,7 @@ type JSONDirectory struct {
 }
 
 var _ Store = (*JSONDirectory)(nil)
+var _ RawStore = (*JSONDirectory)(nil)
 
 // NewJSONDirectory creates a Store backed by the generated JSON directory.
 func NewJSONDirectory(parsedDir string) *JSONDirectory {

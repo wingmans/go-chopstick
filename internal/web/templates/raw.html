@@ -1,0 +1,47 @@
+{{define "raw-inspector-page.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head.html" .}}</head>
+<body class="raw-page">
+  <header><a class="back" href="/">&larr; Filing search</a></header>
+  <main id="raw-filing-inspector">
+    <section class="heading">
+      <h1>Raw Filing Inspector</h1>
+      <div class="subtitle">Local parser and source artifacts</div>
+    </section>
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Filing</h2>
+        <span class="muted">Debug data; not an analytical read model</span>
+      </div>
+      <dl>
+        <dt>Company</dt>
+        <dd>{{if .Filing.Metadata.Filers}}{{(index .Filing.Metadata.Filers 0).Name}}{{else}}Unknown company{{end}}</dd>
+        <dt>CIK</dt><dd>{{.Filing.Metadata.CIK}}</dd>
+        <dt>Accession</dt><dd>{{.Filing.Metadata.Accession}}</dd>
+        <dt>Form</dt><dd>{{.Filing.Metadata.FormType}}</dd>
+        <dt>Status</dt><dd>{{.Filing.Status}}</dd>
+        <dt>Source</dt><dd>{{.Filing.SourceBase}}: {{.Filing.SourcePath}}</dd>
+      </dl>
+    </section>
+    <section class="panel" id="raw-filing-documents">
+      <div class="panel-heading">
+        <h2>Source documents</h2>
+        <span class="muted">Requires the raw SEC filing cache</span>
+      </div>
+      <div class="documents">
+        {{range $index, $document := .Filing.Documents}}
+        <div>
+          <a href="/debug/raw/filings/{{$.Filing.Metadata.CIK}}/{{$.Filing.Metadata.Accession}}/documents/{{$index}}"
+            target="_blank" rel="noopener">{{$document.Filename}}</a>
+          <div class="document-meta">
+            {{$document.Type}}{{if $document.Description}} &middot; {{$document.Description}}{{end}}
+          </div>
+        </div>
+        {{else}}<p>No source documents are available.</p>{{end}}
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+{{end}}

@@ -152,6 +152,8 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"data-statement=\"Cash flow\"",
 		"id=\"key-ratios\"",
 		"id=\"filing-documents\"",
+		"Raw Filing Inspector",
+		"/debug/raw/filings/0000789019/0001193125-26-323660",
 		"id=\"financial-summary\"",
 		"id=\"dividend-register\"",
 		"data-dividend-id=\"test-dividend\"",
@@ -426,6 +428,33 @@ func TestServerFiltersByTicker(t *testing.T) {
 
 func TestServerRendersDetails(t *testing.T) {
 	requireResponse(t, requestServer(t, newCIKTestServer(t), http.MethodGet, "/filings/789019/0001193125-26-027207"), http.StatusOK, "XBRL facts")
+}
+
+func TestRawFilingInspectorIsolatedFromAnalyticalRoutes(t *testing.T) {
+	server := newCIKTestServer(t)
+
+	requireResponse(t, requestServer(t, server, http.MethodGet,
+		"/debug/raw/filings/789019/0001193125-26-027207"),
+		http.StatusOK, "Raw Filing Inspector", "Debug data")
+
+	legacy := requestServer(t, server, http.MethodGet,
+		"/filings/789019/0001193125-26-027207/documents/0")
+	if legacy.Code != http.StatusNotFound {
+		t.Fatalf("legacy raw route status=%d body=%s", legacy.Code,
+			legacy.Body.String())
+	}
+}
+
+func TestRawFilingInspectorReportsMissingRawData(t *testing.T) {
+	server := NewServer(t.TempDir(), nil)
+
+	record := requestServer(t, server, http.MethodGet,
+		"/debug/raw/filings/789019/0001193125-26-027207")
+	if record.Code != http.StatusNotFound ||
+		!strings.Contains(record.Body.String(), "raw filing unavailable") {
+		t.Fatalf("missing raw filing: status=%d body=%s", record.Code,
+			record.Body.String())
+	}
 }
 
 func TestServerRendersDashboard(t *testing.T) {

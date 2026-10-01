@@ -30,6 +30,7 @@ var templateFiles embed.FS
 type Server struct {
 	template    *template.Template
 	store       filingstore.Store
+	rawStore    filingstore.RawStore
 	logger      *slog.Logger
 	setName     string
 	setAsOf     string
@@ -62,8 +63,9 @@ func NewConfiguredServerWithDB(parsedDir, databasePath, setDir, setName string, 
 	}
 
 	server := &Server{
-		store:  store,
-		logger: logger,
+		store:    store,
+		rawStore: store,
+		logger:   logger,
 		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
 			"formatFact": formatFactValue,
 			"add":        add,
@@ -124,14 +126,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.asset(w, r, "assets/htmx-4.0.0.min.js", "text/javascript")
 	case strings.HasPrefix(r.URL.Path, "/companies/"):
 		s.company(w, r)
-	case strings.HasPrefix(r.URL.Path, "/filings/") && strings.Contains(r.URL.Path, "/documents/"):
-		s.document(w, r)
+	case strings.HasPrefix(r.URL.Path, "/debug/raw/filings/") &&
+		strings.Contains(r.URL.Path, "/documents/"):
+		s.rawDocument(w, r)
+	case strings.HasPrefix(r.URL.Path, "/debug/raw/filings/"):
+		s.rawInspector(w, r)
 	case strings.HasPrefix(r.URL.Path, "/filings/"):
 		s.detail(w, r)
 	case r.URL.Path == "/api/filings":
 		s.apiFilings(w, r)
-	case strings.HasPrefix(r.URL.Path, "/api/filings/"):
-		s.apiFiling(w, r)
+	case strings.HasPrefix(r.URL.Path, "/debug/raw/api/filings/"):
+		s.rawAPIFiling(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -240,15 +245,16 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, data)
 }
 
-func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/filings/"), "/")
+func (s *Server) rawAPIFiling(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path,
+		"/debug/raw/api/filings/"), "/")
 	if len(parts) != 2 {
 		http.NotFound(w, r)
 
 		return
 	}
 
-	filing, err := s.store.LoadFiling(r.Context(), parts[0], parts[1])
+	filing, err := s.loadRawFiling(r, parts[0], parts[1])
 	if errors.Is(err, os.ErrNotExist) {
 		http.NotFound(w, r)
 
@@ -264,7 +270,8 @@ func (s *Server) apiFiling(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, filing)
 }
 
-// detail handles requests to the /filings/{accession}/ endpoint, rendering the detailed view of the filing.
+// detail handles requests to the /filings/{accession}/ endpoint, rendering
+// the normalized detail view of the filing.
 func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/filings/"), "/")
 	if len(parts) != 2 {
@@ -342,18 +349,50 @@ func validReturnURL(value string) bool {
 		!strings.ContainsAny(value, "\r\n")
 }
 
-// document handles requests to view a specific document within a filing.
-func (s *Server) document(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/filings/"), "/")
+// rawInspector renders the optional raw filing inspection page.
+func (s *Server) rawInspector(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path,
+		"/debug/raw/filings/"), "/")
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+
+		return
+	}
+
+	filing, err := s.loadRawFiling(r, parts[0], parts[1])
+	if errors.Is(err, os.ErrNotExist) {
+		s.writeRawUnavailable(w, r)
+
+		return
+	}
+	if err != nil {
+		s.writeError(w, err)
+
+		return
+	}
+
+	data := rawInspectorData{
+		Page:   pageChrome{Title: "Raw Filing Inspector", BodyClass: "raw-page"},
+		Filing: filing,
+	}
+	if err := s.template.ExecuteTemplate(w, "raw-inspector-page.html", data); err != nil {
+		s.writeError(w, err)
+	}
+}
+
+// rawDocument serves one source document from the optional raw inspector.
+func (s *Server) rawDocument(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path,
+		"/debug/raw/filings/"), "/")
 	if len(parts) != 4 || parts[2] != "documents" {
 		http.NotFound(w, r)
 
 		return
 	}
 
-	filing, err := s.store.LoadFiling(r.Context(), parts[0], parts[1])
+	filing, err := s.loadRawFiling(r, parts[0], parts[1])
 	if errors.Is(err, os.ErrNotExist) {
-		http.NotFound(w, r)
+		s.writeRawUnavailable(w, r)
 
 		return
 	}
@@ -373,7 +412,12 @@ func (s *Server) document(w http.ResponseWriter, r *http.Request) {
 
 	document := filing.Documents[index]
 
-	source, err := s.store.SourcePath(r.Context(), filing)
+	source, err := s.rawStore.SourcePath(r.Context(), filing)
+	if errors.Is(err, os.ErrNotExist) {
+		s.writeRawUnavailable(w, r)
+
+		return
+	}
 	if err != nil {
 		s.writeError(w, err)
 
@@ -401,6 +445,24 @@ func (s *Server) document(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(document.Filename)))
 	http.ServeContent(w, r, filepath.Base(document.Filename), time.Time{},
 		io.NewSectionReader(file, document.ContentOffset, document.ContentLength))
+}
+
+func (s *Server) loadRawFiling(r *http.Request, cik, accession string) (
+	*edgar.ParsedFiling, error,
+) {
+	if s.rawStore == nil {
+		return nil, os.ErrNotExist
+	}
+
+	return s.rawStore.LoadFiling(r.Context(), cik, accession)
+}
+
+func (s *Server) writeRawUnavailable(w http.ResponseWriter, r *http.Request) {
+	if s.logger != nil {
+		s.logger.Debug("raw filing unavailable", "path", r.URL.Path)
+	}
+
+	http.Error(w, "raw filing unavailable", http.StatusNotFound)
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, value any) {

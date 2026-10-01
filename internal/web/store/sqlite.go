@@ -10,14 +10,15 @@ import (
 	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
-// SQLiteStore reads normalized views from SQLite and parsed filings from the
-// existing filesystem directory.
+// SQLiteStore reads normalized views from SQLite and keeps raw inspection
+// access in a separate filesystem-backed interface.
 type SQLiteStore struct {
 	files *JSONDirectory
 	views *analysisstore.Store
 }
 
 var _ Store = (*SQLiteStore)(nil)
+var _ RawStore = (*SQLiteStore)(nil)
 
 // NewSQLiteStore opens the analysis database used by the web application.
 func NewSQLiteStore(parsedDir, databasePath string) (*SQLiteStore, error) {
