@@ -117,10 +117,6 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 					return result, extractionFailure(&stored)
 				}
 
-				if err := saveParsedFiling(ctx, cfg, &stored); err != nil {
-					return result, err
-				}
-
 				if !cfg.SkipDividendView {
 					if err := updateDividendView(ctx, cfg, &stored); err != nil {
 						return result, err
@@ -162,10 +158,6 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 		return result, err
 	}
 
-	if err := saveParsedFiling(ctx, cfg, result.Filing); err != nil {
-		return result, err
-	}
-
 	result.Path, err = edgar.SaveParsedFiling(cfg.Directory, result.Filing)
 	if err != nil {
 		return result, err
@@ -192,20 +184,6 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	logProcessing(ctx, path, result, cfg, started)
 
 	return result, extractionFailure(result.Filing)
-}
-
-func saveParsedFiling(ctx context.Context, cfg ProcessingConfig, filing *edgar.ParsedFiling) error {
-	store, closeStore, err := storeForConfig(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	defer closeStore()
-
-	if err := store.SaveParsedFiling(ctx, filing); err != nil {
-		return fmt.Errorf("save parsed filing: %w", err)
-	}
-
-	return nil
 }
 
 func updateDividendView(ctx context.Context, cfg ProcessingConfig, filing *edgar.ParsedFiling) error {

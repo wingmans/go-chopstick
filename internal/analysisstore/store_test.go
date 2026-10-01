@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	"wingman.com/fetch-ecb/internal/edgar"
 	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
@@ -62,30 +61,6 @@ func TestFilingViewRoundTripAndReplacement(t *testing.T) {
 	exists, err = store.HasFilingView(t.Context(), "789019", "missing")
 	if err != nil || exists {
 		t.Fatalf("missing filing view: exists=%v error=%v", exists, err)
-	}
-}
-
-func TestParsedFilingRoundTrip(t *testing.T) {
-	store := testStore(t)
-	filing := &edgar.ParsedFiling{
-		Metadata: edgar.FilingMetadata{
-			CIK: "789019", Accession: "0000000002", FormType: "8-K",
-			FilingDate: "2026-10-01",
-		},
-		Status: edgar.ParseComplete,
-	}
-
-	if err := store.SaveParsedFiling(t.Context(), filing); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := store.LoadParsedFiling(t.Context(), "789019", filing.Metadata.Accession)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got.Metadata.CIK != "0000789019" || got.Metadata.FormType != "8-K" {
-		t.Fatalf("unexpected parsed filing: %+v", got.Metadata)
 	}
 }
 

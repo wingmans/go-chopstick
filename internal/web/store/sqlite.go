@@ -10,8 +10,8 @@ import (
 	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
-// SQLiteStore reads normalized views from SQLite and raw parsed filings
-// from the existing filesystem directory.
+// SQLiteStore reads normalized views from SQLite and parsed filings from the
+// existing filesystem directory.
 type SQLiteStore struct {
 	files *JSONDirectory
 	views *analysisstore.Store
@@ -61,15 +61,6 @@ func (s *SQLiteStore) LoadView(ctx context.Context, cik, accession string) (fili
 }
 
 func (s *SQLiteStore) LoadFiling(ctx context.Context, cik, accession string) (*edgar.ParsedFiling, error) {
-	filing, err := s.views.LoadParsedFiling(ctx, cik, accession)
-	if err == nil {
-		return filing, nil
-	}
-
-	if !os.IsNotExist(err) {
-		return nil, err
-	}
-
 	return s.files.LoadFiling(ctx, cik, accession)
 }
 

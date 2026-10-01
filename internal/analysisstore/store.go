@@ -17,11 +17,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	"wingman.com/fetch-ecb/internal/edgar"
 	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 // Store is the SQLite-backed read model for normalized filing data.
 type Store struct {
@@ -70,16 +69,6 @@ func (s *Store) migrate(ctx context.Context) error {
 			status TEXT NOT NULL,
 			facts INTEGER NOT NULL,
 			schema_version INTEGER NOT NULL,
-			payload BLOB NOT NULL,
-			updated_at DATETIME NOT NULL,
-			PRIMARY KEY (cik, accession)
-		)`,
-		`CREATE TABLE IF NOT EXISTS parsed_filings (
-			cik TEXT NOT NULL,
-			accession TEXT NOT NULL,
-			form_type TEXT NOT NULL,
-			filing_date TEXT NOT NULL,
-			status TEXT NOT NULL,
 			payload BLOB NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (cik, accession)
@@ -332,38 +321,6 @@ func (s *Store) HasSuccessfulFilingView(ctx context.Context, cik, accession stri
 	return status == "complete" || status == "no_xbrl" || status == "unsupported", nil
 }
 
-// SaveParsedFiling stores the source-level parser result for database-backed
-// quality checks and document lookup.
-func (s *Store) SaveParsedFiling(ctx context.Context, filing *edgar.ParsedFiling) error {
-	if filing == nil {
-		return errors.New("parsed filing is required")
-	}
-
-	cik := canonicalCIK(filing.Metadata.CIK)
-	stored := *filing
-	stored.Metadata.CIK = cik
-
-	payload, err := json.Marshal(&stored)
-	if err != nil {
-		return fmt.Errorf("encode parsed filing: %w", err)
-	}
-
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO parsed_filings
-			(cik, accession, form_type, filing_date, status, payload, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(cik, accession) DO UPDATE SET form_type=excluded.form_type,
-			filing_date=excluded.filing_date, status=excluded.status,
-			payload=excluded.payload, updated_at=excluded.updated_at`,
-		cik, filing.Metadata.Accession, filing.Metadata.FormType,
-		filing.Metadata.FilingDate, filing.Status, payload, time.Now().UTC())
-	if err != nil {
-		return fmt.Errorf("save parsed filing: %w", err)
-	}
-
-	return nil
-}
-
 // SaveDividendView atomically replaces a company's aggregate dividend view
 // and its queryable event and observation projections.
 func (s *Store) SaveDividendView(ctx context.Context, view dividendview.View) error {
@@ -512,63 +469,6 @@ func (s *Store) LoadFilingView(ctx context.Context, cik, accession string) (fili
 	}
 
 	return view, nil
-}
-
-// LoadParsedFiling loads one source-level parser result.
-func (s *Store) LoadParsedFiling(ctx context.Context, cik, accession string) (*edgar.ParsedFiling, error) {
-	cik = canonicalCIK(cik)
-
-	var payload []byte
-
-	err := s.db.QueryRowContext(ctx, `
-		SELECT payload FROM parsed_filings WHERE cik = ? AND accession = ?`,
-		cik, accession).Scan(&payload)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, os.ErrNotExist
-		}
-
-		return nil, fmt.Errorf("load parsed filing: %w", err)
-	}
-
-	var filing edgar.ParsedFiling
-	if err := json.Unmarshal(payload, &filing); err != nil {
-		return nil, fmt.Errorf("decode parsed filing: %w", err)
-	}
-
-	return &filing, nil
-}
-
-// ListParsedFilings returns source-level parser results ordered newest first.
-func (s *Store) ListParsedFilings(ctx context.Context) ([]*edgar.ParsedFiling, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT payload FROM parsed_filings
-		ORDER BY filing_date DESC, accession DESC`)
-	if err != nil {
-		return nil, fmt.Errorf("list parsed filings: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var filings []*edgar.ParsedFiling
-
-	for rows.Next() {
-		var payload []byte
-		if err := rows.Scan(&payload); err != nil {
-			return nil, fmt.Errorf("read parsed filing: %w", err)
-		}
-
-		var filing edgar.ParsedFiling
-		if err := json.Unmarshal(payload, &filing); err != nil {
-			return nil, fmt.Errorf("decode parsed filing: %w", err)
-		}
-
-		filings = append(filings, &filing)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate parsed filings: %w", err)
-	}
-
-	return filings, nil
 }
 
 // ListFilingViews returns normalized views ordered newest first.
