@@ -188,6 +188,7 @@ func TestBuildUsesAnalysisDatabaseWithoutParserArtifacts(t *testing.T) {
 	writeParsedFixture(t, root, testCase)
 
 	master := filepath.Join(root, "master.tsv")
+
 	contents := strings.Join([]string{
 		testCase.CIK, testCase.Company, "10-K", testCase.DateFiled,
 		filingPath, strings.TrimSuffix(filingPath, ".txt") + "-index.html",
@@ -218,9 +219,11 @@ func TestBuildUsesAnalysisDatabaseWithoutParserArtifacts(t *testing.T) {
 		report.Summary.Missing != 0 || report.Summary.Unparsed != 0 {
 		t.Fatalf("unexpected summary: %+v", report.Summary)
 	}
+
 	if len(report.Filings) != 1 || report.Filings[0].Status != "parsed" {
 		t.Fatalf("unexpected filing report: %+v", report.Filings)
 	}
+
 	if report.Filings[0].Metrics["revenue"] != "present" {
 		t.Fatalf("database metric was not loaded: %+v", report.Filings[0].Metrics)
 	}
@@ -247,6 +250,7 @@ func TestBuildUsesAnalysisDatabaseWithoutParserArtifacts(t *testing.T) {
 		report.Summary.Missing != 0 || report.Summary.Unparsed != 0 {
 		t.Fatalf("unexpected database-only summary: %+v", report.Summary)
 	}
+
 	if report.Filings[0].Status != "parsed" || report.Filings[0].RawAvailable {
 		t.Fatalf("database-only filing=%+v", report.Filings[0])
 	}
@@ -418,6 +422,7 @@ func writeParsedFixture(t *testing.T, root string, testCase expectedCoverageCase
 	}
 
 	view := filingViewFixture(testCase)
+
 	viewData, err := json.Marshal(view)
 	if err != nil {
 		t.Fatalf("encode filing view: %v", err)
@@ -432,10 +437,13 @@ func writeParsedFixture(t *testing.T, root string, testCase expectedCoverageCase
 	if err != nil {
 		t.Fatalf("open analysis database: %v", err)
 	}
+
 	if err := analysis.SaveFilingView(t.Context(), view); err != nil {
 		_ = analysis.Close()
+
 		t.Fatalf("save filing view: %v", err)
 	}
+
 	if err := analysis.Close(); err != nil {
 		t.Fatalf("close analysis database: %v", err)
 	}

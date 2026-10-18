@@ -68,6 +68,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
+// RunOnce performs a single polling cycle: it fetches the latest events,
+// processes dead letters, deduplicates the events, and emits the new ones.
 func (w *Worker) RunOnce(ctx context.Context) error {
 	logger := ctxlog.FromContext(ctx)
 	logger.Debug("polling cycle started")

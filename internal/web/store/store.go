@@ -49,8 +49,10 @@ type JSONDirectory struct {
 	parsedDir string
 }
 
-var _ Store = (*JSONDirectory)(nil)
-var _ RawStore = (*JSONDirectory)(nil)
+var (
+	_ Store    = (*JSONDirectory)(nil)
+	_ RawStore = (*JSONDirectory)(nil)
+)
 
 // NewJSONDirectory creates a Store backed by the generated JSON directory.
 func NewJSONDirectory(parsedDir string) *JSONDirectory {

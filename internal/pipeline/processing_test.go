@@ -24,7 +24,7 @@ func processingConfig(t *testing.T) ProcessingConfig {
 func TestProcessingSummaryBoundsBatchFailure(t *testing.T) {
 	var summary ProcessingSummary
 
-	for index := 0; index < 100; index++ {
+	for index := range 100 {
 		summary.record(t.Context(), fmt.Sprintf("filing-%03d.txt", index),
 			ProcessingResult{}, errors.New("database constraint failed"))
 	}
@@ -38,13 +38,16 @@ func TestProcessingSummaryBoundsBatchFailure(t *testing.T) {
 	if !strings.Contains(message, "100 filing(s) failed processing") {
 		t.Fatalf("unexpected summary: %s", message)
 	}
+
 	if !strings.Contains(message, "100 x database constraint failed") {
 		t.Fatalf("missing grouped failure: %s", message)
 	}
+
 	if !strings.Contains(message, "filing-000.txt") ||
 		!strings.Contains(message, "filing-004.txt") {
 		t.Fatalf("missing failure examples: %s", message)
 	}
+
 	if strings.Contains(message, "filing-005.txt") {
 		t.Fatalf("summary should be bounded: %s", message)
 	}
@@ -127,6 +130,7 @@ func TestProcessingInvalidatesStaleResults(t *testing.T) {
 			if err := os.WriteFile(first.Path, data, 0o600); err != nil {
 				t.Fatal(err)
 			}
+
 			if err := os.Remove(path + ".fingerprint.json"); err != nil {
 				t.Fatal(err)
 			}

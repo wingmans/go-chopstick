@@ -135,5 +135,6 @@ func (f *ParsedFiling) MatchesSource(ctx context.Context, path string) (bool, er
 	if f.SchemaVersion != ParsedSchemaVersion || f.ParserVersion != ParserVersion {
 		return false, nil
 	}
+
 	return SourceFingerprintMatches(ctx, path)
 }

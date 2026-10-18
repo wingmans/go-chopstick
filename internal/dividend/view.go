@@ -254,11 +254,13 @@ func filingData(parsedDir, filingsDir string, filing *edgar.ParsedFiling) ([]Eve
 			}
 			if context, ok := contexts[fact.ContextRef]; ok {
 				observation.ContextStart = context.StartDate
+
 				observation.ContextEnd = context.EndDate
 				if observation.ContextEnd == "" {
 					observation.ContextEnd = context.Instant
 				}
 			}
+
 			observations = append(observations, observation)
 		}
 	}
@@ -397,6 +399,7 @@ func dedupeObservations(view *View) {
 		}
 
 		seen[key] = struct{}{}
+
 		observations = append(observations, observation)
 	}
 

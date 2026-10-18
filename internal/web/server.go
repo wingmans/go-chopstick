@@ -365,6 +365,7 @@ func (s *Server) rawInspector(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
 	if err != nil {
 		s.writeError(w, err)
 
@@ -418,6 +419,7 @@ func (s *Server) rawDocument(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
 	if err != nil {
 		s.writeError(w, err)
 

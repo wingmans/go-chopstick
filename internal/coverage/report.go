@@ -225,11 +225,15 @@ func inspectFiling(
 	}
 
 	accession := accessionFromPath(record.FilingPath)
-	var sourcePath, parsedPath string
-	var sourceErr error
+
+	var (
+		sourcePath, parsedPath string
+		sourceErr              error
+	)
 	if config.FilingsDir != "" {
 		sourcePath, sourceErr = edgar.LocalFilingPath(config.FilingsDir, record.FilingPath)
 	}
+
 	if config.ParsedDir != "" {
 		parsedPath = parsedViewPath(config.ParsedDir, record.CIK, accession)
 	}
@@ -266,6 +270,7 @@ func inspectFiling(
 	view, err := analysis.LoadFilingView(ctx, record.CIK, accession)
 	if err == nil {
 		result.Status = "parsed"
+
 		result.Metrics, result.MissingMetric, result.MissingByTier, result.MissingRelatedEvidence = metricPresence(view, config.Taxonomy)
 		if parsedPath != "" {
 			result.MissingDimensionalEvidence = metricDimensionalEvidence(parsedSourcePath(parsedPath), result.MissingMetric)
@@ -273,6 +278,7 @@ func inspectFiling(
 
 		return result, nil
 	}
+
 	if !errors.Is(err, os.ErrNotExist) {
 		result.Status = "parsed_error"
 

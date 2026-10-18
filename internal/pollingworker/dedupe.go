@@ -84,6 +84,7 @@ func NewSQLiteStore(dbPath string) (*DedupeService, error) {
 	return NewDedupeService(dbPath)
 }
 
+// SaveDeadLetter persists a dead letter entry into the database.
 func (s *DedupeService) SaveDeadLetter(ctx context.Context, letter DeadLetter) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO polling_dead_letters (feed_url, title, link, raw_entry, reason)
@@ -98,6 +99,7 @@ func (s *DedupeService) IsDuplicate(accessionNumber string) (bool, error) {
 	return s.IsDuplicateContext(context.Background(), accessionNumber)
 }
 
+// IsDuplicate checks if the given accession number has already been processed.
 func (s *DedupeService) IsDuplicateContext(ctx context.Context, accessionNumber string) (bool, error) {
 	var exists bool
 
@@ -112,6 +114,7 @@ func (s *DedupeService) IsDuplicateContext(ctx context.Context, accessionNumber 
 }
 
 // SaveAccession records a newly emitted accession number atomically.
+// It ensures that the accession number is only saved if it hasn't been processed before.
 func (s *DedupeService) SaveAccession(event FilingEvent) error {
 	return s.SaveAccessionContext(context.Background(), event)
 }
@@ -135,6 +138,7 @@ func (s *DedupeService) SaveBatch(events []FilingEvent) ([]FilingEvent, error) {
 	return s.SaveBatchContext(context.Background(), events)
 }
 
+// SaveBatchContext performs bulk insertions inside a single transaction (essential for nightly master.zip).
 func (s *DedupeService) SaveBatchContext(ctx context.Context, events []FilingEvent) ([]FilingEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -186,6 +190,7 @@ func (s *DedupeService) FilterNew(ctx context.Context, events []FilingEvent) ([]
 	return s.SaveBatchContext(ctx, events)
 }
 
+// Close terminates the database connection associated with the deduplication service.
 func (s *DedupeService) Close() error {
 	return s.db.Close()
 }

@@ -87,6 +87,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 				if err != nil {
 					return result, err
 				}
+
 				if materialized {
 					result.Action = ActionReused
 					logProcessing(ctx, path, result, cfg, started)
@@ -162,6 +163,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	if err != nil {
 		return result, err
 	}
+
 	if err := edgar.WriteSourceFingerprint(path); err != nil {
 		return result, err
 	}
@@ -302,6 +304,7 @@ func reusableFiling(ctx context.Context, destination, source string,
 	if err != nil {
 		return missing, false, err
 	}
+
 	if !matches {
 		return missing, false, nil
 	}
@@ -469,7 +472,9 @@ func (s *ProcessingSummary) failure() error {
 		for failure, count := range s.failures {
 			classes = append(classes, fmt.Sprintf("%d x %s", count, failure))
 		}
+
 		sort.Strings(classes)
+
 		if s.other > 0 {
 			classes = append(classes, fmt.Sprintf("%d x other failures", s.other))
 		}

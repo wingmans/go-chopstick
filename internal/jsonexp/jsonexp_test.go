@@ -93,11 +93,13 @@ func benchmarkDecoder(
 	}
 
 	b.ReportAllocs()
+
 	for b.Loop() {
 		filing, err := load(path)
 		if err != nil {
 			b.Fatal(err)
 		}
+
 		if filing.Metadata.Accession == "" {
 			b.Fatal("decoded filing has no accession")
 		}
@@ -117,6 +119,7 @@ func BenchmarkParsedFilingEncode(b *testing.B) {
 
 	b.Run("current-indented", func(b *testing.B) {
 		b.ReportAllocs()
+
 		for b.Loop() {
 			if err := encodeCurrent(b, filing, true); err != nil {
 				b.Fatal(err)
@@ -125,6 +128,7 @@ func BenchmarkParsedFilingEncode(b *testing.B) {
 	})
 	b.Run("current-compact", func(b *testing.B) {
 		b.ReportAllocs()
+
 		for b.Loop() {
 			if err := encodeCurrent(b, filing, false); err != nil {
 				b.Fatal(err)
@@ -133,6 +137,7 @@ func BenchmarkParsedFilingEncode(b *testing.B) {
 	})
 	b.Run("jsonv2-compact", func(b *testing.B) {
 		b.ReportAllocs()
+
 		for b.Loop() {
 			if err := jsonv2.MarshalWrite(io.Discard, filing); err != nil {
 				b.Fatal(err)
@@ -147,6 +152,7 @@ func encodeCurrent(b *testing.B, filing *parser.ParsedFiling, indented bool) err
 	// Indentation is kept as a separate case because the current artifacts are
 	// human-readable, while compact output may be a cheap storage optimization.
 	b.Helper()
+
 	encoder := json.NewEncoder(io.Discard)
 	if indented {
 		encoder.SetIndent("", "  ")
@@ -160,20 +166,24 @@ func BenchmarkSourceFingerprint(b *testing.B) {
 	// loading filing.json altogether. Use a temporary source and sidecar so
 	// this benchmark does not depend on checkout timestamps.
 	directory := b.TempDir()
+
 	source := filepath.Join(directory, "filing.txt")
 	if err := os.WriteFile(source, []byte("raw filing fixture\n"), 0o600); err != nil {
 		b.Fatal(err)
 	}
+
 	if err := parser.WriteSourceFingerprint(source); err != nil {
 		b.Fatal(err)
 	}
 
 	b.ReportAllocs()
+
 	for b.Loop() {
 		matches, err := parser.SourceFingerprintMatches(context.Background(), source)
 		if err != nil {
 			b.Fatal(err)
 		}
+
 		if !matches {
 			b.Fatal("source fingerprint did not match")
 		}
@@ -201,7 +211,7 @@ func loadCurrent(path string) (*parser.ParsedFiling, error) {
 	return &filing, nil
 }
 
-// loadCurrentBuffered loads a ParsedFiling from the given path using the current
+// loadCurrentBuffered loads a ParsedFiling from the given path using the current.
 func loadCurrentBuffered(path string) (*parser.ParsedFiling, error) {
 	// This case tests whether adding an explicit large buffer improves the
 	// current decoder. The standard decoder already buffers the file itself.
@@ -212,6 +222,7 @@ func loadCurrentBuffered(path string) (*parser.ParsedFiling, error) {
 	defer func() { _ = file.Close() }()
 
 	var filing parser.ParsedFiling
+
 	reader := bufio.NewReaderSize(file, 256*1024)
 	if err := json.NewDecoder(reader).Decode(&filing); err != nil {
 		return nil, err

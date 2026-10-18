@@ -17,8 +17,10 @@ type SQLiteStore struct {
 	views *analysisstore.Store
 }
 
-var _ Store = (*SQLiteStore)(nil)
-var _ RawStore = (*SQLiteStore)(nil)
+var (
+	_ Store    = (*SQLiteStore)(nil)
+	_ RawStore = (*SQLiteStore)(nil)
+)
 
 // NewSQLiteStore opens the analysis database used by the web application.
 func NewSQLiteStore(parsedDir, databasePath string) (*SQLiteStore, error) {

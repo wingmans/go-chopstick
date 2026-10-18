@@ -30,6 +30,7 @@ func WriteSourceFingerprint(source string) error {
 	}
 
 	path := FingerprintPath(source)
+
 	temporary, err := os.CreateTemp(filepath.Dir(path), ".fingerprint-*.part")
 	if err != nil {
 		return fmt.Errorf("create source fingerprint: %w", err)
@@ -44,12 +45,15 @@ func WriteSourceFingerprint(source string) error {
 	if err := json.NewEncoder(temporary).Encode(fingerprint); err != nil {
 		return fmt.Errorf("encode source fingerprint: %w", err)
 	}
+
 	if err := temporary.Sync(); err != nil {
 		return fmt.Errorf("sync source fingerprint: %w", err)
 	}
+
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close source fingerprint: %w", err)
 	}
+
 	if err := os.Rename(temporaryPath, path); err != nil {
 		return fmt.Errorf("store source fingerprint: %w", err)
 	}
@@ -72,6 +76,7 @@ func SourceFingerprintMatches(ctx context.Context, source string) (bool, error) 
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
+
 	if err != nil {
 		return false, fmt.Errorf("open source fingerprint: %w", err)
 	}

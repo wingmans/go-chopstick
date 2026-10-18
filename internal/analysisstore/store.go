@@ -151,20 +151,26 @@ func (s *Store) migrateDividendObservations(ctx context.Context) error {
 	defer func() { _ = rows.Close() }()
 
 	var hasObservationID bool
+
 	for rows.Next() {
-		var cid, notNull, primaryKey int
-		var name, columnType, defaultValue sql.NullString
+		var (
+			cid, notNull, primaryKey       int
+			name, columnType, defaultValue sql.NullString
+		)
 		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue,
 			&primaryKey); err != nil {
 			return fmt.Errorf("read dividend observations schema: %w", err)
 		}
+
 		if name.Valid && name.String == "observation_id" {
 			hasObservationID = true
 		}
 	}
+
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate dividend observations schema: %w", err)
 	}
+
 	if hasObservationID {
 		return nil
 	}
@@ -179,10 +185,12 @@ func (s *Store) migrateDividendObservations(ctx context.Context) error {
 		dividend_observations_period`); err != nil {
 		return fmt.Errorf("drop dividend observation index: %w", err)
 	}
+
 	if _, err := tx.ExecContext(ctx, `ALTER TABLE dividend_observations
 		RENAME TO dividend_observations_v1`); err != nil {
 		return fmt.Errorf("rename dividend observations: %w", err)
 	}
+
 	if _, err := tx.ExecContext(ctx, `CREATE TABLE dividend_observations (
 		observation_id TEXT PRIMARY KEY,
 		cik TEXT NOT NULL,
@@ -207,17 +215,22 @@ func (s *Store) migrateDividendObservations(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read legacy dividend observations: %w", err)
 	}
+
 	for legacyRows.Next() {
-		var cik string
-		var observation dividendview.Observation
-		var payload []byte
+		var (
+			cik         string
+			observation dividendview.Observation
+			payload     []byte
+		)
 		if err := legacyRows.Scan(&cik, &observation.Kind,
 			&observation.Period, &observation.Accession, &observation.Value,
 			&observation.Unit, &observation.FormType, &observation.FilingDate,
 			&payload); err != nil {
 			_ = legacyRows.Close()
+
 			return fmt.Errorf("scan legacy dividend observation: %w", err)
 		}
+
 		if _, err := tx.ExecContext(ctx, `INSERT INTO dividend_observations
 			(observation_id, cik, kind, period, accession, value, unit,
 			 form_type, filing_date, payload)
@@ -226,18 +239,23 @@ func (s *Store) migrateDividendObservations(ctx context.Context) error {
 			observation.Accession, observation.Value, nullString(observation.Unit),
 			observation.FormType, observation.FilingDate, payload); err != nil {
 			_ = legacyRows.Close()
+
 			return fmt.Errorf("copy legacy dividend observation: %w", err)
 		}
 	}
+
 	if err := legacyRows.Err(); err != nil {
 		_ = legacyRows.Close()
+
 		return fmt.Errorf("iterate legacy dividend observations: %w", err)
 	}
+
 	_ = legacyRows.Close()
 
 	if _, err := tx.ExecContext(ctx, `DROP TABLE dividend_observations_v1`); err != nil {
 		return fmt.Errorf("drop legacy dividend observations: %w", err)
 	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit dividend observation migration: %w", err)
 	}
@@ -291,6 +309,7 @@ func (s *Store) HasFilingView(ctx context.Context, cik, accession string) (bool,
 	cik = canonicalCIK(cik)
 
 	var exists int
+
 	err := s.db.QueryRowContext(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM filing_views WHERE cik = ? AND accession = ?
@@ -308,12 +327,14 @@ func (s *Store) HasSuccessfulFilingView(ctx context.Context, cik, accession stri
 	cik = canonicalCIK(cik)
 
 	var status string
+
 	err := s.db.QueryRowContext(ctx, `
 		SELECT status FROM filing_views WHERE cik = ? AND accession = ?`,
 		cik, accession).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
+
 	if err != nil {
 		return false, fmt.Errorf("check filing view status: %w", err)
 	}

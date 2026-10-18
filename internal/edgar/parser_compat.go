@@ -42,17 +42,20 @@ func ParseSubmission(ctx context.Context, path string) (*ParsedFiling, error) {
 }
 
 func ParseSubmissionSource(ctx context.Context,
-	source SubmissionSource) (*ParsedFiling, error) {
+	source SubmissionSource,
+) (*ParsedFiling, error) {
 	return parser.ParseSubmissionSource(ctx, source)
 }
 
 func ReadSubmissionMetadata(ctx context.Context,
-	path string) (FilingMetadata, error) {
+	path string,
+) (FilingMetadata, error) {
 	return parser.ReadSubmissionMetadata(ctx, path)
 }
 
 func ReadSubmissionMetadataSource(ctx context.Context,
-	source SubmissionSource) (FilingMetadata, error) {
+	source SubmissionSource,
+) (FilingMetadata, error) {
 	return parser.ReadSubmissionMetadataSource(ctx, source)
 }
 
