@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
+	"wingman.com/fetch-ecb/internal/eventbus"
 	pw "wingman.com/fetch-ecb/internal/pollingworker"
 )
 
@@ -17,6 +18,7 @@ func main() {
 	interval := flag.Duration("interval", time.Hour, "poll interval")
 	dbPath := flag.String("db-path", "./var/polling.db", "sqlite db path")
 	userAgent := flag.String("user-agent", "", "SEC user-agent")
+	natsURL := flag.String("nats-url", eventbus.DefaultURL, "NATS server URL")
 
 	flag.Parse()
 
@@ -33,14 +35,24 @@ func main() {
 	ctx = ctxlog.WithLogger(ctx, logger)
 	logger.Debug("polling service starting", "interval", interval.String(), "db_path", *dbPath)
 
+	bus, err := eventbus.Connect(*natsURL)
+	if err != nil {
+		stop()
+
+		log.Fatal(err)
+	}
+	defer func() { _ = bus.Close() }()
+
 	if err := pw.Run(ctx, pw.ServiceConfig{
 		Interval:  *interval,
 		DBPath:    *dbPath,
 		UserAgent: *userAgent,
+		Publisher: bus,
 	}); err != nil {
 		stop()
+		log.Printf("polling service failed: %v", err)
 
-		log.Fatal(err)
+		return
 	}
 
 	stop()

@@ -80,6 +80,7 @@ func SourceFingerprintMatches(ctx context.Context, source string) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("open source fingerprint: %w", err)
 	}
+
 	defer func() { _ = file.Close() }()
 
 	var fingerprint SourceFingerprint

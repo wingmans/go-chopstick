@@ -24,7 +24,7 @@ import (
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
-//go:embed templates/*.html assets/chopstick.svg assets/filingweb.css assets/htmx-4.0.0.min.js
+//go:embed templates/*.html assets/chopstick.svg assets/filingweb.css assets/news.css assets/htmx-4.0.0.min.js
 var templateFiles embed.FS
 
 type Server struct {
@@ -67,9 +67,10 @@ func NewConfiguredServerWithDB(parsedDir, databasePath, setDir, setName string, 
 		rawStore: store,
 		logger:   logger,
 		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
-			"formatFact": formatFactValue,
-			"add":        add,
-			"mul":        mul,
+			"formatFact":     formatFactValue,
+			"shortAccession": shortAccession,
+			"add":            add,
+			"mul":            mul,
 		}).ParseFS(templateFiles, "templates/*.html")),
 		setName:     setName,
 		setAsOf:     "",

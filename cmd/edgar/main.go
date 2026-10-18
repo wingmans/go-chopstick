@@ -39,6 +39,7 @@ const (
 
 type appConfig struct {
 	command string
+	events  eventCommandConfig
 	index   edgar.Config
 	parse   struct {
 		files      stringList
@@ -187,6 +188,8 @@ func run(ctx context.Context, args []string) error {
 	var commandErr error
 
 	switch cfg.command {
+	case "atom", "batch", "download", "process", "news", "run":
+		commandErr = runEventCommand(ctx, cfg.command, cfg.events, logger)
 	case parseCommand:
 		commandErr = runParse(ctx, cfg)
 	case "index":
@@ -302,6 +305,8 @@ func parseConfig(args []string) (appConfig, error) {
 	}
 
 	switch args[0] {
+	case "atom", "batch", "download", "process", "news", "run":
+		return parseEventCommandConfig(args[0], args[1:])
 	case parseCommand:
 		return parseSubmissionConfig(args[1:])
 	case "index":
@@ -938,6 +943,12 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "Usage: edgar <command> [options]")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
+	fmt.Fprintln(os.Stdout, "  atom              discover current filings from SEC Atom")
+	fmt.Fprintln(os.Stdout, "  batch             discover filings from a local master index")
+	fmt.Fprintln(os.Stdout, "  download          filings from discovery events")
+	fmt.Fprintln(os.Stdout, "  process           parse downloaded filings and aggregate data")
+	fmt.Fprintln(os.Stdout, "  news              serve the stream-backed EDGAR news page")
+	fmt.Fprintln(os.Stdout, "  run               atom, download, process, and news")
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")

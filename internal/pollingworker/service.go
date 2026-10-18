@@ -7,15 +7,21 @@ import (
 	"time"
 
 	"wingman.com/fetch-ecb/internal/ctxlog"
+	"wingman.com/fetch-ecb/internal/eventbus"
 )
 
 type ServiceConfig struct {
 	Interval  time.Duration
 	DBPath    string
 	UserAgent string
+	Publisher eventbus.Publisher
 }
 
 func Run(ctx context.Context, cfg ServiceConfig) error {
+	if cfg.Interval <= 0 {
+		return errors.New("poll interval must be positive")
+	}
+
 	logger := ctxlog.FromContext(ctx)
 	out := make(chan FilingEvent, 256)
 
@@ -28,11 +34,41 @@ func Run(ctx context.Context, cfg ServiceConfig) error {
 	defer func() { _ = store.Close() }()
 
 	worker := NewWorker(NewSECFetcher(cfg.UserAgent), store, out, cfg.Interval)
-	if err := worker.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	if err := runCycle(ctx, worker, store, cfg.Publisher); err != nil {
+		logger.Warn("polling cycle failed", "error", err)
+	}
+
+	ticker := time.NewTicker(cfg.Interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				return ctx.Err()
+			}
+
+			return nil
+		case <-ticker.C:
+			if err := runCycle(ctx, worker, store, cfg.Publisher); err != nil {
+				logger.Warn("polling cycle failed", "error", err)
+			}
+		}
+	}
+}
+
+func runCycle(ctx context.Context, worker *Worker, store *DedupeService,
+	publisher eventbus.Publisher,
+) error {
+	if err := store.PublishPending(ctx, publisher); err != nil {
 		return err
 	}
 
-	return nil
+	if err := worker.RunOnce(ctx); err != nil {
+		return err
+	}
+
+	return store.PublishPending(ctx, publisher)
 }
 
 func emitLogs(ctx context.Context, logger *slog.Logger, out <-chan FilingEvent) {

@@ -1,0 +1,48 @@
+{{define "news-page"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EDGAR news</title>
+  <link rel="stylesheet" href="/assets/news.css">
+  <script src="/assets/htmx.min.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><a href="/">EDGAR news</a><span>filings as discovered</span></header>
+    <form method="get" action="/" hx-get="/" hx-target="#feed"
+      hx-push-url="true" hx-trigger="change delay:200ms, submit">
+      <label>Form <input name="form" value="{{.Filter.FormType}}"
+        placeholder="10-K"></label>
+      <label>CIK <input name="cik" value="{{.Filter.CIK}}"
+        inputmode="numeric"></label>
+      <label>Filed from <input type="date" name="from"
+        value="{{.Filter.From}}"></label>
+      <label>through <input type="date" name="to"
+        value="{{.Filter.To}}"></label>
+      <button type="submit">Filter</button>
+    </form>
+    {{template "news-feed" .}}
+  </main>
+</body>
+</html>{{end}}
+
+{{define "news-feed"}}<section id="feed" aria-live="polite">
+  {{if .Items}}
+  <ol>
+    {{range .Items}}
+    <li>
+      <div class="title">
+        <a href="{{.FilingURL}}">{{if .CompanyName}}{{.CompanyName}}
+          {{else}}CIK {{.CIK}}{{end}}</a>
+        <span class="form">{{.FormType}}</span>
+      </div>
+      <div class="meta">
+        filed {{.FilingDate}} · CIK {{.CIK}} ·
+        {{shortAccession .AccessionNumber}} · {{.SourceFeed}}
+      </div>
+    </li>
+    {{end}}
+  </ol>
+  {{else}}<p class="empty">No filings match these filters.</p>{{end}}
+</section>{{end}}

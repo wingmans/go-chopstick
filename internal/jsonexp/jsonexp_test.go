@@ -59,6 +59,7 @@ func BenchmarkParsedFilingDecode(b *testing.B) {
 	// Each iteration opens and decodes the file. This intentionally measures
 	// the operation that matters when a parser artifact must be loaded, rather
 	// than measuring only an in-memory decode.
+	b.Helper()
 	benchDecode(b, fixturePath)
 	benchDecode(b, largePath)
 }
