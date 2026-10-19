@@ -1,8 +1,25 @@
-.PHONY: help deps nats-dev nats-start nats-stop nats-status nats-reset build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-analysis-data build-polling run-polling test-polling
+.PHONY: help env deps nats-dev nats-start nats-stop nats-status nats-reset doctor doctor-verbose status errors retry-download retry-process index discover backfill dev logs logs-errors logs-download logs-process build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-analysis-data build-polling run-polling test-polling
 
 .DEFAULT_GOAL := help
 
 BIN_DIR := bin
+
+-include .env
+
+export EDGAR_SET
+export EDGAR_FROM_YEAR
+export EDGAR_NATS_URL
+export EDGAR_USER_AGENT
+export EDGAR_BASE_URL
+export LOGLEVEL
+
+ifneq ($(strip $(SET)),)
+EDGAR_SET := $(SET)
+endif
+
+ifneq ($(strip $(FROM_YEAR)),)
+EDGAR_FROM_YEAR := $(FROM_YEAR)
+endif
 
 help:
 	@printf '%s\n' \
@@ -10,12 +27,27 @@ help:
 		'Available commands:' \
 		'' \
 		'  help                    Display this command list' \
+		'  env                     Create .env from the example if missing' \
 		'  deps                    Install project-local development tools' \
 		'  nats-dev                Alias for nats-start' \
 		'  nats-start              Start the project-local NATS server' \
 		'  nats-stop               Stop the project-local NATS server' \
 		'  nats-status             Show the project-local NATS server status' \
 		'  nats-reset              Remove local NATS JetStream data' \
+		'  doctor                  Validate pipeline dependencies' \
+		'  doctor-verbose          Validate and show resolved configuration' \
+		'  status                  Show pipeline state and NATS backlogs' \
+		'  errors                  Show unresolved pipeline failures' \
+		'  retry-download          Requeue failed downloads' \
+		'  retry-process           Requeue failed processing work' \
+		'  index                   Download and stitch SEC indexes' \
+		'  discover                Publish the configured filing scope' \
+		'  backfill                Run index through processing' \
+		'  dev                     Run the modular monolith in the foreground' \
+		'  logs                    Follow the development log' \
+		'  logs-errors             Follow warnings and errors' \
+		'  logs-download           Follow download-role messages' \
+		'  logs-process            Follow process-role messages' \
 		'  build                   Build all command binaries' \
 		'  docs-pdf                Build one PDF from the documentation chapters' \
 		'  lint                    Run golangci-lint with auto-fixes' \
@@ -35,6 +67,9 @@ help:
 deps:
 	bash scripts/install-tools.sh
 
+env:
+	@bash -c '[[ -f .env ]] && echo ".env already exists" || { cp .env.example .env && echo "created .env"; }'
+
 nats-dev: nats-start
 
 nats-start:
@@ -48,6 +83,50 @@ nats-status:
 
 nats-reset:
 	bash scripts/nats-dev.sh reset
+
+doctor:
+	go run ./cmd/edgar doctor
+
+doctor-verbose:
+	go run ./cmd/edgar doctor --verbose
+
+status:
+	go run ./cmd/edgar status
+
+errors:
+	go run ./cmd/edgar errors
+
+retry-download:
+	go run ./cmd/edgar retry --stage download
+
+retry-process:
+	go run ./cmd/edgar retry --stage process
+
+index:
+	go run ./cmd/edgar index
+
+discover:
+	go run ./cmd/edgar discover
+
+backfill:
+	mkdir -p data/logs
+	bash -o pipefail -c 'go run ./cmd/edgar backfill 2>&1 | tee -a data/logs/edgar.log'
+
+dev: nats-start
+	mkdir -p data/logs
+	bash -o pipefail -c 'go run ./cmd/edgar run 2>&1 | tee -a data/logs/edgar.log'
+
+logs:
+	tail -F data/logs/edgar.log
+
+logs-errors:
+	tail -F data/logs/edgar.log | rg --line-buffered 'WRN|ERR'
+
+logs-download:
+	tail -F data/logs/edgar.log | rg --line-buffered 'role=download'
+
+logs-process:
+	tail -F data/logs/edgar.log | rg --line-buffered 'role=process'
 
 build:
 	mkdir -p $(BIN_DIR)

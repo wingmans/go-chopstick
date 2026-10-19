@@ -15,7 +15,7 @@ import (
 	"wingman.com/fetch-ecb/internal/pollingworker"
 )
 
-const durableName = "edgar-news-v1"
+const DurableName = "edgar-news-v1"
 
 // Consume maintains the disposable news database from discovery events.
 func Consume(ctx context.Context, bus *eventbus.NATS, store *Store,
@@ -23,14 +23,14 @@ func Consume(ctx context.Context, bus *eventbus.NATS, store *Store,
 ) error {
 	js := bus.JetStream()
 	if replay {
-		err := js.DeleteConsumer(eventbus.StreamName, durableName)
+		err := js.DeleteConsumer(eventbus.StreamName, DurableName)
 		if err != nil && !errors.Is(err, nats.ErrConsumerNotFound) {
 			return fmt.Errorf("reset news consumer: %w", err)
 		}
 	}
 
 	subscription, err := js.PullSubscribe(
-		eventbus.DiscoverySubject+".>", durableName,
+		eventbus.DiscoverySubject+".>", DurableName,
 		nats.BindStream(eventbus.StreamName),
 		nats.ManualAck(),
 		nats.AckExplicit(),

@@ -32,16 +32,21 @@ const defaultUserAgent = "wingman paul@wingmen.io"
 const (
 	edgarUserAgentEnv = "EDGAR_USER_AGENT"
 	edgarBaseURLEnv   = "EDGAR_BASE_URL"
+	edgarNATSURLEnv   = "EDGAR_NATS_URL"
+	edgarSetEnv       = "EDGAR_SET"
+	edgarFromYearEnv  = "EDGAR_FROM_YEAR"
 	parseCommand      = "parse"
 	noopHelpFlags     = "-n, --noop"
 	defaultSetDir     = "./data/sets"
 )
 
 type appConfig struct {
-	command string
-	events  eventCommandConfig
-	index   edgar.Config
-	parse   struct {
+	command    string
+	events     eventCommandConfig
+	backfill   backfillConfig
+	operations operationsConfig
+	index      edgar.Config
+	parse      struct {
 		files      stringList
 		formTypes  stringList
 		masterPath string
@@ -180,16 +185,34 @@ func run(ctx context.Context, args []string) error {
 	}
 	logger := ctxlog.FromContext(ctx)
 
-	started := time.Now()
-	defer func() {
-		logger.Info("finished EDGAR command", "command", cfg.command, "duration_ms", time.Since(started).Milliseconds())
-	}()
+	if cfg.command != "doctor" && cfg.command != "status" &&
+		cfg.command != "errors" && cfg.command != "retry" {
+		started := time.Now()
+		defer func() {
+			logger.Info("finished EDGAR command", "command", cfg.command,
+				"duration_ms", time.Since(started).Milliseconds())
+		}()
+	}
 
 	var commandErr error
 
 	switch cfg.command {
-	case "atom", "batch", "download", "process", "news", "run":
+	case "atom", "batch", "discover", "download", "process", "news", "run":
+		if cfg.command == "batch" {
+			logger.Warn("batch is deprecated; use discover")
+		}
+
 		commandErr = runEventCommand(ctx, cfg.command, cfg.events, logger)
+	case "backfill":
+		commandErr = runBackfill(ctx, client, cfg.backfill, logger)
+	case "doctor":
+		commandErr = runDoctor(ctx, cfg.operations)
+	case "status":
+		commandErr = runStatus(ctx, cfg.operations)
+	case "errors":
+		commandErr = runErrors(ctx, cfg.operations)
+	case "retry":
+		commandErr = runRetry(ctx, cfg.operations)
 	case parseCommand:
 		commandErr = runParse(ctx, cfg)
 	case "index":
@@ -305,8 +328,12 @@ func parseConfig(args []string) (appConfig, error) {
 	}
 
 	switch args[0] {
-	case "atom", "batch", "download", "process", "news", "run":
+	case "atom", "batch", "discover", "download", "process", "news", "run":
 		return parseEventCommandConfig(args[0], args[1:])
+	case "backfill":
+		return parseBackfillConfig(args[1:])
+	case "doctor", "status", "errors", "retry":
+		return parseOperationsConfig(args[0], args[1:])
 	case parseCommand:
 		return parseSubmissionConfig(args[1:])
 	case "index":
@@ -784,12 +811,17 @@ func applyYearSelection(filter *edgar.IndexFilter, year string, fromYear, toYear
 func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
+	fromYear, err := environmentFromYear(edgar.EarliestPipelineYear)
+	if err != nil {
+		return appConfig{}, err
+	}
+
 	cfg.command = "index"
 	cfg.index = edgar.Config{
 		Directory:     "./data/cache/indexes/quarterly",
 		ZipDirectory:  "./data/cache/index-zips",
 		MasterPath:    "./data/cache/indexes/master.tsv",
-		SinceYear:     edgar.EarliestPipelineYear,
+		SinceYear:     fromYear,
 		UserAgent:     environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		RefreshLatest: false,
 		Stitch:        true,
@@ -940,12 +972,32 @@ func environmentValue(name, fallback string) string {
 	return fallback
 }
 
+func environmentFromYear(fallback int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(edgarFromYearEnv))
+	if raw == "" {
+		return fallback, nil
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer", edgarFromYearEnv)
+	}
+
+	return value, nil
+}
+
 func printUsage() {
 	fmt.Fprintln(os.Stdout, "Usage: edgar <command> [options]")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
 	fmt.Fprintln(os.Stdout, "  atom              discover current filings from SEC Atom")
-	fmt.Fprintln(os.Stdout, "  batch             discover filings from a local master index")
+	fmt.Fprintln(os.Stdout, "  discover          select filings from a local master index")
+	fmt.Fprintln(os.Stdout, "  batch             deprecated alias for discover")
+	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
+	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")
+	fmt.Fprintln(os.Stdout, "  status            summarize pipeline state and backlogs")
+	fmt.Fprintln(os.Stdout, "  errors            list unresolved pipeline failures")
+	fmt.Fprintln(os.Stdout, "  retry             requeue unresolved pipeline failures")
 	fmt.Fprintln(os.Stdout, "  download          filings from discovery events")
 	fmt.Fprintln(os.Stdout, "  process           parse downloaded filings and aggregate data")
 	fmt.Fprintln(os.Stdout, "  news              serve the stream-backed EDGAR news page")

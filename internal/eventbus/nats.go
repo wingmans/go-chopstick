@@ -44,6 +44,23 @@ type NATS struct {
 
 // Connect opens a NATS connection and ensures the EDGAR event stream exists.
 func Connect(url string) (*NATS, error) {
+	bus, err := Inspect(url)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := bus.ensureStream(); err != nil {
+		_ = bus.Close()
+
+		return nil, err
+	}
+
+	return bus, nil
+}
+
+// Inspect opens a NATS connection without creating or changing JetStream
+// resources. Operational commands use it for read-only checks.
+func Inspect(url string) (*NATS, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, errors.New("NATS URL is required")
 	}
@@ -64,14 +81,7 @@ func Connect(url string) (*NATS, error) {
 		return nil, fmt.Errorf("open JetStream context: %w", err)
 	}
 
-	bus := &NATS{connection: connection, jetstream: jetstream}
-	if err := bus.ensureStream(); err != nil {
-		connection.Close()
-
-		return nil, err
-	}
-
-	return bus, nil
+	return &NATS{connection: connection, jetstream: jetstream}, nil
 }
 
 //nolint:funcorder // Kept beside Connect, which invokes it during construction.

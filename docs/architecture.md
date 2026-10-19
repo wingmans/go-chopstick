@@ -64,6 +64,10 @@ from cached raw ZIP files, downloads only missing filings, and recreates
 The `edgar` executable owns the operational boundaries:
 
 - `index` extracts and stitches index data;
+- `discover` selects index records and publishes durable work;
+- `download` and `process` consume their complete assigned queues;
+- `backfill` runs those finite stages with one explicit selection;
+- `doctor`, `status`, and `errors` expose operational state;
 - `filings` downloads and processes selected filings;
 - `parse` processes already available raw filings;
 - `taxonomy` and `coverage` run data-quality checks;
@@ -73,9 +77,14 @@ The commands are intentionally usable as one local executable today. Future
 service processes should preserve these stage contracts and database
 identities rather than introduce separate feature-specific databases.
 
-## Future event activity
+## Event activity
 
-Atom remains the low-latency trigger for ownership, insider-trade, dividend,
-and selected 8-K activity. The first implementation can persist activity in
-`analysis.db`. A later outbox or event publisher can push committed events to
-other consumers without changing the parser or web data model.
+Atom remains the low-latency discovery path and the stitched SEC index is the
+historical reconciliation path. Both persist an accession and outbox row in
+one SQLite transaction. JetStream carries the resulting discovery and
+downloaded events between serial, idempotent workers.
+
+Operational commands inspect SQLite and JetStream directly. They do not copy
+those values into a separate status database. Unresolved worker failures are
+kept in `polling.db`; detailed diagnostic output remains in the development
+log.

@@ -39,13 +39,15 @@ type eventCommandConfig struct {
 	fromYear         int
 	toYear           int
 	drain            bool
+	maxAttempts      int
 }
 
+//nolint:maintidx // The switch keeps each role's CLI flags visible together.
 func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 	formTypes := stringList{}
 	cfg := appConfig{command: command}
 	cfg.events = eventCommandConfig{
-		natsURL:          eventbus.DefaultURL,
+		natsURL:          environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
 		pollingDB:        "./data/polling.db",
 		newsDB:           "./data/feed.db",
 		filingsDirectory: edgar.DefaultFilingsDirectory,
@@ -56,6 +58,17 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		baseURL:          environmentValue(edgarBaseURLEnv, ""),
 		address:          "127.0.0.1:8081",
 		interval:         time.Minute,
+		setName:          environmentValue(edgarSetEnv, ""),
+		maxAttempts:      5,
+	}
+
+	if command == "batch" || command == "discover" {
+		fromYear, err := environmentFromYear(0)
+		if err != nil {
+			return appConfig{}, err
+		}
+
+		cfg.events.fromYear = fromYear
 	}
 
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
@@ -81,7 +94,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--user-agent <value>", "SEC user agent."},
 			helpOption{"--interval <duration>", "Atom polling interval."},
 		)
-	case "batch":
+	case "batch", "discover":
 		flags.StringVar(&cfg.events.pollingDB, "polling-db",
 			cfg.events.pollingDB, "polling and outbox database")
 		flags.StringVar(&cfg.events.masterPath, "master", cfg.events.masterPath,
@@ -110,6 +123,8 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--to-year <year>", "Last filing year."},
 		)
 	case "download":
+		flags.StringVar(&cfg.events.pollingDB, "polling-db",
+			cfg.events.pollingDB, "pipeline state database")
 		flags.StringVar(&cfg.events.filingsDirectory, "filings-dir",
 			cfg.events.filingsDirectory, "downloaded filing directory")
 		flags.StringVar(&cfg.events.userAgent, "user-agent",
@@ -118,14 +133,20 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			"SEC base URL override")
 		flags.BoolVar(&cfg.events.drain, "drain", false,
 			"exit after the current event backlog is empty")
+		flags.IntVar(&cfg.events.maxAttempts, "max-attempts",
+			cfg.events.maxAttempts, "attempts before work is marked failed")
 
 		options = append(options,
+			helpOption{"--polling-db <path>", "Pipeline state database."},
 			helpOption{"--filings-dir <path>", "Downloaded filing directory."},
 			helpOption{"--user-agent <value>", "SEC user agent."},
 			helpOption{"--base-url <url>", "SEC base URL override."},
 			helpOption{"--drain", "Exit after the current backlog is empty."},
+			helpOption{"--max-attempts <count>", "Attempts before work is marked failed."},
 		)
 	case "process":
+		flags.StringVar(&cfg.events.pollingDB, "polling-db",
+			cfg.events.pollingDB, "pipeline state database")
 		flags.StringVar(&cfg.events.filingsDirectory, "filings-dir",
 			cfg.events.filingsDirectory, "downloaded filing directory")
 		flags.StringVar(&cfg.events.parsedDirectory, "parsed-dir",
@@ -134,12 +155,16 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			cfg.events.analysisDB, "analysis database")
 		flags.BoolVar(&cfg.events.drain, "drain", false,
 			"exit after the current event backlog is empty")
+		flags.IntVar(&cfg.events.maxAttempts, "max-attempts",
+			cfg.events.maxAttempts, "attempts before work is marked failed")
 
 		options = append(options,
+			helpOption{"--polling-db <path>", "Pipeline state database."},
 			helpOption{"--filings-dir <path>", "Downloaded filing directory."},
 			helpOption{"--parsed-dir <path>", "Parsed filing directory."},
 			helpOption{"--analysis-db <path>", "Analysis database."},
 			helpOption{"--drain", "Exit after the current backlog is empty."},
+			helpOption{"--max-attempts <count>", "Attempts before work is marked failed."},
 		)
 	case "news":
 		flags.StringVar(&cfg.events.newsDB, "news-db", cfg.events.newsDB,
@@ -170,6 +195,8 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			"news HTTP listen address")
 		flags.DurationVar(&cfg.events.interval, "interval",
 			cfg.events.interval, "Atom polling interval")
+		flags.IntVar(&cfg.events.maxAttempts, "max-attempts",
+			cfg.events.maxAttempts, "attempts before work is marked failed")
 
 		options = append(options,
 			helpOption{"--polling-db <path>", "Accession and outbox database."},
@@ -181,6 +208,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--base-url <url>", "SEC base URL override."},
 			helpOption{"--address <host:port>", "News HTTP address."},
 			helpOption{"--interval <duration>", "Atom polling interval."},
+			helpOption{"--max-attempts <count>", "Attempts before work is marked failed."},
 		)
 	}
 
@@ -195,12 +223,21 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		return subcommandError(flags, errors.New("unexpected positional argument"))
 	}
 
-	if cfg.events.natsURL == "" || cfg.events.interval <= 0 {
+	if cfg.events.natsURL == "" || cfg.events.interval <= 0 ||
+		cfg.events.maxAttempts <= 0 {
 		return subcommandError(flags,
-			errors.New("--nats-url and a positive --interval are required"))
+			errors.New("--nats-url, --interval, and --max-attempts must be valid"))
 	}
 
-	if command == "batch" {
+	if command == "batch" || command == "discover" {
+		visited := map[string]bool{}
+
+		flags.Visit(func(value *flag.Flag) { visited[value.Name] = true })
+
+		if visited["year"] && !visited["from-year"] {
+			cfg.events.fromYear = 0
+		}
+
 		cfg.events.filter.FormTypes = formTypes
 
 		if err := applyConstituentSet(&cfg.events.filter,
@@ -239,6 +276,7 @@ func eventCommandDescription(command string) string {
 	return map[string]string{
 		"atom":     "Discover current SEC filings and publish durable events.",
 		"batch":    "Reconcile filing discoveries from a local master index.",
+		"discover": "Select filing discoveries from a local master index.",
 		"download": "Download files for discovery events, serially.",
 		"process":  "Parse downloaded filings and update aggregates, serially.",
 		"news":     "Serve a rebuildable filing news feed.",
@@ -257,6 +295,15 @@ func runEventCommand(ctx context.Context, command string,
 		return runRole(ctx, command, cfg, logger)
 	}
 
+	bootstrap, err := eventbus.Connect(cfg.natsURL)
+	if err != nil {
+		return err
+	}
+
+	if err := bootstrap.Close(); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -268,7 +315,7 @@ func runEventCommand(ctx context.Context, command string,
 		}()
 	}
 
-	err := <-errorsCh
+	err = <-errorsCh
 
 	cancel()
 
@@ -278,6 +325,8 @@ func runEventCommand(ctx context.Context, command string,
 func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 	logger *slog.Logger,
 ) error {
+	logger = logger.With("role", role)
+
 	bus, err := eventbus.Connect(cfg.natsURL)
 	if err != nil {
 		return err
@@ -292,21 +341,47 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 			UserAgent: cfg.userAgent,
 			Publisher: bus,
 		})
-	case "batch":
-		return runBatchDiscovery(ctx, bus, cfg)
+	case "batch", "discover":
+		return runBatchDiscovery(ctx, bus, cfg, logger)
 	case "download":
+		logger.Info("starting queue worker", "consumer",
+			eventworker.DownloadDurable, "selection", "all queued discoveries",
+			"drain", cfg.drain, "max_attempts", cfg.maxAttempts)
+
+		failures, err := pollingworker.NewDedupeServiceContext(ctx,
+			cfg.pollingDB)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = failures.Close() }()
+
 		return eventworker.Download(ctx, bus, eventworker.DownloadConfig{
-			Directory: cfg.filingsDirectory,
-			UserAgent: cfg.userAgent,
-			BaseURL:   cfg.baseURL,
-			Drain:     cfg.drain,
+			Directory:   cfg.filingsDirectory,
+			UserAgent:   cfg.userAgent,
+			BaseURL:     cfg.baseURL,
+			Drain:       cfg.drain,
+			MaxAttempts: cfg.maxAttempts,
+			Failures:    failures,
 		}, logger)
 	case "process":
+		logger.Info("starting queue worker", "consumer",
+			eventworker.ProcessDurable, "selection", "all queued downloads",
+			"drain", cfg.drain, "max_attempts", cfg.maxAttempts)
+
+		failures, err := pollingworker.NewDedupeServiceContext(ctx,
+			cfg.pollingDB)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = failures.Close() }()
+
 		return eventworker.Process(ctx, bus, eventworker.ProcessConfig{
 			FilingsDirectory: cfg.filingsDirectory,
 			ParsedDirectory:  cfg.parsedDirectory,
 			AnalysisDBPath:   cfg.analysisDB,
 			Drain:            cfg.drain,
+			MaxAttempts:      cfg.maxAttempts,
+			Failures:         failures,
 		}, logger)
 	case "news":
 		return runNews(ctx, bus, cfg, logger)
@@ -316,8 +391,12 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 }
 
 func runBatchDiscovery(ctx context.Context, bus *eventbus.NATS,
-	cfg eventCommandConfig,
+	cfg eventCommandConfig, logger *slog.Logger,
 ) error {
+	logger.Info("starting discovery", "set", cfg.setName,
+		"from_year", cfg.filter.FromYear, "to_year", cfg.filter.ToYear,
+		"form_types", cfg.filter.FormTypes, "master", cfg.masterPath)
+
 	file, err := os.Open(cfg.masterPath)
 	if err != nil {
 		return fmt.Errorf("open master index: %w", err)
@@ -332,22 +411,39 @@ func runBatchDiscovery(ctx context.Context, bus *eventbus.NATS,
 
 	reader := edgar.NewIndexReader(file, cfg.filter)
 	batch := make([]pollingworker.FilingEvent, 0, 1000)
-	flush := func() error {
+	selected := 0
+	discovered := 0
+	lastReport := time.Now()
+	flush := func(final bool) error {
 		if len(batch) > 0 {
-			if _, err := store.SaveBatchContext(ctx, batch); err != nil {
+			newEvents, err := store.SaveBatchContext(ctx, batch)
+			if err != nil {
 				return err
 			}
+
+			discovered += len(newEvents)
 
 			batch = batch[:0]
 		}
 
-		return store.PublishPending(ctx, bus)
+		if err := store.PublishPending(ctx, bus); err != nil {
+			return err
+		}
+
+		if final || time.Since(lastReport) >= 5*time.Second {
+			logger.Info("discovery progress", "selected", selected,
+				"new", discovered, "existing", selected-discovered)
+
+			lastReport = time.Now()
+		}
+
+		return nil
 	}
 
 	for {
 		record, err := reader.Next()
 		if errors.Is(err, io.EOF) {
-			return flush()
+			return flush(true)
 		}
 
 		if err != nil {
@@ -371,8 +467,10 @@ func runBatchDiscovery(ctx context.Context, bus *eventbus.NATS,
 			SourceFeed: "BATCH",
 			Timestamp:  time.Now().UTC(),
 		})
+		selected++
+
 		if len(batch) == cap(batch) {
-			if err := flush(); err != nil {
+			if err := flush(false); err != nil {
 				return err
 			}
 		}

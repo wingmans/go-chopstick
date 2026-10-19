@@ -101,6 +101,19 @@ func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService
 		attempts INTEGER NOT NULL DEFAULT 0,
 		last_error TEXT NOT NULL DEFAULT ''
 	);`
+	failuresQuery := `
+	CREATE TABLE IF NOT EXISTS work_failures (
+		stage TEXT NOT NULL,
+		accession_number TEXT NOT NULL,
+		subject TEXT NOT NULL,
+		payload BLOB NOT NULL,
+		attempts INTEGER NOT NULL DEFAULT 0,
+		first_failed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_failed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_error TEXT NOT NULL,
+		resolved_at DATETIME,
+		PRIMARY KEY (stage, accession_number)
+	);`
 
 	if _, err := db.ExecContext(ctx, query); err != nil {
 		_ = db.Close()
@@ -118,6 +131,12 @@ func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService
 		_ = db.Close()
 
 		return nil, fmt.Errorf("failed to create outbox schema: %w", err)
+	}
+
+	if _, err := db.ExecContext(ctx, failuresQuery); err != nil {
+		_ = db.Close()
+
+		return nil, fmt.Errorf("failed to create work-failure schema: %w", err)
 	}
 
 	return &DedupeService{db: db}, nil

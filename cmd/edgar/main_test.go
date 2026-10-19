@@ -17,6 +17,7 @@ import (
 func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 	t.Setenv(edgarUserAgentEnv, "")
 	t.Setenv(edgarBaseURLEnv, "")
+	t.Setenv(edgarFromYearEnv, "")
 
 	cfg, err := parseConfig([]string{"index"})
 	if err != nil {
@@ -78,6 +79,9 @@ func TestParseBatchConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
 }
 
 func TestParseBatchConfigDefaultsToPipelineBoundary(t *testing.T) {
+	t.Setenv(edgarFromYearEnv, "")
+	t.Setenv(edgarSetEnv, "")
+
 	cfg, err := parseConfig([]string{"batch"})
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
@@ -105,6 +109,78 @@ func TestParseEventWorkersSupportDrainMode(t *testing.T) {
 		if !cfg.events.drain {
 			t.Fatalf("%s did not enable drain mode", command)
 		}
+	}
+}
+
+func TestParseDiscoverAlias(t *testing.T) {
+	cfg, err := parseConfig([]string{"discover", "--from-year", "2022"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.command != "discover" || cfg.events.filter.FromYear != 2022 {
+		t.Fatalf("unexpected discover config: %+v", cfg)
+	}
+}
+
+func TestExplicitYearOverridesEnvironmentFromYear(t *testing.T) {
+	t.Setenv(edgarFromYearEnv, "2022")
+
+	cfg, err := parseConfig([]string{"discover", "--year", "2024"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.events.filter.Year != 2024 || cfg.events.filter.FromYear != 0 {
+		t.Fatalf("unexpected year selection: %+v", cfg.events.filter)
+	}
+}
+
+func TestParseBackfillUsesEnvironmentDefaults(t *testing.T) {
+	t.Chdir(filepath.Join("..", ".."))
+	t.Setenv(edgarSetEnv, "us-gaap")
+	t.Setenv(edgarFromYearEnv, "2022")
+	t.Setenv(edgarNATSURLEnv, "nats://example.test:4222")
+
+	cfg, err := parseConfig([]string{"backfill"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.backfill.setName != "us-gaap" || cfg.backfill.fromYear != 2022 ||
+		cfg.backfill.natsURL != "nats://example.test:4222" {
+		t.Fatalf("unexpected backfill config: %+v", cfg.backfill)
+	}
+}
+
+func TestParseDoctorVerbose(t *testing.T) {
+	cfg, err := parseConfig([]string{"doctor", "--verbose"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if !cfg.operations.verbose {
+		t.Fatal("doctor did not enable verbose output")
+	}
+}
+
+func TestParseRetryRequiresValidStage(t *testing.T) {
+	for _, args := range [][]string{
+		{"retry"},
+		{"retry", "--stage", "unknown"},
+	} {
+		if _, err := parseConfig(args); !errors.Is(err, flag.ErrHelp) {
+			t.Fatalf("parseConfig(%v) returned %v, want help", args, err)
+		}
+	}
+
+	cfg, err := parseConfig([]string{"retry", "--stage", "download"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.operations.stage != "download" {
+		t.Fatalf("unexpected retry stage %q", cfg.operations.stage)
 	}
 }
 

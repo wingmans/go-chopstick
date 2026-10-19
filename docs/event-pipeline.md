@@ -16,15 +16,17 @@ discovery outbox rows in one SQLite transaction. Publication happens after the
 commit and an outbox row is marked complete only after JetStream acknowledges
 it.
 
-The POC pipeline supports filings from 2016 onward. Index download and batch
-discovery enforce this boundary so a clean run cannot accidentally enqueue the
-less stable legacy formats. The raw submission path from the SEC master index
-is authoritative. HTML index paths are not synthesized or downloaded.
+The POC pipeline supports filings from 2016 onward. Index download and
+discovery enforce this boundary so a clean run cannot accidentally enqueue
+the less stable legacy formats. The raw submission path from the SEC master
+index is authoritative. HTML index paths are not synthesized or downloaded.
 
 JetStream delivery is at least once. Download and processing therefore retain
 their existing idempotent file and database checks. Consumers are serial for
-now. Subject suffixes route broad categories such as form type; filtering on
-CIK or date remains consumer-side.
+now. Subject suffixes route broad categories such as form type. Constituent
+set and filing-year selection happen during discovery, before work enters the
+stream. Download and process consume all work assigned to their durable
+consumers.
 
 The news service owns `feed.db`. It orders items by JetStream stream sequence,
 not by a locally generated timestamp. If `feed.db` is deleted, the next start
@@ -33,6 +35,17 @@ is replayed from the beginning.
 
 ## Development
 
+Copy the development configuration and provide your SEC contact address:
+
+```sh
+make env
+```
+
+Make reads `.env` and exports its documented settings to the application. CLI
+flags still override application defaults. The normal development scope uses
+`EDGAR_SET` and `EDGAR_FROM_YEAR`; the upper boundary is the current available
+data.
+
 Install the pinned NATS server binary into the git-ignored `.tools/bin`
 directory. This does not install a system-wide binary or service.
 
@@ -40,43 +53,76 @@ directory. This does not install a system-wide binary or service.
 make deps
 ```
 
-Start the file-backed development server:
+Check configuration and infrastructure without changing them:
 
 ```sh
-make nats-dev
+make doctor
+make doctor-verbose
 ```
 
-Run every continuous role in one process:
+Run a finite historical pipeline with the scope from `.env`:
 
 ```sh
-go run ./cmd/edgar run
+make backfill
 ```
 
-The roles can instead be inspected independently:
+The command retrieves and stitches indexes, discovers the selected filings,
+and drains download and processing work. Override the local defaults without
+editing `.env` when needed:
 
 ```sh
-go run ./cmd/edgar atom
-go run ./cmd/edgar download
-go run ./cmd/edgar process
-go run ./cmd/edgar news
+make backfill SET=us-gaap FROM_YEAR=2024
 ```
 
-Reconcile discoveries from the stitched index as a one-shot command. Batch
-selection supports CIK, constituent set, form type, and filing-year filters.
+Run all continuous roles in the foreground:
 
 ```sh
-go run ./cmd/edgar batch --set us-gaap --from-year 2022 --to-year 2026
+make dev
 ```
 
-Download and process the current backlog as separate, finite steps:
+`make dev` creates missing schemas, streams, and consumers through normal
+application startup. It preserves existing state and does not perform a
+historical backfill. Press `Ctrl-C` to stop the application; the project-local
+NATS server remains running.
+
+Inspect current state and unresolved failures from another terminal:
 
 ```sh
+make status
+make errors
+```
+
+Workers retry failed work five times before terminating that delivery and
+leaving a durable failure record in `polling.db`. Requeue failures explicitly:
+
+```sh
+make retry-download
+make retry-process
+```
+
+Normal logs include a progress summary every five seconds. `LOGLEVEL=debug`
+also shows individual work decisions. `make dev` and `make backfill` append
+their output to `data/logs/edgar.log`. Follow all output or a filtered view:
+
+```sh
+make logs
+make logs-errors
+make logs-download
+make logs-process
+```
+
+The explicit stages remain available for debugging. `batch` is a deprecated
+alias for `discover`.
+
+```sh
+make index
+make discover
 go run ./cmd/edgar download --drain
 go run ./cmd/edgar process --drain
 ```
 
-The news page listens on `http://127.0.0.1:8081` by default. Stop or reset the
-development server with:
+The news page listens on `http://127.0.0.1:8081` by default. Stop or reset
+the development server with:
 
 ```sh
 make nats-stop
