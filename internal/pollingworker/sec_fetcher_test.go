@@ -83,6 +83,16 @@ func TestParseAtomEntryExtractsSECAtomMetadata(t *testing.T) {
 	if event.FormType != "4" {
 		t.Fatalf("form type = %q", event.FormType)
 	}
+
+	wantPath := "edgar/data/2045034/000204503426000009/" +
+		"0002045034-26-000009.txt"
+	if event.FilingPath != wantPath {
+		t.Fatalf("filing path = %q, want %q", event.FilingPath, wantPath)
+	}
+
+	if event.IndexPath != "" {
+		t.Fatalf("index path should not be synthesized: %q", event.IndexPath)
+	}
 }
 
 func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {

@@ -2,63 +2,92 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-state_dir="${root_dir}/var/nats"
+nats_server="${root_dir}/.tools/bin/nats-server"
+state_dir="${root_dir}/data/nats"
 store_dir="${state_dir}/store"
 pid_file="${state_dir}/nats.pid"
 log_file="${state_dir}/nats.log"
+legacy_pid_file="${root_dir}/var/nats/nats.pid"
+
+running_pid() {
+  [[ -f "${pid_file}" ]] && kill -0 "$(<"${pid_file}")" 2>/dev/null && {
+    echo "$(<"${pid_file}")"
+    return
+  }
+
+  [[ -f "${legacy_pid_file}" ]] && \
+    kill -0 "$(<"${legacy_pid_file}")" 2>/dev/null && {
+      echo "$(<"${legacy_pid_file}")"
+      return
+    }
+
+  return 1
+}
 
 is_running() {
-  [[ -f "${pid_file}" ]] && kill -0 "$(<"${pid_file}")" 2>/dev/null
+  running_pid >/dev/null
 }
 
 start() {
-  if ! command -v nats-server >/dev/null 2>&1; then
-    echo "nats-server is not installed or is not on PATH" >&2
-    exit 1
-  fi
-  if is_running; then
-    echo "NATS is already running with PID $(<"${pid_file}")"
+  [[ -x "${nats_server}" ]] || {
+    echo "project-local nats-server is not installed" >&2
+    echo "run scripts/install-tools.sh first" >&2
+    return 1
+  }
+
+  pid="$(running_pid)" && {
+    echo "NATS is already running with PID ${pid}"
     return
-  fi
+  }
 
   mkdir -p "${store_dir}"
-  nats-server -js -sd "${store_dir}" -p 4222 -m 8222 \
+  "${nats_server}" -js -sd "${store_dir}" -p 4222 -m 8222 \
     >"${log_file}" 2>&1 &
   echo "$!" >"${pid_file}"
+
+  sleep 0.2
+  is_running || {
+    rm -f "${pid_file}"
+    echo "NATS failed to start; log: ${log_file}" >&2
+    tail -n 10 "${log_file}" >&2
+    return 1
+  }
+
   echo "NATS started; log: ${log_file}"
 }
 
 stop() {
-  if ! is_running; then
+  pid="$(running_pid)" || {
     rm -f "${pid_file}"
     echo "NATS is not running"
     return
-  fi
+  }
 
-  pid="$(<"${pid_file}")"
   kill "${pid}"
   wait "${pid}" 2>/dev/null || true
-  rm -f "${pid_file}"
+  rm -f "${pid_file}" "${legacy_pid_file}"
   echo "NATS stopped"
 }
 
 reset() {
-  if is_running; then
+  ! is_running || {
     echo "stop NATS before resetting its data" >&2
-    exit 1
-  fi
+    return 1
+  }
+
   rm -rf "${store_dir}"
   rm -f "${pid_file}" "${log_file}"
   echo "NATS development data removed"
 }
 
 status() {
-  if is_running; then
-    echo "NATS is running with PID $(<"${pid_file}")"
-  else
-    echo "NATS is not running"
-    exit 1
-  fi
+  pid="$(running_pid)" && {
+    echo "NATS is running with PID ${pid}"
+    return
+  }
+
+  echo "NATS is not running"
+  return 1
 }
 
 case "${1:-}" in

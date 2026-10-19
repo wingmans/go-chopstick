@@ -65,19 +65,19 @@ func TestFilingWorkflowDownloadsFiltersAndReuses(t *testing.T) {
 	})
 
 	first, err := ProcessFilings(t.Context(), &client, master, download, processing, filter)
-	if err != nil || first.Processed != 1 || first.Selected != 1 || requests != 2 {
+	if err != nil || first.Processed != 1 || first.Selected != 1 || requests != 1 {
 		t.Fatalf("first=%+v requests=%d error=%v", first, requests, err)
 	}
 
 	second, err := ProcessFilings(t.Context(), &client, master, download, processing, filter)
-	if err != nil || second.Reused != 1 || requests != 2 {
+	if err != nil || second.Reused != 1 || requests != 1 {
 		t.Fatalf("second=%+v requests=%d error=%v", second, requests, err)
 	}
 
 	processing.Reprocess = true
 
 	third, err := ProcessFilings(t.Context(), &client, master, download, processing, filter)
-	if err != nil || third.Processed != 1 || requests != 2 {
+	if err != nil || third.Processed != 1 || requests != 1 {
 		t.Fatalf("forced=%+v requests=%d error=%v", third, requests, err)
 	}
 }

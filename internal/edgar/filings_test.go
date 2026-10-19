@@ -164,7 +164,7 @@ func TestDownloadFilingNormalizesExistingGzipFile(t *testing.T) {
 	}
 }
 
-func TestDownloadFilingWritesBothReferencedFiles(t *testing.T) {
+func TestDownloadFilingIgnoresLegacySynthesizedIndexPath(t *testing.T) {
 	directory := t.TempDir()
 	record := EdgarIndex{
 		CIK:         "1",
@@ -211,23 +211,30 @@ func TestDownloadFilingWritesBothReferencedFiles(t *testing.T) {
 		t.Fatalf("DownloadFiling returned error: %v", err)
 	}
 
-	if requests != 2 {
-		t.Fatalf("expected 2 requests, got %d", requests)
+	if requests != 1 {
+		t.Fatalf("expected 1 request, got %d", requests)
 	}
 
-	for _, relativePath := range []string{record.FilingPath, record.IndexPath} {
-		path, err := localFilingPath(directory, relativePath)
-		if err != nil {
-			t.Fatal(err)
-		}
+	path, err := localFilingPath(directory, record.FilingPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		if string(data) != "/Archives/"+relativePath {
-			t.Fatalf("unexpected content for %s: %q", relativePath, data)
-		}
+	if string(data) != "/Archives/"+record.FilingPath {
+		t.Fatalf("unexpected content for %s: %q", record.FilingPath, data)
+	}
+
+	indexPath, err := localFilingPath(directory, record.IndexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(indexPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy synthesized index was downloaded: %v", err)
 	}
 }

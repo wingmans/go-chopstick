@@ -49,8 +49,8 @@ long-only: `-f, --form-type` must retain the same meaning on both `parse` and
 convention.
 
 Both commands provide `-r, --reprocess`, default false. It bypasses reuse and
-rebuilds parsed output; it does not force redownloading or refresh the HTML index.
-No separate skip-processed flag is needed: reuse is the default.
+rebuilds parsed output; it does not force redownloading the raw submission. No
+separate skip-processed flag is needed: reuse is the default.
 
 To reset local EDGAR outputs while keeping downloaded raw SEC submissions, run
 `make clean-analysis-data`. The underlying `scripts/clean-analysis-data.sh`

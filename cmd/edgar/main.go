@@ -789,7 +789,7 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 		Directory:     "./data/cache/indexes/quarterly",
 		ZipDirectory:  "./data/cache/index-zips",
 		MasterPath:    "./data/cache/indexes/master.tsv",
-		SinceYear:     edgar.EarliestYear,
+		SinceYear:     edgar.EarliestPipelineYear,
 		UserAgent:     environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		RefreshLatest: false,
 		Stitch:        true,
@@ -824,8 +824,9 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 		return appConfig{}, flag.ErrHelp
 	}
 
-	if cfg.index.SinceYear < edgar.EarliestYear {
-		return subcommandError(flags, fmt.Errorf("--from-year must be %d or later", edgar.EarliestYear))
+	if cfg.index.SinceYear < edgar.EarliestPipelineYear {
+		return subcommandError(flags, fmt.Errorf("--from-year must be %d or later",
+			edgar.EarliestPipelineYear))
 	}
 
 	return cfg, nil

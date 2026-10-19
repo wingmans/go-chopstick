@@ -1,7 +1,8 @@
 # EDGAR Indexes and Filing Downloads
 
-The EDGAR downloader stores quarterly index files under `data/cache/indexes/` and
-stores downloaded filing files under `data/cache/filings/` by default.
+The EDGAR downloader stores quarterly index files under
+`data/cache/indexes/` and stores downloaded filing files under
+`data/cache/filings/` by default.
 
 ## Index records
 
@@ -19,11 +20,11 @@ The SEC fields are represented as follows:
 | `FormType` | Submitted SEC form, such as `10-K` or `10-Q` |
 | `DateFiled` | Filing date, parsed as `time.Time` |
 | `FilingPath` | SEC-relative path to the raw submission text file |
-| `IndexPath` | Derived SEC-relative path to the HTML filing index |
+| `IndexPath` | Optional legacy value retained when reading old local TSVs |
 
-`IndexPath` is added by this repository. It is not one of the original master
-index columns. The extractor derives it by changing the submission `.txt` path
-to the corresponding `-index.html` path.
+New extraction writes the five authoritative SEC master-index fields. It does
+not synthesize an HTML index path. `IndexReader` still accepts old six-column
+local TSVs so existing cache files can be read during migration.
 
 ## Unique form types
 
@@ -33,9 +34,9 @@ the source file is very large.
 
 ## Filing downloads
 
-`DownloadIndexFiles` streams records from a master TSV and downloads the files
-referenced by each `EdgarIndex`. It downloads `FilingPath` and `IndexPath`
-sequentially.
+`DownloadIndexFiles` streams records from a master TSV and downloads the raw
+submission referenced by `FilingPath`. Optional legacy `IndexPath` values are
+not downloaded.
 
 The downloader is intentionally single-threaded. Before each network request
 it checks whether the destination file already exists. Existing files are
@@ -72,7 +73,6 @@ data/
       data/
         1000045/
           0000950170-25-021128.txt
-          0000950170-25-021128-index.html
 ```
 
 The filings directory mirrors the SEC-relative paths exactly. CIK is part of

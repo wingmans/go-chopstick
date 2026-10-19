@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -180,13 +181,7 @@ func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
 		companyName = strings.TrimSpace(companyMatch[1])
 	}
 
-	indexPath := ""
-	if parsed, err := url.Parse(entry.Link.Href); err == nil {
-		indexPath = strings.TrimPrefix(parsed.Path, "/Archives/")
-	}
-
-	filingPath := "edgar/data/" + strings.TrimLeft(cik, "0") + "/" +
-		strings.ReplaceAll(accessionNo, "-", "") + ".txt"
+	filingPath := atomFilingPath(entry.Link.Href, cik, accessionNo)
 
 	return FilingEvent{
 		SchemaVersion:   filingEventSchemaVersion,
@@ -197,9 +192,22 @@ func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
 		FormType:        formType,
 		FilingDate:      entry.Updated.Format("2006-01-02"),
 		FilingPath:      filingPath,
-		IndexPath:       indexPath,
+		IndexPath:       "",
 		FilingURL:       entry.Link.Href,
 		SourceFeed:      "ATOM",
 		Timestamp:       time.Now().UTC(),
 	}, true
+}
+
+func atomFilingPath(href, cik, accession string) string {
+	parsed, err := url.Parse(href)
+	if err == nil {
+		archivePath := strings.TrimPrefix(parsed.Path, "/Archives/")
+		if directory := path.Dir(archivePath); directory != "." {
+			return path.Join(directory, accession+".txt")
+		}
+	}
+
+	return path.Join("edgar/data", strings.TrimLeft(cik, "0"),
+		accession+".txt")
 }

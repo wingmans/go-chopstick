@@ -73,8 +73,7 @@ func TestDownloadIndexExtractsAndAppendsHTMLURL(t *testing.T) {
 	}
 
 	want := "1000045|NICHOLAS FINANCIAL INC|10-K|2018-06-27|" +
-		"edgar/data/1000045/0001193125-18-205637.txt|" +
-		"edgar/data/1000045/0001193125-18-205637-index.html\n"
+		"edgar/data/1000045/0001193125-18-205637.txt\n"
 	if got := string(data); got != want {
 		t.Fatalf("unexpected extracted index:\n%s", got)
 	}

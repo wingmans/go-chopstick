@@ -222,6 +222,10 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 				return nil, fmt.Errorf("read %s: %w", path, err)
 			}
 
+			if record.DateFiled.Year() < edgar.EarliestPipelineYear {
+				continue
+			}
+
 			events = append(events, pw.FilingEvent{
 				SchemaVersion:   1,
 				EventID:         "filing.discovered:" + accessionFromPath(record.FilingPath),
@@ -231,7 +235,7 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 				FormType:        record.FormType,
 				FilingDate:      record.DateFiled.Format("2006-01-02"),
 				FilingPath:      record.FilingPath,
-				IndexPath:       record.IndexPath,
+				IndexPath:       "",
 				FilingURL:       filingURL(record),
 				SourceFeed:      "BATCH",
 				Timestamp:       time.Now().UTC(),
@@ -247,12 +251,8 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 }
 
 func filingURL(record edgar.EdgarIndex) string {
-	path := record.IndexPath
-	if path == "" {
-		path = record.FilingPath
-	}
-
-	return "https://www.sec.gov/Archives/" + strings.TrimPrefix(path, "/")
+	return "https://www.sec.gov/Archives/" +
+		strings.TrimPrefix(record.FilingPath, "/")
 }
 
 func accessionFromPath(path string) string {

@@ -1,4 +1,4 @@
-.PHONY: help build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-analysis-data build-polling run-polling test-polling
+.PHONY: help deps nats-dev nats-start nats-stop nats-status nats-reset build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-analysis-data build-polling run-polling test-polling
 
 .DEFAULT_GOAL := help
 
@@ -10,6 +10,12 @@ help:
 		'Available commands:' \
 		'' \
 		'  help                    Display this command list' \
+		'  deps                    Install project-local development tools' \
+		'  nats-dev                Alias for nats-start' \
+		'  nats-start              Start the project-local NATS server' \
+		'  nats-stop               Stop the project-local NATS server' \
+		'  nats-status             Show the project-local NATS server status' \
+		'  nats-reset              Remove local NATS JetStream data' \
 		'  build                   Build all command binaries' \
 		'  docs-pdf                Build one PDF from the documentation chapters' \
 		'  lint                    Run golangci-lint with auto-fixes' \
@@ -25,6 +31,23 @@ help:
 		'  run                     Run the ECB example command' \
 		'  serve                   Serve locally parsed EDGAR filings' \
 		'  serve-dev               Serve filings with Air auto-rebuilds' \
+
+deps:
+	bash scripts/install-tools.sh
+
+nats-dev: nats-start
+
+nats-start:
+	bash scripts/nats-dev.sh start
+
+nats-stop:
+	bash scripts/nats-dev.sh stop
+
+nats-status:
+	bash scripts/nats-dev.sh status
+
+nats-reset:
+	bash scripts/nats-dev.sh reset
 
 build:
 	mkdir -p $(BIN_DIR)

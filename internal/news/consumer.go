@@ -10,6 +10,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/eventbus"
 	"wingman.com/fetch-ecb/internal/pollingworker"
 )
@@ -59,6 +60,23 @@ func Consume(ctx context.Context, bus *eventbus.NATS, store *Store,
 				_ = message.Term()
 
 				logger.Error("discarding invalid discovery event", "error", err)
+
+				continue
+			}
+
+			filed, err := time.Parse("2006-01-02", event.FilingDate)
+			if err != nil {
+				_ = message.Term()
+
+				logger.Error("discarding event with invalid filing date",
+					"filing_date", event.FilingDate,
+					"accession", event.AccessionNumber)
+
+				continue
+			}
+
+			if filed.Year() < edgar.EarliestPipelineYear {
+				_ = message.Ack()
 
 				continue
 			}

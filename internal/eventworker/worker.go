@@ -28,6 +28,7 @@ type DownloadConfig struct {
 	Directory string
 	UserAgent string
 	BaseURL   string
+	Drain     bool
 }
 
 // ProcessConfig configures the serial parse and aggregate consumer.
@@ -35,10 +36,11 @@ type ProcessConfig struct {
 	FilingsDirectory string
 	ParsedDirectory  string
 	AnalysisDBPath   string
+	Drain            bool
 }
 
 // Download consumes discovery events and publishes downloaded events only
-// after the local filing and index files are present.
+// after the authoritative raw submission is present.
 func Download(ctx context.Context, bus *eventbus.NATS, cfg DownloadConfig,
 	logger *slog.Logger,
 ) error {
@@ -59,7 +61,7 @@ func Download(ctx context.Context, bus *eventbus.NATS, cfg DownloadConfig,
 		return err
 	}
 
-	return consume(ctx, subscription, logger, func(message *nats.Msg,
+	return consume(ctx, subscription, logger, cfg.Drain, func(message *nats.Msg,
 		event pollingworker.FilingEvent,
 	) error {
 		record := edgar.EdgarIndex{
@@ -67,11 +69,13 @@ func Download(ctx context.Context, bus *eventbus.NATS, cfg DownloadConfig,
 			CompanyName: event.CompanyName,
 			FormType:    event.FormType,
 			FilingPath:  event.FilingPath,
-			IndexPath:   event.IndexPath,
+			IndexPath:   "",
 		}
 		if err := downloader.Download(ctx, record); err != nil {
 			return err
 		}
+
+		event.IndexPath = ""
 
 		payload, err := json.Marshal(event)
 		if err != nil {
@@ -103,7 +107,7 @@ func Process(ctx context.Context, bus *eventbus.NATS, cfg ProcessConfig,
 		return err
 	}
 
-	return consume(ctx, subscription, logger, func(message *nats.Msg,
+	return consume(ctx, subscription, logger, cfg.Drain, func(message *nats.Msg,
 		event pollingworker.FilingEvent,
 	) error {
 		path, err := edgar.LocalFilingPath(cfg.FilingsDirectory,
@@ -120,6 +124,14 @@ func Process(ctx context.Context, bus *eventbus.NATS, cfg ProcessConfig,
 				FormType:         event.FormType,
 			})
 		if err != nil {
+			if result.Action != "" {
+				logger.Warn("filing persisted with processing diagnostics",
+					"accession", event.AccessionNumber,
+					"action", result.Action, "error", err)
+
+				return message.Ack()
+			}
+
 			return err
 		}
 
@@ -148,7 +160,7 @@ func pullSubscription(bus *eventbus.NATS, subject, durable string) (
 }
 
 func consume(ctx context.Context, subscription *nats.Subscription,
-	logger *slog.Logger,
+	logger *slog.Logger, drain bool,
 	handle func(*nats.Msg, pollingworker.FilingEvent) error,
 ) error {
 	for {
@@ -156,6 +168,17 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 		if errors.Is(err, nats.ErrTimeout) {
 			if ctx.Err() != nil {
 				return ctx.Err()
+			}
+
+			if drain {
+				info, infoErr := subscription.ConsumerInfo()
+				if infoErr != nil {
+					return fmt.Errorf("inspect work backlog: %w", infoErr)
+				}
+
+				if info.NumPending == 0 && info.NumAckPending == 0 {
+					return nil
+				}
 			}
 
 			continue
@@ -170,6 +193,27 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 		var event pollingworker.FilingEvent
 		if err := json.Unmarshal(message.Data, &event); err != nil {
 			_ = message.Term()
+
+			continue
+		}
+
+		filed, err := time.Parse("2006-01-02", event.FilingDate)
+		if err != nil {
+			_ = message.Term()
+
+			logger.Error("discarding event with invalid filing date",
+				"filing_date", event.FilingDate,
+				"accession", event.AccessionNumber)
+
+			continue
+		}
+
+		if filed.Year() < edgar.EarliestPipelineYear {
+			_ = message.Ack()
+
+			logger.Info("skipping filing before pipeline support boundary",
+				"filing_date", event.FilingDate,
+				"accession", event.AccessionNumber)
 
 			continue
 		}

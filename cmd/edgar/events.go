@@ -33,9 +33,16 @@ type eventCommandConfig struct {
 	baseURL          string
 	address          string
 	interval         time.Duration
+	filter           edgar.IndexFilter
+	setName          string
+	year             string
+	fromYear         int
+	toYear           int
+	drain            bool
 }
 
 func parseEventCommandConfig(command string, args []string) (appConfig, error) {
+	formTypes := stringList{}
 	cfg := appConfig{command: command}
 	cfg.events = eventCommandConfig{
 		natsURL:          eventbus.DefaultURL,
@@ -55,41 +62,130 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 	flags.SetOutput(os.Stdout)
 	flags.StringVar(&cfg.events.natsURL, "nats-url", cfg.events.natsURL,
 		"NATS server URL")
-	flags.StringVar(&cfg.events.pollingDB, "polling-db",
-		cfg.events.pollingDB, "polling and outbox database")
-	flags.StringVar(&cfg.events.newsDB, "news-db", cfg.events.newsDB,
-		"disposable news database")
-	flags.StringVar(&cfg.events.filingsDirectory, "filings-dir",
-		cfg.events.filingsDirectory, "downloaded filing directory")
-	flags.StringVar(&cfg.events.parsedDirectory, "parsed-dir",
-		cfg.events.parsedDirectory, "parsed filing directory")
-	flags.StringVar(&cfg.events.analysisDB, "analysis-db",
-		cfg.events.analysisDB, "analysis database")
-	flags.StringVar(&cfg.events.masterPath, "master", cfg.events.masterPath,
-		"stitched master index")
-	flags.StringVar(&cfg.events.userAgent, "user-agent",
-		cfg.events.userAgent, "SEC user agent")
-	flags.StringVar(&cfg.events.baseURL, "base-url", cfg.events.baseURL,
-		"SEC base URL override")
-	flags.StringVar(&cfg.events.address, "address", cfg.events.address,
-		"news HTTP listen address")
-	flags.DurationVar(&cfg.events.interval, "interval", cfg.events.interval,
-		"Atom polling interval")
+
+	options := []helpOption{
+		{"--nats-url <url>", "NATS server; default nats://127.0.0.1:4222."},
+	}
+
+	switch command {
+	case "atom":
+		flags.StringVar(&cfg.events.pollingDB, "polling-db",
+			cfg.events.pollingDB, "polling and outbox database")
+		flags.StringVar(&cfg.events.userAgent, "user-agent",
+			cfg.events.userAgent, "SEC user agent")
+		flags.DurationVar(&cfg.events.interval, "interval",
+			cfg.events.interval, "Atom polling interval")
+
+		options = append(options,
+			helpOption{"--polling-db <path>", "Accession and outbox database."},
+			helpOption{"--user-agent <value>", "SEC user agent."},
+			helpOption{"--interval <duration>", "Atom polling interval."},
+		)
+	case "batch":
+		flags.StringVar(&cfg.events.pollingDB, "polling-db",
+			cfg.events.pollingDB, "polling and outbox database")
+		flags.StringVar(&cfg.events.masterPath, "master", cfg.events.masterPath,
+			"stitched master index")
+		flags.StringVar(&cfg.events.filter.CIK, "cik", "",
+			"select filings for one CIK")
+		flags.StringVar(&cfg.events.setName, "set", "",
+			"select filings for a constituent set")
+		flags.Var(&formTypes, "form-type",
+			"select this form type; may be repeated")
+		flags.StringVar(&cfg.events.year, "year", "",
+			"select one filing year")
+		flags.IntVar(&cfg.events.fromYear, "from-year", 0,
+			"first filing year to include")
+		flags.IntVar(&cfg.events.toYear, "to-year", 0,
+			"last filing year to include")
+
+		options = append(options,
+			helpOption{"--polling-db <path>", "Accession and outbox database."},
+			helpOption{"--master <path>", "Stitched master index."},
+			helpOption{"--cik <cik>", "Select filings for one CIK."},
+			helpOption{"--set <name>", "Select a set from data/sets."},
+			helpOption{"--form-type <type>", "Select a form; repeatable."},
+			helpOption{"--year <year>", "Select one filing year."},
+			helpOption{"--from-year <year>", "First year; default 2016."},
+			helpOption{"--to-year <year>", "Last filing year."},
+		)
+	case "download":
+		flags.StringVar(&cfg.events.filingsDirectory, "filings-dir",
+			cfg.events.filingsDirectory, "downloaded filing directory")
+		flags.StringVar(&cfg.events.userAgent, "user-agent",
+			cfg.events.userAgent, "SEC user agent")
+		flags.StringVar(&cfg.events.baseURL, "base-url", cfg.events.baseURL,
+			"SEC base URL override")
+		flags.BoolVar(&cfg.events.drain, "drain", false,
+			"exit after the current event backlog is empty")
+
+		options = append(options,
+			helpOption{"--filings-dir <path>", "Downloaded filing directory."},
+			helpOption{"--user-agent <value>", "SEC user agent."},
+			helpOption{"--base-url <url>", "SEC base URL override."},
+			helpOption{"--drain", "Exit after the current backlog is empty."},
+		)
+	case "process":
+		flags.StringVar(&cfg.events.filingsDirectory, "filings-dir",
+			cfg.events.filingsDirectory, "downloaded filing directory")
+		flags.StringVar(&cfg.events.parsedDirectory, "parsed-dir",
+			cfg.events.parsedDirectory, "parsed filing directory")
+		flags.StringVar(&cfg.events.analysisDB, "analysis-db",
+			cfg.events.analysisDB, "analysis database")
+		flags.BoolVar(&cfg.events.drain, "drain", false,
+			"exit after the current event backlog is empty")
+
+		options = append(options,
+			helpOption{"--filings-dir <path>", "Downloaded filing directory."},
+			helpOption{"--parsed-dir <path>", "Parsed filing directory."},
+			helpOption{"--analysis-db <path>", "Analysis database."},
+			helpOption{"--drain", "Exit after the current backlog is empty."},
+		)
+	case "news":
+		flags.StringVar(&cfg.events.newsDB, "news-db", cfg.events.newsDB,
+			"disposable news database")
+		flags.StringVar(&cfg.events.address, "address", cfg.events.address,
+			"news HTTP listen address")
+
+		options = append(options,
+			helpOption{"--news-db <path>", "Disposable news database."},
+			helpOption{"--address <host:port>", "News HTTP address."},
+		)
+	case "run":
+		flags.StringVar(&cfg.events.pollingDB, "polling-db",
+			cfg.events.pollingDB, "polling and outbox database")
+		flags.StringVar(&cfg.events.newsDB, "news-db", cfg.events.newsDB,
+			"disposable news database")
+		flags.StringVar(&cfg.events.filingsDirectory, "filings-dir",
+			cfg.events.filingsDirectory, "downloaded filing directory")
+		flags.StringVar(&cfg.events.parsedDirectory, "parsed-dir",
+			cfg.events.parsedDirectory, "parsed filing directory")
+		flags.StringVar(&cfg.events.analysisDB, "analysis-db",
+			cfg.events.analysisDB, "analysis database")
+		flags.StringVar(&cfg.events.userAgent, "user-agent",
+			cfg.events.userAgent, "SEC user agent")
+		flags.StringVar(&cfg.events.baseURL, "base-url", cfg.events.baseURL,
+			"SEC base URL override")
+		flags.StringVar(&cfg.events.address, "address", cfg.events.address,
+			"news HTTP listen address")
+		flags.DurationVar(&cfg.events.interval, "interval",
+			cfg.events.interval, "Atom polling interval")
+
+		options = append(options,
+			helpOption{"--polling-db <path>", "Accession and outbox database."},
+			helpOption{"--news-db <path>", "Disposable news database."},
+			helpOption{"--filings-dir <path>", "Downloaded filing directory."},
+			helpOption{"--parsed-dir <path>", "Parsed filing directory."},
+			helpOption{"--analysis-db <path>", "Analysis database."},
+			helpOption{"--user-agent <value>", "SEC user agent."},
+			helpOption{"--base-url <url>", "SEC base URL override."},
+			helpOption{"--address <host:port>", "News HTTP address."},
+			helpOption{"--interval <duration>", "Atom polling interval."},
+		)
+	}
 
 	flags.Usage = func() {
-		printSubcommandHelp(command, eventCommandDescription(command),
-			[]helpOption{
-				{"--nats-url <url>", "NATS server; default nats://127.0.0.1:4222."},
-				{"--polling-db <path>", "Accession and outbox database."},
-				{"--news-db <path>", "Disposable news read-model database."},
-				{"--filings-dir <path>", "Downloaded filing directory."},
-				{"--parsed-dir <path>", "Parsed filing directory."},
-				{"--analysis-db <path>", "Aggregate analysis database."},
-				{"--master <path>", "Stitched master index for batch discovery."},
-				{"--user-agent <value>", "SEC user agent."},
-				{"--address <host:port>", "News HTTP address."},
-				{"--interval <duration>", "Atom polling interval."},
-			})
+		printSubcommandHelp(command, eventCommandDescription(command), options)
 	}
 	if err := flags.Parse(args); err != nil {
 		return appConfig{}, flag.ErrHelp
@@ -102,6 +198,38 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 	if cfg.events.natsURL == "" || cfg.events.interval <= 0 {
 		return subcommandError(flags,
 			errors.New("--nats-url and a positive --interval are required"))
+	}
+
+	if command == "batch" {
+		cfg.events.filter.FormTypes = formTypes
+
+		if err := applyConstituentSet(&cfg.events.filter,
+			cfg.events.setName); err != nil {
+			return subcommandError(flags, err)
+		}
+
+		if strings.TrimSpace(cfg.events.year) == "" &&
+			cfg.events.fromYear == 0 {
+			cfg.events.fromYear = edgar.EarliestPipelineYear
+		}
+
+		if err := applyYearSelection(&cfg.events.filter, cfg.events.year,
+			cfg.events.fromYear, cfg.events.toYear); err != nil {
+			return subcommandError(flags, err)
+		}
+
+		if cfg.events.filter.Year != 0 &&
+			cfg.events.filter.Year < edgar.EarliestPipelineYear {
+			return subcommandError(flags, fmt.Errorf(
+				"--year must be %d or later", edgar.EarliestPipelineYear))
+		}
+
+		if cfg.events.filter.FromYear != 0 &&
+			cfg.events.filter.FromYear < edgar.EarliestPipelineYear {
+			return subcommandError(flags, fmt.Errorf(
+				"--from-year must be %d or later",
+				edgar.EarliestPipelineYear))
+		}
 	}
 
 	return cfg, nil
@@ -171,12 +299,14 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 			Directory: cfg.filingsDirectory,
 			UserAgent: cfg.userAgent,
 			BaseURL:   cfg.baseURL,
+			Drain:     cfg.drain,
 		}, logger)
 	case "process":
 		return eventworker.Process(ctx, bus, eventworker.ProcessConfig{
 			FilingsDirectory: cfg.filingsDirectory,
 			ParsedDirectory:  cfg.parsedDirectory,
 			AnalysisDBPath:   cfg.analysisDB,
+			Drain:            cfg.drain,
 		}, logger)
 	case "news":
 		return runNews(ctx, bus, cfg, logger)
@@ -200,7 +330,7 @@ func runBatchDiscovery(ctx context.Context, bus *eventbus.NATS,
 	}
 	defer func() { _ = store.Close() }()
 
-	reader := edgar.NewIndexReader(file, edgar.IndexFilter{})
+	reader := edgar.NewIndexReader(file, cfg.filter)
 	batch := make([]pollingworker.FilingEvent, 0, 1000)
 	flush := func() error {
 		if len(batch) > 0 {
@@ -227,11 +357,6 @@ func runBatchDiscovery(ctx context.Context, bus *eventbus.NATS,
 		accession := strings.TrimSuffix(filepath.Base(record.FilingPath),
 			filepath.Ext(record.FilingPath))
 
-		indexPath := record.IndexPath
-		if indexPath == "" {
-			indexPath = record.FilingPath
-		}
-
 		batch = append(batch, pollingworker.FilingEvent{
 			EventID:         "filing.discovered:" + accession,
 			AccessionNumber: accession,
@@ -240,9 +365,9 @@ func runBatchDiscovery(ctx context.Context, bus *eventbus.NATS,
 			FormType:        record.FormType,
 			FilingDate:      record.DateFiled.Format("2006-01-02"),
 			FilingPath:      record.FilingPath,
-			IndexPath:       record.IndexPath,
+			IndexPath:       "",
 			FilingURL: "https://www.sec.gov/Archives/" +
-				strings.TrimPrefix(indexPath, "/"),
+				strings.TrimPrefix(record.FilingPath, "/"),
 			SourceFeed: "BATCH",
 			Timestamp:  time.Now().UTC(),
 		})

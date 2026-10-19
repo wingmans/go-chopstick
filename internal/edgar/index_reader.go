@@ -35,9 +35,8 @@ type EdgarIndex struct {
 	// folder path. It points to the raw submission text file.
 	FilingPath string
 
-	// IndexPath is the derived path to the SEC HTML filing index. It is not an
-	// original master-index field; this repository adds it when extracting
-	// quarterly indexes.
+	// IndexPath is retained for compatibility with previously generated
+	// six-column indexes. New index extraction does not synthesize it.
 	IndexPath string
 }
 

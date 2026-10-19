@@ -75,7 +75,8 @@ SEC EDGAR
 ### 1. Index
 
 `edgar index` downloads quarterly SEC index archives, extracts their TSV
-records, and can stitch them into `data/cache/indexes/master.tsv`.
+records, and can stitch them into `data/cache/indexes/master.tsv`. The POC
+defaults to 2016 and refuses earlier index years.
 
 Older index files are reused from disk. `--refresh-latest` is deliberately
 explicit: it refreshes the newest available quarter while older quarters stay

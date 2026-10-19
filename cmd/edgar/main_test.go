@@ -46,6 +46,66 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 	if cfg.index.Noop {
 		t.Fatal("expected noop to be disabled by default")
 	}
+
+	if cfg.index.SinceYear != edgar.EarliestPipelineYear {
+		t.Fatalf("unexpected earliest year %d", cfg.index.SinceYear)
+	}
+}
+
+func TestParseBatchConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
+	t.Chdir(filepath.Join("..", ".."))
+
+	cfg, err := parseConfig([]string{
+		"batch", "--set", "us-gaap", "--from-year", "2022",
+		"--to-year", "2026", "--form-type", "10-K",
+	})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.events.filter.FromYear != 2022 ||
+		cfg.events.filter.ToYear != 2026 {
+		t.Fatalf("unexpected year range: %+v", cfg.events.filter)
+	}
+
+	if len(cfg.events.filter.CIKs) == 0 {
+		t.Fatal("constituent set did not populate CIKs")
+	}
+
+	if got := cfg.events.filter.FormTypes; len(got) != 1 || got[0] != "10-K" {
+		t.Fatalf("unexpected form types: %v", got)
+	}
+}
+
+func TestParseBatchConfigDefaultsToPipelineBoundary(t *testing.T) {
+	cfg, err := parseConfig([]string{"batch"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.events.filter.FromYear != edgar.EarliestPipelineYear {
+		t.Fatalf("batch from year = %d, want %d",
+			cfg.events.filter.FromYear, edgar.EarliestPipelineYear)
+	}
+
+	if _, err := parseConfig([]string{
+		"batch", "--from-year", "2015",
+	}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("pre-boundary batch returned %v, want help error", err)
+	}
+}
+
+func TestParseEventWorkersSupportDrainMode(t *testing.T) {
+	for _, command := range []string{"download", "process"} {
+		cfg, err := parseConfig([]string{command, "--drain"})
+		if err != nil {
+			t.Fatalf("%s config returned error: %v", command, err)
+		}
+
+		if !cfg.events.drain {
+			t.Fatalf("%s did not enable drain mode", command)
+		}
+	}
 }
 
 func TestParseConfigUsesEDGAREnvironment(t *testing.T) {
