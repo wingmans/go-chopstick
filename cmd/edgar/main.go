@@ -31,13 +31,14 @@ import (
 const defaultUserAgent = "wingman paul@wingmen.io"
 
 const (
-	edgarUserAgentEnv = "EDGAR_USER_AGENT"
-	edgarBaseURLEnv   = "EDGAR_BASE_URL"
-	edgarNATSURLEnv   = "EDGAR_NATS_URL"
-	edgarSetEnv       = "EDGAR_SET"
-	edgarFromYearEnv  = "EDGAR_FROM_YEAR"
-	parseCommand      = "parse"
-	noopHelpFlags     = "-n, --noop"
+	edgarUserAgentEnv   = "EDGAR_USER_AGENT"
+	edgarBaseURLEnv     = "EDGAR_BASE_URL"
+	edgarNATSURLEnv     = "EDGAR_NATS_URL"
+	edgarNewsAddressEnv = "EDGAR_NEWS_ADDRESS"
+	edgarSetEnv         = "EDGAR_SET"
+	edgarFromYearEnv    = "EDGAR_FROM_YEAR"
+	parseCommand        = "parse"
+	noopHelpFlags       = "-n, --noop"
 )
 
 type appConfig struct {

@@ -57,10 +57,11 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		masterPath:       appdata.Path("cache", "indexes", "master.tsv"),
 		userAgent:        environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		baseURL:          environmentValue(edgarBaseURLEnv, ""),
-		address:          "127.0.0.1:8081",
-		interval:         time.Minute,
-		setName:          environmentValue(edgarSetEnv, ""),
-		maxAttempts:      5,
+		address: environmentValue(edgarNewsAddressEnv,
+			"127.0.0.1:8081"),
+		interval:    time.Minute,
+		setName:     environmentValue(edgarSetEnv, ""),
+		maxAttempts: 5,
 	}
 
 	if command == "discover" {

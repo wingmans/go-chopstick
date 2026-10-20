@@ -205,6 +205,37 @@ func TestParseDoctorVerbose(t *testing.T) {
 	}
 }
 
+func TestNewsAddressUsesEnvironmentDefault(t *testing.T) {
+	t.Setenv(edgarNewsAddressEnv, "127.0.0.1:8082")
+
+	for _, command := range []string{"run", "news", "status"} {
+		cfg, err := parseConfig([]string{command})
+		if err != nil {
+			t.Fatalf("parseConfig(%q) returned error: %v", command, err)
+		}
+
+		address := cfg.events.address
+		if command == "status" {
+			address = cfg.operations.newsAddress
+		}
+
+		if address != "127.0.0.1:8082" {
+			t.Fatalf("parseConfig(%q) address = %q", command, address)
+		}
+	}
+
+	cfg, err := parseConfig([]string{
+		"run", "--address", "127.0.0.1:8083",
+	})
+	if err != nil {
+		t.Fatalf("parseConfig with address returned error: %v", err)
+	}
+	if cfg.events.address != "127.0.0.1:8083" {
+		t.Fatalf("CLI address did not override environment: %q",
+			cfg.events.address)
+	}
+}
+
 func TestParseRetryRequiresValidStage(t *testing.T) {
 	for _, args := range [][]string{
 		{"retry"},

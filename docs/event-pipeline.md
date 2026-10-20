@@ -112,8 +112,9 @@ go run ./cmd/edgar download --drain
 go run ./cmd/edgar process --drain
 ```
 
-The news page listens on `http://127.0.0.1:8081` by default. Stop or reset
-the development server with:
+The news page listens on `http://127.0.0.1:8081` by default. Set
+`EDGAR_NEWS_ADDRESS` in `.env` to use another address. Stop or reset the
+development server with:
 
 ```sh
 make nats-stop

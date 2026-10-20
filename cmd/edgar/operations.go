@@ -41,12 +41,13 @@ type operationsConfig struct {
 func parseOperationsConfig(command string, args []string) (appConfig, error) {
 	cfg := appConfig{command: command}
 	cfg.operations = operationsConfig{
-		natsURL:     environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
-		pollingDB:   appdata.Path("polling.db"),
-		newsDB:      appdata.Path("feed.db"),
-		masterPath:  appdata.Path("cache", "indexes", "master.tsv"),
-		newsAddress: "127.0.0.1:8081",
-		limit:       50,
+		natsURL:    environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
+		pollingDB:  appdata.Path("polling.db"),
+		newsDB:     appdata.Path("feed.db"),
+		masterPath: appdata.Path("cache", "indexes", "master.tsv"),
+		newsAddress: environmentValue(edgarNewsAddressEnv,
+			"127.0.0.1:8081"),
+		limit: 50,
 	}
 
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
