@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/coverage"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
@@ -18,27 +19,27 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 
 	cfg.command = "coverage"
 
-	cfg.coverage.masterPath = "./data/cache/indexes/master.tsv"
-	cfg.coverage.indexesDir = "./data/cache/indexes/quarterly"
-	cfg.coverage.filingsDir = edgar.DefaultFilingsDirectory
-	cfg.coverage.parsedDir = edgar.DefaultParsedDirectory
-	cfg.coverage.analysisDB = "./data/analysis.db"
-	cfg.coverage.out = "./data/validation/coverage-report.json"
+	cfg.coverage.masterPath = appdata.Path("cache", "indexes", "master.tsv")
+	cfg.coverage.indexesDir = appdata.Path("cache", "indexes", "quarterly")
+	cfg.coverage.filingsDir = appdata.Path("cache", "filings")
+	cfg.coverage.parsedDir = appdata.Path("parsed")
+	cfg.coverage.analysisDB = appdata.Path("analysis.db")
+	cfg.coverage.out = appdata.Path("validation", "coverage-report.json")
 
 	flags := flag.NewFlagSet("coverage", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
 		printSubcommandHelp("coverage", "Report expected local filing coverage.", []helpOption{
-			{"-s, --set <name>", "Select current members from data/sets/<name>.json."},
+			{"-s, --set <name>", "Select a set from the configured data directory."},
 			{"-c, --cik <cik>", "Select filings for this CIK."},
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"    --from-year <year>", "First filing year to include."},
 			{"    --to-year <year>", "Last filing year to include."},
-			{"-m, --master <path>", "Master TSV; default ./data/cache/indexes/master.tsv."},
+			{"-m, --master <path>", "Master TSV path."},
 			{"    --indexes-dir <path>", "Quarterly indexes directory."},
 			{"    --filings-dir <path>", "Downloaded filings directory."},
 			{"-d, --parsed-dir <path>", "Optional parser artifact directory."},
-			{"    --analysis-db <path>", "Analysis database; default ./data/analysis.db."},
+			{"    --analysis-db <path>", "Analysis database path."},
 			{"-o, --out <path>", "JSON report path."},
 			{"-h, --help", "Show command help."},
 		})

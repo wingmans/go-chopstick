@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/appdata"
 	filingweb "wingman.com/fetch-ecb/internal/web"
 )
 
@@ -19,16 +19,16 @@ func parseServeConfig(args []string) (appConfig, error) {
 
 	cfg.command = "serve"
 	cfg.serve.address = "127.0.0.1:8080"
-	cfg.serve.parsedDir = edgar.DefaultParsedDirectory
-	cfg.serve.analysisDB = "./data/analysis.db"
+	cfg.serve.parsedDir = appdata.Path("parsed")
+	cfg.serve.analysisDB = appdata.Path("analysis.db")
 
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
 		printSubcommandHelp("serve", "Browse locally parsed filing data.", []helpOption{
 			{"-a, --address <host:port>", "HTTP listen address; default 127.0.0.1:8080."},
-			{"-d, --parsed-dir <path>", "Parsed filing directory; default ./data/parsed."},
-			{"-s, --set <name>", "Resolve ticker and company searches from data/sets/<name>.json."},
+			{"-d, --parsed-dir <path>", "Parsed filing directory."},
+			{"-s, --set <name>", "Resolve searches using a configured data set."},
 			{"-h, --help", "Show command help."},
 		})
 	}
@@ -64,7 +64,8 @@ func parseServeConfig(args []string) (appConfig, error) {
 }
 
 func runServe(ctx context.Context, logger *slog.Logger, address, parsedDir, setName, analysisDB string) error {
-	server, err := filingweb.NewConfiguredServerWithDB(parsedDir, analysisDB, defaultSetDir, setName, logger)
+	server, err := filingweb.NewConfiguredServerWithDB(parsedDir, analysisDB,
+		appdata.Path("sets"), setName, logger)
 	if err != nil {
 		return err
 	}

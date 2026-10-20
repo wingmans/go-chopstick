@@ -7,14 +7,17 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/edgar"
 	filingview "wingman.com/fetch-ecb/internal/filing"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
 func TestParseDownloadIndexConfigDefaults(t *testing.T) {
+	t.Setenv(appdata.EnvName, "")
 	t.Setenv(edgarUserAgentEnv, "")
 	t.Setenv(edgarBaseURLEnv, "")
 	t.Setenv(edgarFromYearEnv, "")
@@ -24,15 +27,15 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
-	if cfg.index.Directory != "./data/cache/indexes/quarterly" {
+	if cfg.index.Directory != "data/cache/indexes/quarterly" {
 		t.Fatalf("unexpected index directory %q", cfg.index.Directory)
 	}
 
-	if cfg.index.ZipDirectory != "./data/cache/index-zips" {
+	if cfg.index.ZipDirectory != "data/cache/index-zips" {
 		t.Fatalf("unexpected ZIP directory %q", cfg.index.ZipDirectory)
 	}
 
-	if cfg.index.MasterPath != "./data/cache/indexes/master.tsv" {
+	if cfg.index.MasterPath != "data/cache/indexes/master.tsv" {
 		t.Fatalf("unexpected master path %q", cfg.index.MasterPath)
 	}
 
@@ -53,11 +56,49 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestParseBatchConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
+func TestConfiguredDataRootControlsCommandDefaults(t *testing.T) {
+	t.Setenv(appdata.EnvName, "/srv/chopstick")
+	t.Setenv(edgarSetEnv, "")
+
+	events, err := parseEventCommandConfig("run", nil)
+	if err != nil {
+		t.Fatalf("parse event config: %v", err)
+	}
+
+	index, err := parseDownloadIndexConfig(nil)
+	if err != nil {
+		t.Fatalf("parse index config: %v", err)
+	}
+
+	operations, err := parseOperationsConfig("doctor", nil)
+	if err != nil {
+		t.Fatalf("parse operations config: %v", err)
+	}
+
+	paths := map[string]string{
+		"polling database":  events.events.pollingDB,
+		"news database":     events.events.newsDB,
+		"filings":           events.events.filingsDirectory,
+		"parsed":            events.events.parsedDirectory,
+		"analysis database": events.events.analysisDB,
+		"master index":      index.index.MasterPath,
+		"quarterly indexes": index.index.Directory,
+		"index archives":    index.index.ZipDirectory,
+		"doctor database":   operations.operations.pollingDB,
+	}
+
+	for name, path := range paths {
+		if !strings.HasPrefix(path, "/srv/chopstick/") {
+			t.Errorf("%s path %q is outside configured data root", name, path)
+		}
+	}
+}
+
+func TestParseDiscoverConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
 	t.Chdir(filepath.Join("..", ".."))
 
 	cfg, err := parseConfig([]string{
-		"batch", "--set", "us-gaap", "--from-year", "2022",
+		"discover", "--set", "us-gaap", "--from-year", "2022",
 		"--to-year", "2026", "--form-type", "10-K",
 	})
 	if err != nil {
@@ -78,24 +119,24 @@ func TestParseBatchConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
 	}
 }
 
-func TestParseBatchConfigDefaultsToPipelineBoundary(t *testing.T) {
+func TestParseDiscoverConfigDefaultsToPipelineBoundary(t *testing.T) {
 	t.Setenv(edgarFromYearEnv, "")
 	t.Setenv(edgarSetEnv, "")
 
-	cfg, err := parseConfig([]string{"batch"})
+	cfg, err := parseConfig([]string{"discover"})
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
 	if cfg.events.filter.FromYear != edgar.EarliestPipelineYear {
-		t.Fatalf("batch from year = %d, want %d",
+		t.Fatalf("discover from year = %d, want %d",
 			cfg.events.filter.FromYear, edgar.EarliestPipelineYear)
 	}
 
 	if _, err := parseConfig([]string{
-		"batch", "--from-year", "2015",
+		"discover", "--from-year", "2015",
 	}); !errors.Is(err, flag.ErrHelp) {
-		t.Fatalf("pre-boundary batch returned %v, want help error", err)
+		t.Fatalf("pre-boundary discover returned %v, want help error", err)
 	}
 }
 
@@ -203,6 +244,8 @@ func TestParseConfigUsesEDGAREnvironment(t *testing.T) {
 }
 
 func TestParseDownloadFilingsConfigSupportsRepeatedFormTypes(t *testing.T) {
+	t.Setenv(appdata.EnvName, "")
+
 	cfg, err := parseConfig([]string{
 		"filings",
 		"--form-type", "10-K",
@@ -215,11 +258,11 @@ func TestParseDownloadFilingsConfigSupportsRepeatedFormTypes(t *testing.T) {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
-	if cfg.filings.masterPath != "./data/cache/indexes/master.tsv" {
+	if cfg.filings.masterPath != "data/cache/indexes/master.tsv" {
 		t.Fatalf("unexpected master path %q", cfg.filings.masterPath)
 	}
 
-	if cfg.filings.config.Directory != "./data/cache/filings" {
+	if cfg.filings.config.Directory != "data/cache/filings" {
 		t.Fatalf("unexpected filing directory %q", cfg.filings.config.Directory)
 	}
 
@@ -248,6 +291,8 @@ func TestParseConfigWithoutCommandShowsHelp(t *testing.T) {
 }
 
 func TestParseServeConfigDefaults(t *testing.T) {
+	t.Setenv(appdata.EnvName, "")
+
 	cfg, err := parseConfig([]string{"serve"})
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
@@ -257,7 +302,7 @@ func TestParseServeConfigDefaults(t *testing.T) {
 		t.Fatalf("unexpected serve address %q", cfg.serve.address)
 	}
 
-	if cfg.serve.parsedDir != "./data/parsed" {
+	if cfg.serve.parsedDir != "data/parsed" {
 		t.Fatalf("unexpected parsed directory %q", cfg.serve.parsedDir)
 	}
 

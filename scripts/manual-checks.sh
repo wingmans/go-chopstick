@@ -3,8 +3,10 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DATA_DIR="${CHOPSTICK_DATA_DIR:-$ROOT_DIR/data}"
+[[ "$DATA_DIR" = /* ]] || DATA_DIR="$ROOT_DIR/${DATA_DIR#./}"
 BASELINE="${BASELINE:-$ROOT_DIR/golden/manual-checks.json}"
-PARSED_DIR="${PARSED_DIR:-$ROOT_DIR/data/parsed}"
+PARSED_DIR="${PARSED_DIR:-$DATA_DIR/parsed}"
 TOLERANCE="${TOLERANCE:-0.011}"
 
 cd "$ROOT_DIR"

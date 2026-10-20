@@ -27,14 +27,12 @@ type (
 )
 
 const (
-	ParsedSchemaVersion     = parser.ParsedSchemaVersion
-	ParserVersion           = parser.ParserVersion
-	ParseComplete           = parser.ParseComplete
-	ParseNoXBRL             = parser.ParseNoXBRL
-	ParseUnsupported        = parser.ParseUnsupported
-	ParsePartial            = parser.ParsePartial
-	DefaultParsedDirectory  = parser.DefaultParsedDirectory
-	DefaultFilingsDirectory = parser.DefaultFilingsDirectory
+	ParsedSchemaVersion = parser.ParsedSchemaVersion
+	ParserVersion       = parser.ParserVersion
+	ParseComplete       = parser.ParseComplete
+	ParseNoXBRL         = parser.ParseNoXBRL
+	ParseUnsupported    = parser.ParseUnsupported
+	ParsePartial        = parser.ParsePartial
 )
 
 func ParseSubmission(ctx context.Context, path string) (*ParsedFiling, error) {

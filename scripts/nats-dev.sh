@@ -3,23 +3,18 @@ set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 nats_server="${root_dir}/.tools/bin/nats-server"
-state_dir="${root_dir}/data/nats"
+data_dir="${CHOPSTICK_DATA_DIR:-data}"
+[[ "${data_dir}" = /* ]] || data_dir="${root_dir}/${data_dir#./}"
+state_dir="${data_dir}/nats"
 store_dir="${state_dir}/store"
 pid_file="${state_dir}/nats.pid"
 log_file="${state_dir}/nats.log"
-legacy_pid_file="${root_dir}/var/nats/nats.pid"
 
 running_pid() {
   [[ -f "${pid_file}" ]] && kill -0 "$(<"${pid_file}")" 2>/dev/null && {
     echo "$(<"${pid_file}")"
     return
   }
-
-  [[ -f "${legacy_pid_file}" ]] && \
-    kill -0 "$(<"${legacy_pid_file}")" 2>/dev/null && {
-      echo "$(<"${legacy_pid_file}")"
-      return
-    }
 
   return 1
 }
@@ -65,7 +60,7 @@ stop() {
 
   kill "${pid}"
   wait "${pid}" 2>/dev/null || true
-  rm -f "${pid_file}" "${legacy_pid_file}"
+  rm -f "${pid_file}"
   echo "NATS stopped"
 }
 

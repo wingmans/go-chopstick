@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/eventbus"
@@ -104,8 +105,11 @@ func parseConfig(args []string) (config, error) {
 	flags.SetOutput(os.Stderr)
 
 	cfg := config{}
-	flags.StringVar(&cfg.indexesDir, "indexes-dir", "./data/cache/indexes/quarterly", "quarterly index directory")
-	flags.StringVar(&cfg.dbPath, "db-path", "./data/polling.db", "SQLite database path")
+	flags.StringVar(&cfg.indexesDir, "indexes-dir",
+		appdata.Path("cache", "indexes", "quarterly"),
+		"quarterly index directory")
+	flags.StringVar(&cfg.dbPath, "db-path", appdata.Path("polling.db"),
+		"SQLite database path")
 	flags.StringVar(&cfg.natsURL, "nats-url", eventbus.DefaultURL, "NATS server URL")
 	flags.StringVar(&cfg.file, "file", "", "import one quarterly TSV file")
 	flags.BoolVar(&cfg.latest, "latest", false, "import the newest local quarterly TSV")

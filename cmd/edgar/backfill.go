@@ -47,7 +47,7 @@ func parseBackfillConfig(args []string) (appConfig, error) {
 		printSubcommandHelp("backfill",
 			"Index, discover, download, and process a finite historical scope.",
 			[]helpOption{
-				{"--set <name>", "Required constituent set from data/sets."},
+				{"--set <name>", "Required set from the configured data directory."},
 				{"--from-year <year>", "First year; continues through current data."},
 				{"--nats-url <url>", "NATS server; default nats://127.0.0.1:4222."},
 			})

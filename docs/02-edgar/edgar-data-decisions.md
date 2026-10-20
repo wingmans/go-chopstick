@@ -5,7 +5,12 @@ downloader.
 
 ## Data layout
 
-The local data directory is split by the role of each file:
+`CHOPSTICK_DATA_DIR` selects the application data root and defaults to
+`./data`. All runtime data, caches, databases, logs, and temporary files live
+below this directory. Build outputs and project-local development tools remain
+under `bin`, `dist`, and `.tools`.
+
+The data directory is split by the role of each file:
 
 ```text
 data/
@@ -13,19 +18,24 @@ data/
     index-zips/
       2025-QTR1.zip
       2025-QTR2.zip
-
-  indexes/
-    quarterly/
-      2025-QTR1.tsv
-      2025-QTR2.tsv
-    master.tsv
-
-  filings/
-    edgar/
-      data/
-        1000045/
-          0000950170-24-003550.txt
-          0000950170-24-003550-index.html
+    indexes/
+      quarterly/
+        2025-QTR1.tsv
+        2025-QTR2.tsv
+      master.tsv
+    filings/
+      edgar/data/1000045/
+        0000950170-24-003550.txt
+        0000950170-24-003550-index.html
+  parsed/
+  logs/
+  nats/
+  sets/
+  validation/
+  polling.db
+  analysis.db
+  feed.db
+  tmp/
 ```
 
 ### Cached index ZIP files
@@ -45,15 +55,15 @@ adds the derived `IndexPath` field.
 
 ### Master TSV
 
-The stitched `master.tsv` is stored under `data/cache/indexes`, next to its source
-quarterly indexes. It is derived data, but it is still an index/catalog rather
-than application output. Keeping it there makes its relationship to the
+The stitched `master.tsv` is stored under `data/cache/indexes`, next to its
+source quarterly indexes. It is derived data, but it is still an index/catalog
+rather than application output. Keeping it there makes its relationship to the
 quarterly files clear and avoids cluttering the `data` root.
 
 ## Filing paths
 
-Downloaded filing files are stored under `data/cache/filings` while preserving the
-SEC-relative path:
+Downloaded filing files are stored under `data/cache/filings` while preserving
+the SEC-relative path:
 
 ```text
 data/cache/filings/edgar/data/<CIK>/<accession>.txt

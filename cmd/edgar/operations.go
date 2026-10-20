@@ -15,6 +15,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nats-io/nats.go"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/eventbus"
 	"wingman.com/fetch-ecb/internal/eventworker"
@@ -41,9 +42,9 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 	cfg := appConfig{command: command}
 	cfg.operations = operationsConfig{
 		natsURL:     environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
-		pollingDB:   "./data/polling.db",
-		newsDB:      "./data/feed.db",
-		masterPath:  "./data/cache/indexes/master.tsv",
+		pollingDB:   appdata.Path("polling.db"),
+		newsDB:      appdata.Path("feed.db"),
+		masterPath:  appdata.Path("cache", "indexes", "master.tsv"),
 		newsAddress: "127.0.0.1:8081",
 		limit:       50,
 	}
@@ -222,6 +223,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 		fmt.Printf("  set              %s\n", environmentValue(edgarSetEnv,
 			"not configured"))
 		fmt.Printf("  from-year        %d\n", fromYear)
+		fmt.Printf("  data directory   %s\n", appdata.Root())
 		fmt.Printf("  NATS             %s\n", cfg.natsURL)
 		fmt.Printf("  polling DB       %s\n", cfg.pollingDB)
 		fmt.Printf("  viewer DB        %s\n", cfg.newsDB)

@@ -3,14 +3,12 @@
 package parser
 
 const (
-	ParsedSchemaVersion     = 4
-	ParserVersion           = "4"
-	DefaultParsedDirectory  = "./data/parsed"
-	DefaultFilingsDirectory = "./data/cache/filings"
-	ParseComplete           = "complete"
-	ParseNoXBRL             = "no_xbrl"
-	ParseUnsupported        = "unsupported"
-	ParsePartial            = "partial"
+	ParsedSchemaVersion = 4
+	ParserVersion       = "4"
+	ParseComplete       = "complete"
+	ParseNoXBRL         = "no_xbrl"
+	ParseUnsupported    = "unsupported"
+	ParsePartial        = "partial"
 )
 
 // ParsedFiling is a source-level result, not a harmonized financial statement.

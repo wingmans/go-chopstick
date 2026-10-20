@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/eventbus"
 	pw "wingman.com/fetch-ecb/internal/pollingworker"
@@ -16,7 +17,8 @@ import (
 
 func main() {
 	interval := flag.Duration("interval", time.Hour, "poll interval")
-	dbPath := flag.String("db-path", "./var/polling.db", "sqlite db path")
+	dbPath := flag.String("db-path", appdata.Path("polling.db"),
+		"sqlite db path")
 	userAgent := flag.String("user-agent", "", "SEC user-agent")
 	natsURL := flag.String("nats-url", eventbus.DefaultURL, "NATS server URL")
 

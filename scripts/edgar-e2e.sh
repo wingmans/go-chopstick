@@ -12,6 +12,8 @@ trap on_exit EXIT
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_PATH="$ROOT_DIR/bin/edgar"
+DATA_DIR="${CHOPSTICK_DATA_DIR:-$ROOT_DIR/data}"
+[[ "$DATA_DIR" = /* ]] || DATA_DIR="$ROOT_DIR/${DATA_DIR#./}"
 SET_NAME="us-gaap"
 FROM_YEAR="${FROM_YEAR:-2016}"
 REFRESH_LATEST="${REFRESH_LATEST:-0}"
@@ -24,10 +26,11 @@ fi
 
 cd "$ROOT_DIR"
 export LOGLEVEL=debug
+export CHOPSTICK_DATA_DIR="$DATA_DIR"
 
 echo "Preparing US-GAAP coverage constituent set"
-mkdir -p data/sets
-cp golden/us-gaap.json data/sets/us-gaap.json
+mkdir -p "$DATA_DIR/sets"
+cp golden/us-gaap.json "$DATA_DIR/sets/us-gaap.json"
 
 if [[ ! -x "$CLI_PATH" ]]; then
   echo "error: $CLI_PATH is missing; run 'make build' first" >&2
@@ -42,7 +45,7 @@ fi
 "$CLI_PATH" index \
   "${INDEX_ARGS[@]}"
 
-test -s data/cache/indexes/master.tsv
+test -s "$DATA_DIR/cache/indexes/master.tsv"
 
 for form_type in "${FORM_TYPES[@]}"; do
 	echo "Downloading and processing $form_type filings from $FROM_YEAR onward"
@@ -52,7 +55,7 @@ for form_type in "${FORM_TYPES[@]}"; do
 		--from-year "$FROM_YEAR"
 done
 
-if [[ ! -s data/analysis.db ]]; then
+if [[ ! -s "$DATA_DIR/analysis.db" ]]; then
   echo "error: analysis database was not produced" >&2
 	exit 1
 fi
@@ -62,7 +65,7 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$(sqlite3 data/analysis.db \
+if [[ "$(sqlite3 "$DATA_DIR/analysis.db" \
   'SELECT COUNT(*) FROM filing_views;')" -eq 0 ]]; then
   echo "error: analysis database contains no filing views" >&2
   exit 1

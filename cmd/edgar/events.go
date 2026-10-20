@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/eventbus"
 	"wingman.com/fetch-ecb/internal/eventworker"
@@ -48,12 +49,12 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 	cfg := appConfig{command: command}
 	cfg.events = eventCommandConfig{
 		natsURL:          environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
-		pollingDB:        "./data/polling.db",
-		newsDB:           "./data/feed.db",
-		filingsDirectory: edgar.DefaultFilingsDirectory,
-		parsedDirectory:  edgar.DefaultParsedDirectory,
-		analysisDB:       "./data/analysis.db",
-		masterPath:       "./data/cache/indexes/master.tsv",
+		pollingDB:        appdata.Path("polling.db"),
+		newsDB:           appdata.Path("feed.db"),
+		filingsDirectory: appdata.Path("cache", "filings"),
+		parsedDirectory:  appdata.Path("parsed"),
+		analysisDB:       appdata.Path("analysis.db"),
+		masterPath:       appdata.Path("cache", "indexes", "master.tsv"),
 		userAgent:        environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		baseURL:          environmentValue(edgarBaseURLEnv, ""),
 		address:          "127.0.0.1:8081",
@@ -62,7 +63,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		maxAttempts:      5,
 	}
 
-	if command == "batch" || command == "discover" {
+	if command == "discover" {
 		fromYear, err := environmentFromYear(0)
 		if err != nil {
 			return appConfig{}, err
@@ -94,7 +95,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--user-agent <value>", "SEC user agent."},
 			helpOption{"--interval <duration>", "Atom polling interval."},
 		)
-	case "batch", "discover":
+	case "discover":
 		flags.StringVar(&cfg.events.pollingDB, "polling-db",
 			cfg.events.pollingDB, "polling and outbox database")
 		flags.StringVar(&cfg.events.masterPath, "master", cfg.events.masterPath,
@@ -116,7 +117,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--polling-db <path>", "Accession and outbox database."},
 			helpOption{"--master <path>", "Stitched master index."},
 			helpOption{"--cik <cik>", "Select filings for one CIK."},
-			helpOption{"--set <name>", "Select a set from data/sets."},
+			helpOption{"--set <name>", "Select a set from the data directory."},
 			helpOption{"--form-type <type>", "Select a form; repeatable."},
 			helpOption{"--year <year>", "Select one filing year."},
 			helpOption{"--from-year <year>", "First year; default 2016."},
@@ -229,7 +230,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			errors.New("--nats-url, --interval, and --max-attempts must be valid"))
 	}
 
-	if command == "batch" || command == "discover" {
+	if command == "discover" {
 		visited := map[string]bool{}
 
 		flags.Visit(func(value *flag.Flag) { visited[value.Name] = true })
@@ -275,7 +276,6 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 func eventCommandDescription(command string) string {
 	return map[string]string{
 		"atom":     "Discover current SEC filings and publish durable events.",
-		"batch":    "Reconcile filing discoveries from a local master index.",
 		"discover": "Select filing discoveries from a local master index.",
 		"download": "Download files for discovery events, serially.",
 		"process":  "Parse downloaded filings and update aggregates, serially.",
@@ -341,8 +341,8 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 			UserAgent: cfg.userAgent,
 			Publisher: bus,
 		})
-	case "batch", "discover":
-		return runBatchDiscovery(ctx, bus, cfg, logger)
+	case "discover":
+		return runDiscovery(ctx, bus, cfg, logger)
 	case "download":
 		logger.Info("starting queue worker", "consumer",
 			eventworker.DownloadDurable, "selection", "all queued discoveries",
@@ -390,7 +390,7 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 	}
 }
 
-func runBatchDiscovery(ctx context.Context, bus *eventbus.NATS,
+func runDiscovery(ctx context.Context, bus *eventbus.NATS,
 	cfg eventCommandConfig, logger *slog.Logger,
 ) error {
 	logger.Info("starting discovery", "set", cfg.setName,

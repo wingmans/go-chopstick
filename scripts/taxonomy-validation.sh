@@ -4,6 +4,8 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_PATH="${CLI_PATH:-$ROOT_DIR/bin/edgar}"
+DATA_DIR="${CHOPSTICK_DATA_DIR:-$ROOT_DIR/data}"
+[[ "$DATA_DIR" = /* ]] || DATA_DIR="$ROOT_DIR/${DATA_DIR#./}"
 SET_NAME="${SET_NAME:-us-gaap}"
 FORM_TYPE="${FORM_TYPE:-10-K}"
 FROM_YEAR="${FROM_YEAR:-2015}"
@@ -11,7 +13,7 @@ TO_YEAR="${TO_YEAR:-}"
 REFRESH_LATEST="${REFRESH_LATEST:-0}"
 EXCEPTIONS_FILE="${EXCEPTIONS_FILE:-$ROOT_DIR/golden/taxonomy-validation-exceptions.json}"
 RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
-RUN_DIR="${RUN_DIR:-$ROOT_DIR/data/validation/runs/$RUN_ID}"
+RUN_DIR="${RUN_DIR:-$DATA_DIR/validation/runs/$RUN_ID}"
 RUN_LOG="$RUN_DIR/run.log"
 SOFT_FAILURES=()
 ACCEPTED_HARD_CORE_GAPS=0
@@ -19,6 +21,7 @@ UNEXPLAINED_HARD_CORE_GAPS=0
 
 cd "$ROOT_DIR"
 export LOGLEVEL="${LOGLEVEL:-debug}"
+export CHOPSTICK_DATA_DIR="$DATA_DIR"
 
 if [[ ! -x "$CLI_PATH" ]]; then
   echo "error: $CLI_PATH is missing; run 'make build' first" >&2
@@ -42,8 +45,8 @@ if [[ ! -f "$EXCEPTIONS_FILE" ]] || ! jq -e '
   exit 1
 fi
 
-mkdir -p data/sets "$RUN_DIR"
-cp "golden/$SET_NAME.json" "data/sets/$SET_NAME.json"
+mkdir -p "$DATA_DIR/sets" "$RUN_DIR"
+cp "golden/$SET_NAME.json" "$DATA_DIR/sets/$SET_NAME.json"
 cp "golden/$SET_NAME.json" "$RUN_DIR/constituent-set.json"
 cp internal/filingview/taxonomy.json "$RUN_DIR/taxonomy.json"
 : > "$RUN_LOG"
@@ -522,7 +525,7 @@ determine_gate_status() {
 run_step "download and stitch SEC indexes" \
   "$CLI_PATH" index "${INDEX_ARGS[@]}"
 
-test -s data/cache/indexes/master.tsv
+test -s "$DATA_DIR/cache/indexes/master.tsv"
 
 run_step_allow_failure "download $FORM_TYPE filings for $SET_NAME" \
   "$CLI_PATH" filings \
@@ -537,7 +540,7 @@ run_step_allow_failure "reprocess parsed filings and compact views" \
     "${YEAR_ARGS[@]}" \
     --reprocess
 
-if [[ ! -s data/analysis.db ]]; then
+if [[ ! -s "$DATA_DIR/analysis.db" ]]; then
   echo "error: analysis database was not produced" >&2
 	exit 1
 fi
@@ -547,7 +550,7 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$(sqlite3 data/analysis.db \
+if [[ "$(sqlite3 "$DATA_DIR/analysis.db" \
   'SELECT COUNT(*) FROM filing_views;')" -eq 0 ]]; then
   echo "error: analysis database contains no filing views" >&2
   exit 1

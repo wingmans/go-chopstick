@@ -52,13 +52,15 @@ Both commands provide `-r, --reprocess`, default false. It bypasses reuse and
 rebuilds parsed output; it does not force redownloading the raw submission. No
 separate skip-processed flag is needed: reuse is the default.
 
-To reset local EDGAR outputs while keeping downloaded raw SEC submissions, run
-`make clean-analysis-data`. The underlying `scripts/clean-analysis-data.sh`
-preserves `data/cache/filings` and cached SEC index ZIPs under
-`data/cache/index-zips`; it removes parsed filings, validation runs, generated
-local sets, and stitched/extracted index files. This lets `edgar index
---stitch` rebuild `master.tsv` from disk without network traffic unless
-`--refresh-latest` is also requested.
+To reset processing while keeping downloaded source material, run
+`make clean-dev`. It preserves filings, index ZIPs, extracted quarterly
+indexes, and constituent sets. It removes parsed output, databases, validation
+reports, logs, NATS state, temporary files, and the stitched `master.tsv`.
+This lets `edgar index --stitch` rebuild the master index without downloading
+the quarterly indexes again.
+
+Use `make reset-dev` for a completely empty application data directory. That
+also removes downloaded source material and requires fresh network requests.
 
 Both commands provide `-n, --noop`, default false. This is now a planning operation:
 it reads local headers and checks existing parsed results and source checksums,

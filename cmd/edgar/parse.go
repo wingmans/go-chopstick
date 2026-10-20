@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
 	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
 )
 
@@ -17,14 +17,14 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
 	cfg.command = parseCommand
-	cfg.parse.masterPath = "./data/cache/indexes/master.tsv"
-	cfg.parse.analysisDB = "./data/analysis.db"
+	cfg.parse.masterPath = appdata.Path("cache", "indexes", "master.tsv")
+	cfg.parse.analysisDB = appdata.Path("analysis.db")
 	flags := flag.NewFlagSet(parseCommand, flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
 		printSubcommandHelp(parseCommand, "Process downloaded local submissions selected from master.tsv.", []helpOption{
 			{flags: "-c, --cik <cik>", description: "Select filings for this CIK."},
-			{flags: "    --set <name>", description: "Select current members from data/sets/<name>.json."},
+			{flags: "    --set <name>", description: "Select a set from the configured data directory."},
 			{flags: "-f, --form-type <type>", description: "Select this form type; may be repeated."},
 			{flags: "-y, --year <year>", description: "Select filings filed in this year; default is all years."},
 			{flags: "    --from-year <year>", description: "First filing year to include."},
@@ -101,8 +101,8 @@ func runParse(ctx context.Context, cfg appConfig) error {
 	)
 
 	processing := filingworkflow.ProcessingConfig{
-		Directory:        edgar.DefaultParsedDirectory,
-		FilingsDirectory: edgar.DefaultFilingsDirectory,
+		Directory:        appdata.Path("parsed"),
+		FilingsDirectory: appdata.Path("cache", "filings"),
 		AnalysisDBPath:   cfg.parse.analysisDB,
 		FormType:         "",
 		Reprocess:        cfg.parse.reprocess,
@@ -114,7 +114,8 @@ func runParse(ctx context.Context, cfg appConfig) error {
 		return err
 	}
 
-	_, err := filingworkflow.ProcessLocalFilings(ctx, cfg.parse.masterPath, edgar.DefaultFilingsDirectory, processing, cfg.parse.filter)
+	_, err := filingworkflow.ProcessLocalFilings(ctx, cfg.parse.masterPath,
+		appdata.Path("cache", "filings"), processing, cfg.parse.filter)
 
 	return err
 }

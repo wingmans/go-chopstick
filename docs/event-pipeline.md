@@ -44,7 +44,8 @@ make env
 Make reads `.env` and exports its documented settings to the application. CLI
 flags still override application defaults. The normal development scope uses
 `EDGAR_SET` and `EDGAR_FROM_YEAR`; the upper boundary is the current available
-data.
+data. `CHOPSTICK_DATA_DIR` defaults to `./data` and is the root for all runtime
+data, caches, databases, logs, and temporary files.
 
 Install the pinned NATS server binary into the git-ignored `.tools/bin`
 directory. This does not install a system-wide binary or service.
@@ -111,8 +112,7 @@ make logs-download
 make logs-process
 ```
 
-The explicit stages remain available for debugging. `batch` is a deprecated
-alias for `discover`.
+The explicit stages remain available for debugging.
 
 ```sh
 make index
@@ -134,3 +134,8 @@ The PID, log, and JetStream store live together under `data/nats`. Reset
 removes only that directory's development state. Application databases and
 downloaded or parsed files remain independent and can be deleted according to
 the specific replay experiment.
+
+Use `make clean-dev` to remove processing state while preserving downloaded
+filings, index source material, and constituent sets. Use `make reset-dev` to
+remove all application data and start again without any cached downloads. Both
+commands stop the project-local NATS server before removing its state.
