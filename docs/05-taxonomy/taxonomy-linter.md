@@ -51,7 +51,7 @@ Validation runs reuse the local index and filing caches by default. To refresh
 only the newest SEC index quarter, opt in explicitly:
 
 ```bash
-REFRESH_LATEST=1 make taxonomy-validation
+REFRESH_LATEST=1 bash scripts/taxonomy-validation.sh
 ```
 
 - `coverage-report.txt` summarizes expected filing coverage, missing core
@@ -328,9 +328,15 @@ Caterpillar's `CashCashEquivalentsAndShortTermInvestments` is accepted as a
 reviewed near-match, not silently mapped to pure cash. Future work may add a
 separate cash-and-short-term-investments metric.
 
-The fast default loop is available as `make taxonomy-validation-fast`. It uses
-the five-company `golden` set, one 2024 10-K year, and local caches. The full
-19-company pass remains `make taxonomy-validation`.
+Run the fast loop with the five-company `golden` set, one 2024 10-K year, and
+local caches:
+
+```bash
+SET_NAME=golden FROM_YEAR=2024 TO_YEAR=2024 \
+  bash scripts/taxonomy-validation.sh
+```
+
+Run the full 19-company pass without those overrides.
 
 Berkshire's diluted-EPS gap is currently a valid `REVIEW` result: the 2024
 filing has basic EPS facts scoped to share-class dimensions and no consolidated

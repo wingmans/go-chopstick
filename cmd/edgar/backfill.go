@@ -137,7 +137,7 @@ func runBackfill(ctx context.Context, client *http.Client,
 
 	if len(failures) > 0 {
 		return fmt.Errorf("backfill completed with %d unresolved failure(s); "+
-			"run make errors", len(failures))
+			"run 'edgar errors'", len(failures))
 	}
 
 	logger.Info("backfill complete", "set", cfg.setName,

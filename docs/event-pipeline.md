@@ -35,10 +35,10 @@ is replayed from the beginning.
 
 ## Development
 
-Copy the development configuration and provide your SEC contact address:
+Prepare the project-local tools and copy the development configuration:
 
 ```sh
-make env
+make setup
 ```
 
 Make reads `.env` and exports its documented settings to the application. CLI
@@ -47,76 +47,67 @@ flags still override application defaults. The normal development scope uses
 data. `CHOPSTICK_DATA_DIR` defaults to `./data` and is the root for all runtime
 data, caches, databases, logs, and temporary files.
 
-Install the pinned NATS server binary into the git-ignored `.tools/bin`
-directory. This does not install a system-wide binary or service.
-
-```sh
-make deps
-```
+The pinned NATS server is installed into the git-ignored `.tools/bin`
+directory. This does not install a system-wide binary or service. Update the
+SEC contact address in `.env` before running the service.
 
 Check configuration and infrastructure without changing them:
 
 ```sh
-make doctor
-make doctor-verbose
+go run ./cmd/edgar doctor
+go run ./cmd/edgar doctor --verbose
 ```
 
-Run a finite historical pipeline with the scope from `.env`:
+Run a finite historical pipeline with an explicit scope:
 
 ```sh
-make backfill
+go run ./cmd/edgar backfill --set us-gaap --from-year 2024
 ```
 
 The command retrieves and stitches indexes, discovers the selected filings,
-and drains download and processing work. Override the local defaults without
-editing `.env` when needed:
+and drains download and processing work.
+
+Start the development infrastructure explicitly, then run all application
+roles in the foreground:
 
 ```sh
-make backfill SET=us-gaap FROM_YEAR=2024
-```
-
-Run all continuous roles in the foreground:
-
-```sh
+make nats-start
 make dev
 ```
 
 `make dev` creates missing schemas, streams, and consumers through normal
 application startup. It preserves existing state and does not perform a
-historical backfill. Press `Ctrl-C` to stop the application; the project-local
-NATS server remains running.
+historical backfill. It never starts a background process. Press `Ctrl-C` to
+stop the application; the explicitly started NATS server remains running.
 
 Inspect current state and unresolved failures from another terminal:
 
 ```sh
-make status
-make errors
+go run ./cmd/edgar status
+go run ./cmd/edgar errors
 ```
 
 Workers retry failed work five times before terminating that delivery and
 leaving a durable failure record in `polling.db`. Requeue failures explicitly:
 
 ```sh
-make retry-download
-make retry-process
+go run ./cmd/edgar retry --stage download
+go run ./cmd/edgar retry --stage process
 ```
 
 Normal logs include a progress summary every five seconds. `LOGLEVEL=debug`
-also shows individual work decisions. `make dev` and `make backfill` append
-their output to `data/logs/edgar.log`. Follow all output or a filtered view:
+also shows individual work decisions. `make dev` appends its output to
+`data/logs/edgar.log`. Follow that file from another terminal when needed:
 
 ```sh
-make logs
-make logs-errors
-make logs-download
-make logs-process
+tail -F data/logs/edgar.log
 ```
 
 The explicit stages remain available for debugging.
 
 ```sh
-make index
-make discover
+go run ./cmd/edgar index --from-year 2024
+go run ./cmd/edgar discover --set us-gaap --from-year 2024
 go run ./cmd/edgar download --drain
 go run ./cmd/edgar process --drain
 ```

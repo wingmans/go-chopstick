@@ -12,14 +12,14 @@
 Run with the default daily USD-to-EUR series:
 
 ```bash
-make run
+go run ./cmd/ecb
 ```
 
 Build a local executable:
 
 ```bash
 make build
-./bin/ecb
+./bin/ecb-fx
 ```
 
 ## Inputs
@@ -190,10 +190,8 @@ Invalid inputs and failed ECB requests are reported on standard error and return
 ## Development
 
 ```bash
-make build    # Build bin/ecb
+make build    # Build command binaries
 make test     # Run all tests
 make lint     # Run golangci-lint
-make run      # Run the application
 make clean    # Remove build artifacts
-make release  # Create a Goreleaser release
 ```

@@ -24,7 +24,7 @@ The manually cross-checked company values are kept in
 [`golden/manual-checks.json`](../../golden/manual-checks.json). This is a durable
 approved baseline for the five-company, two-year spot check. Its source
 labels, fiscal periods, signs, and values were checked by a human and are
-enforced by `make manual-checks`.
+enforced by `scripts/manual-checks.sh`.
 
 ## Current Golden-19 Acceptance Boundary
 

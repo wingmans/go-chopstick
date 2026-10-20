@@ -177,7 +177,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 	if _, err := os.Stat(cfg.masterPath); err == nil {
 		report.check("OK", "master index", cfg.masterPath)
 	} else if errors.Is(err, os.ErrNotExist) {
-		report.check("WARN", "master index", "missing; run make index")
+		report.check("WARN", "master index", "missing; run 'edgar index'")
 	} else {
 		report.check("FAIL", "master index", err.Error())
 	}

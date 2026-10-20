@@ -23,6 +23,11 @@ is_running() {
   running_pid >/dev/null
 }
 
+server_available() {
+  curl --fail --silent --max-time 1 http://127.0.0.1:8222/varz | \
+    grep --quiet '"server_id"'
+}
+
 start() {
   [[ -x "${nats_server}" ]] || {
     echo "project-local nats-server is not installed" >&2
@@ -32,6 +37,11 @@ start() {
 
   pid="$(running_pid)" && {
     echo "NATS is already running with PID ${pid}"
+    return
+  }
+
+  server_available && {
+    echo "NATS is already available; leaving the existing server untouched"
     return
   }
 
@@ -54,6 +64,13 @@ start() {
 stop() {
   pid="$(running_pid)" || {
     rm -f "${pid_file}"
+
+    server_available && {
+      echo "NATS is running but is not managed by this project" >&2
+      echo "leaving the existing server untouched" >&2
+      return 1
+    }
+
     echo "NATS is not running"
     return
   }
@@ -65,7 +82,7 @@ stop() {
 }
 
 reset() {
-  ! is_running || {
+  ! is_running && ! server_available || {
     echo "stop NATS before resetting its data" >&2
     return 1
   }
@@ -77,7 +94,12 @@ reset() {
 
 status() {
   pid="$(running_pid)" && {
-    echo "NATS is running with PID ${pid}"
+    echo "NATS is running with project PID ${pid}"
+    return
+  }
+
+  server_available && {
+    echo "NATS is running but is not managed by this project"
     return
   }
 

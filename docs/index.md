@@ -92,7 +92,7 @@ the SEC-relative path so the local file can be traced back to its source URL.
 For the current end-to-end target:
 
 ```bash
-REFRESH_LATEST=1 make integration
+REFRESH_LATEST=1 bash scripts/edgar-e2e.sh
 ```
 
 The integration script selects `10-K` for both download and parse. This is
@@ -308,7 +308,7 @@ backtests.
 
 The current guardrail set is sufficient when:
 
-- `make test`, `make lint`, and `make manual-checks` pass;
+- `make test`, `make lint`, and `scripts/manual-checks.sh` pass;
 - the clean golden-19 run parses every expected 10-K;
 - compact lint has no quality issues;
 - hard core gaps are zero or explicitly accepted with evidence;
@@ -325,9 +325,10 @@ source-level findings.
 make build
 make test
 make lint
-make manual-checks
-REFRESH_LATEST=1 make integration
-SET_NAME=us-gaap-coverage FROM_YEAR=2015 TO_YEAR=2025 make taxonomy-validation
+bash scripts/manual-checks.sh
+REFRESH_LATEST=1 bash scripts/edgar-e2e.sh
+SET_NAME=us-gaap-coverage FROM_YEAR=2015 TO_YEAR=2025 \
+  bash scripts/taxonomy-validation.sh
 make docs-pdf
 ```
 

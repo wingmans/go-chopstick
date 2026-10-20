@@ -1,6 +1,4 @@
-.PHONY: help env deps build lint integration taxonomy-validation \
-	taxonomy-validation-fast manual-checks docs-pdf test clean clean-dev \
-	reset-dev
+.PHONY: help setup build test lint docs-pdf clean
 
 .DEFAULT_GOAL := help
 
@@ -27,57 +25,50 @@ ifneq ($(strip $(FROM_YEAR)),)
 EDGAR_FROM_YEAR := $(FROM_YEAR)
 endif
 
-include make/operations.mk
+include make/development.mk
 
 help:
 	@printf '%s\n' \
 		'' \
-		'Available commands:' \
+		'Development:' \
 		'' \
 		'  help                    Display this command list' \
-		'  env                     Create .env from the example if missing' \
-		'  deps                    Install project-local development tools' \
-		'  nats-dev                Alias for nats-start' \
-		'  nats-start              Start the project-local NATS server' \
-		'  nats-stop               Stop the project-local NATS server' \
-		'  nats-status             Show the project-local NATS server status' \
-		'  nats-reset              Remove local NATS JetStream data' \
-		'  doctor                  Validate pipeline dependencies' \
-		'  doctor-verbose          Validate and show resolved configuration' \
-		'  status                  Show pipeline state and NATS backlogs' \
-		'  errors                  Show unresolved pipeline failures' \
-		'  retry-download          Requeue failed downloads' \
-		'  retry-process           Requeue failed processing work' \
-		'  index                   Download and stitch SEC indexes' \
-		'  discover                Publish the configured filing scope' \
-		'  backfill                Run index through processing' \
-		'  dev                     Run the modular monolith in the foreground' \
-		'  logs                    Follow the development log' \
-		'  logs-errors             Follow warnings and errors' \
-		'  logs-download           Follow download-role messages' \
-		'  logs-process            Follow process-role messages' \
+		'  setup                   Prepare the development environment' \
+		'  dev                     Run the app in foreground; requires NATS' \
 		'  build                   Build all command binaries' \
-		'  docs-pdf                Build one PDF from the documentation chapters' \
-		'  lint                    Run golangci-lint with auto-fixes' \
 		'  test                    Run the Go test suite' \
+		'  lint                    Run golangci-lint with auto-fixes' \
+		'  docs-pdf                Build the documentation PDF' \
 		'  clean                   Remove build artifacts' \
+		'' \
+		'Local data:' \
+		'' \
 		'  clean-dev               Reset processing but preserve downloads' \
 		'  reset-dev               Remove all local application data' \
 		'' \
-		'  constituents            Download the current S&P 500 constituent set' \
-		'  integration             Run the EDGAR end-to-end test' \
-		'  taxonomy-validation     Run the 19-company taxonomy validation pass' \
-		'  taxonomy-validation-fast Run the five-company one-year validation pass' \
-		'  manual-checks           Compare the confirmed baseline with parsed 10-K views' \
-		'  run                     Fetch ECB data' \
-		'  serve                   Serve locally parsed EDGAR filings' \
-		'  serve-dev               Serve filings with Air auto-rebuilds' \
+		'Infrastructure:' \
+		'' \
+		'  nats-start              Start project-local NATS' \
+		'  nats-stop               Stop project-local NATS' \
+		'  nats-status             Show project-local NATS status' \
+		'  nats-reset              Remove local NATS state' \
+		'' \
+		'Operations:' \
+		'' \
+		'  doctor                  Validate pipeline dependencies' \
+		'  doctor-verbose          Validate and show configuration' \
+		'  status                  Show pipeline and NATS state' \
+		'  errors                  Show unresolved pipeline failures' \
+		'  retry-download          Requeue failed downloads' \
+		'  retry-process           Requeue failed processing work' \
+		'' \
+		'More commands: go run ./cmd/edgar --help'
 
-deps:
+setup:
+	@bash -c '[[ -f .env ]] && echo ".env already exists" || { \
+		cp .env.example .env && echo "created .env"; \
+	}'
 	bash scripts/install-tools.sh
-
-env:
-	@bash -c '[[ -f .env ]] && echo ".env already exists" || { cp .env.example .env && echo "created .env"; }'
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -90,18 +81,6 @@ build:
 lint:
 	golangci-lint run --fix ./cmd/... ./internal/...
 
-integration: build
-	bash scripts/edgar-e2e.sh
-
-taxonomy-validation: build
-	bash scripts/taxonomy-validation.sh
-
-taxonomy-validation-fast: build
-	SET_NAME=golden FROM_YEAR=2024 TO_YEAR=2024 bash scripts/taxonomy-validation.sh
-
-manual-checks:
-	bash scripts/manual-checks.sh
-
 docs-pdf:
 	bash scripts/docs-pdf.sh
 
@@ -110,9 +89,3 @@ test:
 
 clean:
 	rm -rf $(BIN_DIR) dist
-
-clean-dev: nats-stop
-	bash scripts/clean-dev.sh
-
-reset-dev: nats-stop
-	bash scripts/reset-dev.sh
