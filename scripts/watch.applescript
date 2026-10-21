@@ -20,8 +20,9 @@ on run arguments
     set consoleTab to selected tab of consoleWindow
     set devTerminal to focused terminal of consoleTab
 
-    -- Split the full window first so errors retain the full bottom width.
-    set errorsTerminal to split devTerminal direction down with configuration my surfaceConfig(projectDirectory, "logs-errors")
+    -- Split the full window first to reserve the bottom overview row.
+    set overviewTerminal to split devTerminal direction down with configuration my surfaceConfig(projectDirectory, "overview")
+    set errorsTerminal to split overviewTerminal direction right with configuration my surfaceConfig(projectDirectory, "logs-errors")
 
     -- Divide the upper area into service, discovery, download, and process.
     set discoveryTerminal to split devTerminal direction right with configuration my surfaceConfig(projectDirectory, "logs-discovery")

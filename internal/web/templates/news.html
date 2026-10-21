@@ -44,31 +44,35 @@
   <ol>
     {{range .Items}}
     <li>
-      <div class="title">
-        <a href="{{.FilingURL}}">{{if .CompanyName}}{{.CompanyName}}
-          {{else}}CIK {{.CIK}}{{end}}</a>
-        <span class="form">{{.FormType}}</span>
-      </div>
-      <div class="meta">
-        filed {{.FilingDate}} · CIK {{.CIK}} ·
-        {{shortAccession .AccessionNumber}} · {{.SourceFeed}}
-      </div>
-      <div class="meta selection-state">
-        {{if .Selected}}
-          <span class="selection selected">{{if eq .SelectionMode "on-demand"}}on demand{{else}}selected{{end}}</span>
-        {{else}}
-          <span class="selection skipped">observed only</span>
+      <div class="news-item">
+        <div class="news-details">
+          <div class="title">
+            <a href="{{.FilingURL}}">{{if .CompanyName}}{{.CompanyName}}
+              {{else}}CIK {{.CIK}}{{end}}</a>
+            <span class="form">{{.FormType}}</span>
+          </div>
+          <div class="meta">
+            filed {{.FilingDate}} · CIK {{.CIK}} ·
+            {{shortAccession .AccessionNumber}} · {{.SourceFeed}}
+          </div>
+          <div class="meta selection-state">
+            {{if .Selected}}
+              <span class="selection selected">{{if eq .SelectionMode "on-demand"}}on demand{{else}}selected{{end}}</span>
+            {{else}}
+              <span class="selection skipped">observed only</span>
+            {{end}}
+            {{.SelectionReason}}
+          </div>
+        </div>
+        {{if not .Selected}}
+        <div class="news-action" id="download-{{.AccessionNumber}}">
+          <button type="button"
+            hx-post="/actions/download/{{.AccessionNumber}}"
+            hx-target="#download-{{.AccessionNumber}}"
+            hx-swap="innerHTML">Download and parse</button>
+        </div>
         {{end}}
-        {{.SelectionReason}}
       </div>
-      {{if not .Selected}}
-      <div id="download-{{.AccessionNumber}}">
-        <button type="button"
-          hx-post="/actions/download/{{.AccessionNumber}}"
-          hx-target="#download-{{.AccessionNumber}}"
-          hx-swap="innerHTML">Download and parse on demand</button>
-      </div>
-      {{end}}
     </li>
     {{end}}
   </ol>

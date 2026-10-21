@@ -1,4 +1,5 @@
-.PHONY: dev watch prepare-dev-data clean-dev reset-dev nats-start nats-stop \
+.PHONY: dev watch overview index-refresh prepare-dev-data clean-dev \
+	reset-dev nats-start nats-stop \
 	nats-status nats-reset \
 	doctor doctor-verbose status errors retry-download retry-process logs \
 	logs-atom logs-select logs-discovery logs-download logs-process logs-news \
@@ -13,6 +14,12 @@ dev: nats-start prepare-dev-data
 
 watch:
 	/usr/bin/osascript scripts/watch.applescript "$(CURDIR)"
+
+overview:
+	bash scripts/pipeline-overview.sh
+
+index-refresh:
+	go run ./cmd/edgar index --refresh-latest
 
 prepare-dev-data:
 	mkdir -p "$(CHOPSTICK_DATA_DIR)/sets"

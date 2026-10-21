@@ -39,6 +39,8 @@ help:
 		'  setup                   Prepare the development environment' \
 		'  dev                     Start NATS and run all services' \
 		'  watch                   Open the tiled Ghostty development console' \
+		'  overview                Refresh polling and news metrics each minute' \
+		'  index-refresh           Refresh latest SEC index and master.tsv' \
 		'  filings-web             Run only the filings web server' \
 		'  build                   Build all command binaries' \
 		'  test                    Run the Go test suite' \

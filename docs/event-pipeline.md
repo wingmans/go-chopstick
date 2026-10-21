@@ -87,15 +87,40 @@ streams, and consumers. It preserves existing state and does not perform a
 historical backfill. Press `Ctrl-C` to stop the application; NATS remains
 running until `make nats-stop` or a reset.
 
+If `master.tsv` is missing, `make dev` also starts a one-time index bootstrap
+in parallel with the Atom feed. Once the master index is available, startup
+reconciles the configured `EDGAR_SET`, `EDGAR_FORM_TYPES`, and
+`EDGAR_FROM_YEAR` scope. Download and processing remain idempotent: existing
+raw submissions and current parsed results are reused. Existing master indexes
+are not refreshed at startup. Refresh the latest quarter and rebuild
+`master.tsv` explicitly with:
+
+```sh
+make index-refresh
+```
+
+This command is safe to schedule once or twice per day: older quarterly files
+are reused and only the latest quarter is refreshed.
+
 Open the same development process with a tiled Ghostty console:
 
 ```sh
 make watch
 ```
 
-The console runs `make dev` and follows discovery, download, processing, and
-error logs in separate panes. Ghostty may ask for macOS Automation permission
-the first time the AppleScript launcher runs.
+The console runs `make dev`, follows discovery, download, processing, and error
+logs, and refreshes a SQLite pipeline overview every minute. Ghostty may ask
+for macOS Automation permission the first time the AppleScript launcher runs.
+
+Run the overview independently when needed:
+
+```sh
+make overview
+```
+
+It uses read-only connections to `polling.db` and `feed.db`. The display
+summarizes observations, outbox publication, failures, dead letters, selection
+decisions, form counts, and the latest news items.
 
 Inspect current state and unresolved failures from another terminal:
 

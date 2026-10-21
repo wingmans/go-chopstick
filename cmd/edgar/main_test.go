@@ -236,6 +236,23 @@ func TestNewsAddressUsesEnvironmentDefault(t *testing.T) {
 	}
 }
 
+func TestRunUsesEnvironmentReconciliationScope(t *testing.T) {
+	t.Setenv(edgarSetEnv, "")
+	t.Setenv(edgarFormTypesEnv, "10-K,10-Q,8-K")
+	t.Setenv(edgarFromYearEnv, "2022")
+
+	cfg, err := parseConfig([]string{"run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.events.filter.FromYear != 2022 {
+		t.Fatalf("run from year = %d", cfg.events.filter.FromYear)
+	}
+	if len(cfg.events.filter.FormTypes) != 3 {
+		t.Fatalf("run forms = %v", cfg.events.filter.FormTypes)
+	}
+}
+
 func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
 	t.Setenv(edgarWebAddressEnv, "127.0.0.1:8084")
 

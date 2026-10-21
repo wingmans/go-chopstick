@@ -74,8 +74,12 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 	}
 	cfg.events.filter.FormTypes = configuredForms
 
-	if command == "discover" {
-		fromYear, err := environmentFromYear(0)
+	if command == "discover" || command == "run" {
+		defaultYear := 0
+		if command == "run" {
+			defaultYear = edgar.EarliestPipelineYear
+		}
+		fromYear, err := environmentFromYear(defaultYear)
 		if err != nil {
 			return appConfig{}, err
 		}
@@ -232,6 +236,8 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			"automatic processing constituent set")
 		flags.Var(&formTypes, "form-type",
 			"automatic processing form type; may be repeated")
+		flags.IntVar(&cfg.events.fromYear, "from-year", cfg.events.fromYear,
+			"first filing year for startup reconciliation")
 
 		options = append(options,
 			helpOption{"--polling-db <path>", "Accession and outbox database."},
@@ -249,6 +255,8 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--set <name>", "Automatic processing constituent set."},
 			helpOption{"--form-type <type>",
 				"Automatic processing form; repeatable."},
+			helpOption{"--from-year <year>",
+				"First year for startup reconciliation."},
 		)
 	}
 
@@ -328,6 +336,15 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			cfg.events.setName); err != nil {
 			return subcommandError(flags, err)
 		}
+
+		if command == "run" {
+			if cfg.events.fromYear < edgar.EarliestPipelineYear {
+				return subcommandError(flags, fmt.Errorf(
+					"--from-year must be %d or later",
+					edgar.EarliestPipelineYear))
+			}
+			cfg.events.filter.FromYear = cfg.events.fromYear
+		}
 	}
 
 	return cfg, nil
@@ -368,7 +385,26 @@ func runEventCommand(ctx context.Context, command string,
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errorsCh := make(chan error, 5)
+	reconcileLogger := logger.With("role", "reconcile")
+	go func() {
+		client := &http.Client{Timeout: 30 * time.Second}
+		if bootstrapErr := ensureMasterIndex(ctx, client, cfg,
+			reconcileLogger); bootstrapErr != nil &&
+			!errors.Is(bootstrapErr, context.Canceled) {
+			reconcileLogger.Warn("master index bootstrap failed",
+				"error", bootstrapErr)
+
+			return
+		}
+		if reconcileErr := reconcileMasterIndex(ctx, cfg,
+			reconcileLogger); reconcileErr != nil &&
+			!errors.Is(reconcileErr, context.Canceled) {
+			reconcileLogger.Warn("master index reconciliation failed",
+				"error", reconcileErr)
+		}
+	}()
+
+	errorsCh := make(chan error, 6)
 
 	for _, role := range []string{
 		"atom", "select", "download", "process", "news", "filings-web",
@@ -383,6 +419,69 @@ func runEventCommand(ctx context.Context, command string,
 	cancel()
 
 	return err
+}
+
+func ensureMasterIndex(ctx context.Context, client *http.Client,
+	cfg eventCommandConfig, logger *slog.Logger,
+) error {
+	if _, err := os.Stat(cfg.masterPath); err == nil {
+		logger.Debug("master index already present", "path", cfg.masterPath)
+
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect master index: %w", err)
+	}
+
+	indexCfg, err := parseDownloadIndexConfig(nil)
+	if err != nil {
+		return err
+	}
+	indexCfg.index.MasterPath = cfg.masterPath
+	indexCfg.index.UserAgent = cfg.userAgent
+	indexCfg.index.BaseURL = cfg.baseURL
+
+	logger.Info("starting missing master index bootstrap",
+		"from_year", indexCfg.index.SinceYear,
+		"path", indexCfg.index.MasterPath)
+	if err := edgar.DownloadIndex(ctx, client, indexCfg.index); err != nil {
+		return err
+	}
+
+	logger.Info("master index bootstrap complete",
+		"path", indexCfg.index.MasterPath)
+
+	return nil
+}
+
+func reconcileMasterIndex(ctx context.Context, cfg eventCommandConfig,
+	logger *slog.Logger,
+) error {
+	if strings.TrimSpace(cfg.setName) == "" || len(cfg.filter.CIKs) == 0 {
+		logger.Warn("skipping master index reconciliation",
+			"reason", "EDGAR_SET is not configured")
+
+		return nil
+	}
+
+	bus, err := eventbus.Connect(cfg.natsURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = bus.Close() }()
+
+	logger.Info("starting master index reconciliation", "set", cfg.setName,
+		"set_members", len(cfg.filter.CIKs),
+		"form_types", cfg.filter.FormTypes,
+		"from_year", cfg.filter.FromYear, "master", cfg.masterPath)
+	if err := runDiscovery(ctx, bus, cfg, logger); err != nil {
+		return err
+	}
+
+	logger.Info("master index reconciliation complete", "set", cfg.setName,
+		"form_types", cfg.filter.FormTypes,
+		"from_year", cfg.filter.FromYear)
+
+	return nil
 }
 
 func runRole(ctx context.Context, role string, cfg eventCommandConfig,

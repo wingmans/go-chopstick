@@ -30,7 +30,16 @@ input { width: 145px; border: 1px solid #aaa; padding: 4px 6px; }
 select { border: 1px solid #aaa; background: #fff; padding: 4px 6px; }
 button { border: 1px solid #777; background: #fff; padding: 4px 12px; }
 ol { margin: 0; padding: 12px 14px 18px 42px; }
-li { padding: 3px 2px; }
+li { padding: 5px 2px; }
+.news-item {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+.news-details { min-width: 0; }
+.news-action { flex: 0 0 auto; white-space: nowrap; }
+.news-action button { min-height: 26px; padding: 2px 9px; font-size: 0.72rem; }
 .title { font-size: 0.86rem; }
 .title a { color: #111; text-decoration: none; }
 .title a:visited { color: #777; }
@@ -55,4 +64,7 @@ li { padding: 3px 2px; }
   label { flex: 1 1 44%; }
   input { width: 100%; }
   button { flex: 1 1 100%; }
+  .news-item { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .news-action { align-self: stretch; }
+  .news-action button { width: 100%; }
 }
