@@ -280,7 +280,7 @@ func decodeUU(reader io.Reader, writer io.Writer) error {
 func safeFilename(filename string) (string, error) {
 	filename = strings.TrimSpace(filename)
 	if filename == "" || filename == "." || filename == ".." ||
-		filepath.Base(filename) != filename {
+		filepath.Base(filename) != filename || strings.Contains(filename, `\`) {
 		return "", fmt.Errorf("unsafe artifact filename %q", filename)
 	}
 

@@ -5,9 +5,9 @@ boundaries executable. NATS is a deployment prerequisite; the application does
 not embed a server.
 
 ```text
-SEC Atom -> polling.db + outbox -> JetStream -> download -> process
-                                      |
-                                      +----------> EDGAR news
+SEC Atom -> polling.db + outbox -> observed -> selection -> download -> process
+                                              |
+                                              +----------> EDGAR news
 ```
 
 Atom is intentionally a lossy, low-latency source. The existing index path is
@@ -23,10 +23,15 @@ index is authoritative. HTML index paths are not synthesized or downloaded.
 
 JetStream delivery is at least once. Download and processing therefore retain
 their existing idempotent file and database checks. Consumers are serial for
-now. Subject suffixes route broad categories such as form type. Constituent
-set and filing-year selection happen during discovery, before work enters the
-stream. Download and process consume all work assigned to their durable
-consumers.
+now. Atom publishes every normalized entry as an observed discovery. The
+selection worker publishes a second decision for every discovery. Only
+selected decisions enter the download queue.
+
+Automatic processing uses `EDGAR_SET` and `EDGAR_FORM_TYPES`. The default
+development scope is the 19-member `us-gaap` set and forms `10-K`, `10-Q`, and
+`8-K`. The parser capability list validates the CLI and is shown by Doctor and
+the news website. Unsupported forms remain visible as observed news, together
+with the reason they were not selected.
 
 The news service owns `feed.db`. It orders items by JetStream stream sequence,
 not by a locally generated timestamp. If `feed.db` is deleted, the next start
@@ -67,19 +72,20 @@ go run ./cmd/edgar backfill --set us-gaap --from-year 2024
 The command retrieves and stitches indexes, discovers the selected filings,
 and drains download and processing work.
 
-Start the development infrastructure explicitly, then run all application
-roles and both HTTP services in the foreground:
+Start all development infrastructure, application roles, and both HTTP
+services in the foreground:
 
 ```sh
-make nats-start
 make dev
 ```
 
-`make dev` starts Atom discovery, download, processing, news, and the filings
-web server. It creates missing schemas, streams, and consumers through normal
-application startup. It preserves existing state and does not perform a
-historical backfill. It never starts a background process. Press `Ctrl-C` to
-stop the application; the explicitly started NATS server remains running.
+`make dev` starts the project-local NATS server, Atom discovery, selection,
+download, processing, news, and the filings web server. After a reset it also
+restores `data/sets/us-gaap.json` from the bundled golden snapshot. Existing
+set files are not overwritten. Application startup creates missing schemas,
+streams, and consumers. It preserves existing state and does not perform a
+historical backfill. Press `Ctrl-C` to stop the application; NATS remains
+running until `make nats-stop` or a reset.
 
 Inspect current state and unresolved failures from another terminal:
 
@@ -116,6 +122,7 @@ The same file can back one terminal per role without running another service:
 
 ```sh
 make logs-atom
+make logs-select
 make logs-download
 make logs-process
 make logs-news
@@ -128,11 +135,40 @@ process views show completed counts, the current durable backlog, failures,
 and the rate since that worker started. JSON logging is not required for this
 workflow.
 
+The news page can queue any observed filing with **Download and parse on
+demand**. This publishes one selected event without expanding the automatic
+set or form filters. It is intended for parser experiments that should not
+turn into a broad filing archive.
+
+Inspect documents from a parsed filing without retaining another permanent
+copy:
+
+```sh
+go run ./cmd/edgar artifacts list \
+  --cik 0001898496 \
+  --accession 0001213900-26-111193
+
+go run ./cmd/edgar artifacts extract \
+  --cik 0001898496 \
+  --accession 0001213900-26-111193 \
+  --type EX-99.1 --type GRAPHIC
+
+go run ./cmd/edgar artifacts clean \
+  --cik 0001898496 \
+  --accession 0001213900-26-111193
+```
+
+Extraction preserves filenames so local HTML can find its images, decodes
+uuencoded `GRAPHIC` documents, and stops at 300 MiB per bundle. Cleanup only
+removes a directory with a matching generated manifest; it never removes the
+raw filing or parsed result.
+
 The explicit stages remain available for debugging.
 
 ```sh
 go run ./cmd/edgar index --from-year 2024
 go run ./cmd/edgar discover --set us-gaap --from-year 2024
+go run ./cmd/edgar select --set us-gaap --drain
 go run ./cmd/edgar download --drain
 go run ./cmd/edgar process --drain
 ```

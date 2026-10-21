@@ -927,7 +927,11 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, errors.New("unexpected positional arguments"))
 	}
 
-	cfg.filings.filter.FormTypes = formTypes
+	validatedForms, err := edgar.ValidateSupportedFormTypes(formTypes)
+	if err != nil {
+		return subcommandError(flags, err)
+	}
+	cfg.filings.filter.FormTypes = validatedForms
 	if err := applyConstituentSet(&cfg.filings.filter, cfg.filings.setName); err != nil {
 		return subcommandError(flags, err)
 	}

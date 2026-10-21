@@ -1,13 +1,20 @@
-.PHONY: dev clean-dev reset-dev nats-start nats-stop nats-status nats-reset \
+.PHONY: dev prepare-dev-data clean-dev reset-dev nats-start nats-stop \
+	nats-status nats-reset \
 	doctor doctor-verbose status errors retry-download retry-process logs \
-	logs-atom logs-download logs-process logs-news logs-filings logs-errors \
+	logs-atom logs-select logs-download logs-process logs-news logs-filings \
+	logs-errors \
 	filings-web
 
-dev:
+dev: nats-start prepare-dev-data
 	mkdir -p "$(CHOPSTICK_DATA_DIR)/logs"
 	EDGAR_LOG="$(CHOPSTICK_DATA_DIR)/logs/edgar.log" \
 		bash -o pipefail -c \
 		'go run ./cmd/edgar run 2>&1 | tee -a "$${EDGAR_LOG}"'
+
+prepare-dev-data:
+	mkdir -p "$(CHOPSTICK_DATA_DIR)/sets"
+	test -f "$(CHOPSTICK_DATA_DIR)/sets/us-gaap.json" || \
+		cp golden/us-gaap.json "$(CHOPSTICK_DATA_DIR)/sets/us-gaap.json"
 
 filings-web:
 	go run ./cmd/edgar serve
@@ -54,6 +61,10 @@ logs:
 logs-atom:
 	tail -F "$(CHOPSTICK_DATA_DIR)/logs/edgar.log" | \
 		rg --line-buffered 'role=.*atom'
+
+logs-select:
+	tail -F "$(CHOPSTICK_DATA_DIR)/logs/edgar.log" | \
+		rg --line-buffered 'role=.*select'
 
 logs-download:
 	tail -F "$(CHOPSTICK_DATA_DIR)/logs/edgar.log" | \

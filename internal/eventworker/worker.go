@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	DownloadDurable = "edgar-download-v1"
+	DownloadDurable = "edgar-download-v2"
 	ProcessDurable  = "edgar-process-v1"
 	defaultAttempts = 5
 	progressEvery   = 5 * time.Second

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/eventbus"
 	"wingman.com/fetch-ecb/internal/news"
 	"wingman.com/fetch-ecb/internal/pollingworker"
@@ -78,9 +79,11 @@ func (s *NewsServer) index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Items  []news.Item
-		Filter news.Filter
-	}{Items: items, Filter: filter}
+		Items          []news.Item
+		Filter         news.Filter
+		SupportedForms []string
+	}{Items: items, Filter: filter,
+		SupportedForms: edgar.SupportedFormTypes()}
 
 	templateName := "news-page"
 	if strings.EqualFold(r.Header.Get("Hx-Request"), "true") {

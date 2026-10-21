@@ -180,6 +180,11 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 	}
 
 	checkConfiguredSet(&report)
+	if forms, err := configuredFormTypes(); err != nil {
+		report.check("FAIL", "form types", err.Error())
+	} else {
+		report.check("OK", "form types", strings.Join(forms, ","))
+	}
 
 	if _, err := os.Stat(cfg.masterPath); err == nil {
 		report.check("OK", "master index", cfg.masterPath)
@@ -363,6 +368,7 @@ func printResolvedConfiguration(cfg operationsConfig) {
 	fmt.Printf("  data directory    %s\n", appdata.Root())
 	fmt.Printf("  filings cache     %s\n", appdata.Path("cache", "filings"))
 	fmt.Printf("  parsed filings    %s\n", appdata.Path("parsed"))
+	fmt.Printf("  temp artifacts    %s\n", appdata.Path("tmp", "artifacts"))
 	fmt.Printf("  constituent sets  %s\n", appdata.Path("sets"))
 	setName := environmentValue(edgarSetEnv, "")
 	if setName != "" {
@@ -389,6 +395,7 @@ func printStorageUsage(root string) {
 		{label: "filings cache", path: appdata.Path("cache", "filings")},
 		{label: "index cache", path: appdata.Path("cache", "indexes")},
 		{label: "parsed filings", path: appdata.Path("parsed")},
+		{label: "temp artifacts", path: appdata.Path("tmp", "artifacts")},
 		{label: "constituent sets", path: appdata.Path("sets")},
 		{label: "polling DB", path: appdata.Path("polling.db")},
 		{label: "news DB", path: appdata.Path("feed.db")},

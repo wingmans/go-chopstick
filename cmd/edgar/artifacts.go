@@ -50,6 +50,11 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 				{"--filings-dir <path>", "Raw filing cache directory."},
 			})
 	}
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+		flags.Usage()
+
+		return appConfig{}, flag.ErrHelp
+	}
 	if len(args) == 0 {
 		return subcommandError(flags,
 			errors.New("use 'edgar artifacts <list|extract|clean>'"))

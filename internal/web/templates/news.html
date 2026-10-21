@@ -15,7 +15,10 @@
       <label>Search <input name="q" value="{{.Filter.Query}}"
         placeholder="company, accession, or CIK"></label>
       <label>Form <input name="form" value="{{.Filter.FormType}}"
-        placeholder="10-K"></label>
+        placeholder="10-K" list="supported-forms"></label>
+      <datalist id="supported-forms">
+        {{range .SupportedForms}}<option value="{{.}}">{{end}}
+      </datalist>
       <label>Processing
         <select name="selection">
           <option value=""{{if eq .Filter.Selection ""}} selected{{end}}>All</option>
