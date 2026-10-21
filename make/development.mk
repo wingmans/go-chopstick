@@ -1,8 +1,8 @@
-.PHONY: dev prepare-dev-data clean-dev reset-dev nats-start nats-stop \
+.PHONY: dev watch prepare-dev-data clean-dev reset-dev nats-start nats-stop \
 	nats-status nats-reset \
 	doctor doctor-verbose status errors retry-download retry-process logs \
-	logs-atom logs-select logs-download logs-process logs-news logs-filings \
-	logs-errors \
+	logs-atom logs-select logs-discovery logs-download logs-process logs-news \
+	logs-filings logs-errors \
 	filings-web
 
 dev: nats-start prepare-dev-data
@@ -10,6 +10,9 @@ dev: nats-start prepare-dev-data
 	EDGAR_LOG="$(CHOPSTICK_DATA_DIR)/logs/edgar.log" \
 		bash -o pipefail -c \
 		'go run ./cmd/edgar run 2>&1 | tee -a "$${EDGAR_LOG}"'
+
+watch:
+	/usr/bin/osascript scripts/watch.applescript "$(CURDIR)"
 
 prepare-dev-data:
 	mkdir -p "$(CHOPSTICK_DATA_DIR)/sets"
@@ -65,6 +68,10 @@ logs-atom:
 logs-select:
 	tail -F "$(CHOPSTICK_DATA_DIR)/logs/edgar.log" | \
 		rg --line-buffered 'role=.*select'
+
+logs-discovery:
+	tail -F "$(CHOPSTICK_DATA_DIR)/logs/edgar.log" | \
+		rg --line-buffered 'role=.*(atom|select)'
 
 logs-download:
 	tail -F "$(CHOPSTICK_DATA_DIR)/logs/edgar.log" | \

@@ -38,6 +38,7 @@ help:
 		'  help                    Display this command list' \
 		'  setup                   Prepare the development environment' \
 		'  dev                     Start NATS and run all services' \
+		'  watch                   Open the tiled Ghostty development console' \
 		'  filings-web             Run only the filings web server' \
 		'  build                   Build all command binaries' \
 		'  test                    Run the Go test suite' \
@@ -71,6 +72,7 @@ help:
 		'  logs                    Follow all application logs' \
 		'  logs-atom               Follow Atom discovery logs' \
 		'  logs-select             Follow filing selection logs' \
+		'  logs-discovery          Follow Atom and selection logs' \
 		'  logs-download           Follow download worker logs' \
 		'  logs-process            Follow processing worker logs' \
 		'  logs-news               Follow news service logs' \

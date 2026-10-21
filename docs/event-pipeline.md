@@ -87,6 +87,16 @@ streams, and consumers. It preserves existing state and does not perform a
 historical backfill. Press `Ctrl-C` to stop the application; NATS remains
 running until `make nats-stop` or a reset.
 
+Open the same development process with a tiled Ghostty console:
+
+```sh
+make watch
+```
+
+The console runs `make dev` and follows discovery, download, processing, and
+error logs in separate panes. Ghostty may ask for macOS Automation permission
+the first time the AppleScript launcher runs.
+
 Inspect current state and unresolved failures from another terminal:
 
 ```sh
@@ -123,6 +133,7 @@ The same file can back one terminal per role without running another service:
 ```sh
 make logs-atom
 make logs-select
+make logs-discovery
 make logs-download
 make logs-process
 make logs-news
