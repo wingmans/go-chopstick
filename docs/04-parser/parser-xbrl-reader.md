@@ -330,7 +330,7 @@ cached diagnostic results, cancellation, and continuing batches after failures.
 
 `serve` starts a standard-library `net/http` server over `data/parsed`. It reads
 the persisted `filing.json` files locally and does not contact SEC EDGAR. Open
-`http://127.0.0.1:8080/` after starting it. The dashboard lists parsed filings
+`http://127.0.0.1:8083/` after starting it. The dashboard lists parsed filings
 and supports CIK filtering. Each filing opens a details page with filing
 metadata, structural counts, and source-level XBRL facts; the JSON API remains
 available for complete persisted-file inspection.

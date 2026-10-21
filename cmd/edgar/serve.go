@@ -18,7 +18,8 @@ func parseServeConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
 	cfg.command = "serve"
-	cfg.serve.address = "127.0.0.1:8080"
+	cfg.serve.address = environmentValue(edgarWebAddressEnv,
+		"127.0.0.1:8083")
 	cfg.serve.parsedDir = appdata.Path("parsed")
 	cfg.serve.analysisDB = appdata.Path("analysis.db")
 
@@ -26,7 +27,7 @@ func parseServeConfig(args []string) (appConfig, error) {
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
 		printSubcommandHelp("serve", "Browse locally parsed filing data.", []helpOption{
-			{"-a, --address <host:port>", "HTTP listen address; default 127.0.0.1:8080."},
+			{"-a, --address <host:port>", "HTTP listen address; default 127.0.0.1:8083."},
 			{"-d, --parsed-dir <path>", "Parsed filing directory."},
 			{"-s, --set <name>", "Resolve searches using a configured data set."},
 			{"-h, --help", "Show command help."},

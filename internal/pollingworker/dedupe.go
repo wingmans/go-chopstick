@@ -27,6 +27,10 @@ type FilingEvent struct {
 	FilingURL       string    `json:"filing_url"`
 	SourceFeed      string    `json:"source_feed"` // "BATCH" or "ATOM"
 	Timestamp       time.Time `json:"observed_at"`
+	Selected        *bool     `json:"selected,omitempty"`
+	SelectionReason string    `json:"selection_reason,omitempty"`
+	SelectionMode   string    `json:"selection_mode,omitempty"`
+	SelectionSet    string    `json:"selection_set,omitempty"`
 }
 
 const filingEventSchemaVersion = 1

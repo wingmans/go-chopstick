@@ -236,6 +236,48 @@ func TestNewsAddressUsesEnvironmentDefault(t *testing.T) {
 	}
 }
 
+func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
+	t.Setenv(edgarWebAddressEnv, "127.0.0.1:8084")
+
+	cfg, err := parseConfig([]string{"run"})
+	if err != nil {
+		t.Fatalf("parseConfig run returned error: %v", err)
+	}
+	if cfg.events.filingsAddress != "127.0.0.1:8084" {
+		t.Fatalf("run filings address = %q", cfg.events.filingsAddress)
+	}
+
+	cfg, err = parseConfig([]string{
+		"run", "--filings-address", "127.0.0.1:8085",
+	})
+	if err != nil {
+		t.Fatalf("parseConfig run with address returned error: %v", err)
+	}
+	if cfg.events.filingsAddress != "127.0.0.1:8085" {
+		t.Fatalf("run CLI address did not override environment: %q",
+			cfg.events.filingsAddress)
+	}
+
+	cfg, err = parseConfig([]string{"serve"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+	if cfg.serve.address != "127.0.0.1:8084" {
+		t.Fatalf("serve address = %q", cfg.serve.address)
+	}
+
+	cfg, err = parseConfig([]string{
+		"serve", "--address", "127.0.0.1:8085",
+	})
+	if err != nil {
+		t.Fatalf("parseConfig with address returned error: %v", err)
+	}
+	if cfg.serve.address != "127.0.0.1:8085" {
+		t.Fatalf("CLI address did not override environment: %q",
+			cfg.serve.address)
+	}
+}
+
 func TestParseRetryRequiresValidStage(t *testing.T) {
 	for _, args := range [][]string{
 		{"retry"},
@@ -329,7 +371,7 @@ func TestParseServeConfigDefaults(t *testing.T) {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
-	if cfg.serve.address != "127.0.0.1:8080" {
+	if cfg.serve.address != "127.0.0.1:8083" {
 		t.Fatalf("unexpected serve address %q", cfg.serve.address)
 	}
 

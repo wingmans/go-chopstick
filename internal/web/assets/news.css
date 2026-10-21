@@ -25,8 +25,9 @@ form {
   border-bottom: 1px solid #d9d9d1;
 }
 label { display: grid; gap: 3px; font-size: 0.72rem; color: #555; }
-input, button { box-sizing: border-box; min-height: 30px; font: inherit; }
+input, select, button { box-sizing: border-box; min-height: 30px; font: inherit; }
 input { width: 145px; border: 1px solid #aaa; padding: 4px 6px; }
+select { border: 1px solid #aaa; background: #fff; padding: 4px 6px; }
 button { border: 1px solid #777; background: #fff; padding: 4px 12px; }
 ol { margin: 0; padding: 12px 14px 18px 42px; }
 li { padding: 3px 2px; }
@@ -35,6 +36,16 @@ li { padding: 3px 2px; }
 .title a:visited { color: #777; }
 .form { margin-left: 5px; color: #555; font-size: 0.72rem; }
 .meta { margin-top: 2px; color: #777; font-size: 0.67rem; }
+.selection-state { margin-bottom: 4px; }
+.selection {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: #222;
+}
+.selection.selected { background: #b9dfbd; }
+.selection.skipped { background: #deded7; }
 .empty { padding: 16px; color: #666; }
 
 @media (max-width: 680px) {

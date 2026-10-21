@@ -68,14 +68,15 @@ The command retrieves and stitches indexes, discovers the selected filings,
 and drains download and processing work.
 
 Start the development infrastructure explicitly, then run all application
-roles in the foreground:
+roles and both HTTP services in the foreground:
 
 ```sh
 make nats-start
 make dev
 ```
 
-`make dev` creates missing schemas, streams, and consumers through normal
+`make dev` starts Atom discovery, download, processing, news, and the filings
+web server. It creates missing schemas, streams, and consumers through normal
 application startup. It preserves existing state and does not perform a
 historical backfill. It never starts a background process. Press `Ctrl-C` to
 stop the application; the explicitly started NATS server remains running.
@@ -85,6 +86,14 @@ Inspect current state and unresolved failures from another terminal:
 ```sh
 go run ./cmd/edgar status
 go run ./cmd/edgar errors
+```
+
+`status` is the catch-up view. Each durable consumer reports its remaining
+backlog, in-flight work, redeliveries, last activity, and whether it is caught
+up. Run it again whenever a point-in-time snapshot is needed:
+
+```sh
+make status
 ```
 
 Workers retry failed work five times before terminating that delivery and
@@ -103,6 +112,22 @@ also shows individual work decisions. `make dev` appends its output to
 tail -F data/logs/edgar.log
 ```
 
+The same file can back one terminal per role without running another service:
+
+```sh
+make logs-atom
+make logs-download
+make logs-process
+make logs-news
+make logs-filings
+make logs-errors
+```
+
+These views filter the structured fields in the text log. The download and
+process views show completed counts, the current durable backlog, failures,
+and the rate since that worker started. JSON logging is not required for this
+workflow.
+
 The explicit stages remain available for debugging.
 
 ```sh
@@ -113,8 +138,16 @@ go run ./cmd/edgar process --drain
 ```
 
 The news page listens on `http://127.0.0.1:8081` by default. Set
-`EDGAR_NEWS_ADDRESS` in `.env` to use another address. Stop or reset the
-development server with:
+`EDGAR_NEWS_ADDRESS` in `.env` to use another address. The parsed-filings web
+server defaults to `http://127.0.0.1:8083`; configure it with
+`EDGAR_FILINGS_ADDRESS`. Both start with `make dev`. Run only the filings web
+server for isolated debugging with:
+
+```sh
+make filings-web
+```
+
+Stop or reset the development server with:
 
 ```sh
 make nats-stop

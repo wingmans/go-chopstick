@@ -16,6 +16,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"wingman.com/fetch-ecb/internal/appdata"
+	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/eventbus"
 	"wingman.com/fetch-ecb/internal/eventworker"
@@ -26,14 +27,15 @@ import (
 // operationsConfig holds the configuration for the operations subcommands.
 // It includes settings for NATS, databases, file paths, HTTP addresses, and command-specific options.
 type operationsConfig struct {
-	natsURL     string
-	pollingDB   string
-	newsDB      string
-	masterPath  string
-	newsAddress string
-	stage       string
-	limit       int
-	verbose     bool
+	natsURL        string
+	pollingDB      string
+	newsDB         string
+	masterPath     string
+	newsAddress    string
+	filingsAddress string
+	stage          string
+	limit          int
+	verbose        bool
 }
 
 // parseOperationsConfig parses the command-line arguments and environment variables
@@ -47,6 +49,8 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 		masterPath: appdata.Path("cache", "indexes", "master.tsv"),
 		newsAddress: environmentValue(edgarNewsAddressEnv,
 			"127.0.0.1:8081"),
+		filingsAddress: environmentValue(edgarWebAddressEnv,
+			"127.0.0.1:8083"),
 		limit: 50,
 	}
 
@@ -175,6 +179,8 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 		report.check("OK", "configuration", "SEC user agent configured")
 	}
 
+	checkConfiguredSet(&report)
+
 	if _, err := os.Stat(cfg.masterPath); err == nil {
 		report.check("OK", "master index", cfg.masterPath)
 	} else if errors.Is(err, os.ErrNotExist) {
@@ -212,24 +218,14 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 			report.check("OK", "JetStream", "EDGAR_EVENTS is available")
 			checkConsumer(&report, bus, eventworker.DownloadDurable)
 			checkConsumer(&report, bus, eventworker.ProcessDurable)
+			checkConsumer(&report, bus, eventworker.SelectionDurable)
 			checkConsumer(&report, bus, news.DurableName)
 		}
 	}
 
 	if cfg.verbose {
-		fromYear, _ := environmentFromYear(edgar.EarliestPipelineYear)
-
-		fmt.Println()
-		fmt.Println("Configuration")
-		fmt.Printf("  set              %s\n", environmentValue(edgarSetEnv,
-			"not configured"))
-		fmt.Printf("  from-year        %d\n", fromYear)
-		fmt.Printf("  data directory   %s\n", appdata.Root())
-		fmt.Printf("  NATS             %s\n", cfg.natsURL)
-		fmt.Printf("  polling DB       %s\n", cfg.pollingDB)
-		fmt.Printf("  viewer DB        %s\n", cfg.newsDB)
-		fmt.Printf("  master index     %s\n", cfg.masterPath)
-		fmt.Printf("  log level        %s\n", environmentValue("LOGLEVEL", "info"))
+		printResolvedConfiguration(cfg)
+		printStorageUsage(appdata.Root())
 	}
 
 	fmt.Println()
@@ -322,6 +318,144 @@ func checkConsumer(report *doctorReport, bus *eventbus.NATS, durable string) {
 	}
 }
 
+func checkConfiguredSet(report *doctorReport) {
+	setName := environmentValue(edgarSetEnv, "")
+	if setName == "" {
+		report.check("WARN", "constituent set",
+			"not configured; historical backfill requires EDGAR_SET")
+
+		return
+	}
+
+	path := appdata.Path("sets", setName+".json")
+	set, err := constituents.LoadJSON(path)
+	if err != nil {
+		report.check("FAIL", "constituent set", err.Error())
+
+		return
+	}
+
+	report.check("OK", "constituent set", fmt.Sprintf(
+		"%s (%d members)", path, len(set.Members)))
+}
+
+func printResolvedConfiguration(cfg operationsConfig) {
+	fromYear, _ := environmentFromYear(edgar.EarliestPipelineYear)
+	baseURL := environmentValue(edgarBaseURLEnv, edgar.DefaultBaseURL)
+	forms, _ := configuredFormTypes()
+
+	fmt.Println()
+	fmt.Println("Configuration")
+	fmt.Printf("  set               %s\n", environmentValue(edgarSetEnv,
+		"not configured"))
+	fmt.Printf("  from year         %d\n", fromYear)
+	fmt.Printf("  form types        %s\n", strings.Join(forms, ","))
+	fmt.Printf("  parser supports   %s\n",
+		strings.Join(edgar.SupportedFormTypes(), ","))
+	fmt.Printf("  SEC archives      %s\n", baseURL)
+	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv,
+		defaultUserAgent))
+	fmt.Printf("  NATS              %s\n", cfg.natsURL)
+	fmt.Printf("  news URL          %s (started by make dev)\n",
+		httpURL(cfg.newsAddress))
+	fmt.Printf("  filings web URL   %s (started by make dev)\n",
+		httpURL(cfg.filingsAddress))
+	fmt.Printf("  data directory    %s\n", appdata.Root())
+	fmt.Printf("  filings cache     %s\n", appdata.Path("cache", "filings"))
+	fmt.Printf("  parsed filings    %s\n", appdata.Path("parsed"))
+	fmt.Printf("  constituent sets  %s\n", appdata.Path("sets"))
+	setName := environmentValue(edgarSetEnv, "")
+	if setName != "" {
+		fmt.Printf("  selected set      %s\n",
+			appdata.Path("sets", setName+".json"))
+	}
+	fmt.Printf("  polling DB        %s\n", cfg.pollingDB)
+	fmt.Printf("  news DB           %s\n", cfg.newsDB)
+	fmt.Printf("  analysis DB       %s\n", appdata.Path("analysis.db"))
+	fmt.Printf("  master index      %s\n", cfg.masterPath)
+	fmt.Printf("  event log         %s\n", appdata.Path("logs", "edgar.log"))
+	fmt.Printf("  log level         %s\n", environmentValue("LOGLEVEL", "info"))
+}
+
+func printStorageUsage(root string) {
+	fmt.Println()
+	fmt.Println("Storage used")
+
+	for _, entry := range []struct {
+		label string
+		path  string
+	}{
+		{label: "total", path: root},
+		{label: "filings cache", path: appdata.Path("cache", "filings")},
+		{label: "index cache", path: appdata.Path("cache", "indexes")},
+		{label: "parsed filings", path: appdata.Path("parsed")},
+		{label: "constituent sets", path: appdata.Path("sets")},
+		{label: "polling DB", path: appdata.Path("polling.db")},
+		{label: "news DB", path: appdata.Path("feed.db")},
+		{label: "analysis DB", path: appdata.Path("analysis.db")},
+		{label: "NATS", path: appdata.Path("nats")},
+		{label: "logs", path: appdata.Path("logs")},
+	} {
+		bytes, err := pathSize(entry.path)
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Printf("  %-17s not created\n", entry.label)
+
+			continue
+		}
+		if err != nil {
+			fmt.Printf("  %-17s unavailable: %v\n", entry.label, err)
+
+			continue
+		}
+
+		fmt.Printf("  %-17s %s (%d bytes)\n", entry.label,
+			formatBytes(bytes), bytes)
+	}
+}
+
+func pathSize(path string) (int64, error) {
+	var total int64
+
+	err := filepath.WalkDir(path, func(current string, entry os.DirEntry,
+		walkErr error,
+	) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("inspect %s: %w", current, err)
+		}
+
+		total += info.Size()
+
+		return nil
+	})
+
+	return total, err
+}
+
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+
+	divisor := int64(unit)
+	exponent := 0
+	for value := bytes / unit; value >= unit && exponent < 4; value /= unit {
+		divisor *= unit
+		exponent++
+	}
+
+	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(divisor),
+		"KMGTPE"[exponent])
+}
+
 func runStatus(ctx context.Context, cfg operationsConfig) error {
 	fmt.Println("EDGAR status")
 	fmt.Println()
@@ -329,6 +463,7 @@ func runStatus(ctx context.Context, cfg operationsConfig) error {
 	printDatabaseStatus(ctx, cfg.pollingDB)
 	printNATSStatus(cfg.natsURL)
 	printViewerStatus(ctx, cfg.newsDB, cfg.newsAddress)
+	printHTTPStatus("Filings web", cfg.filingsAddress)
 
 	return ctx.Err()
 }
@@ -395,7 +530,7 @@ func printNATSStatus(url string) {
 
 	defer func() { _ = bus.Close() }()
 
-	fmt.Println("  server            running")
+	fmt.Println("  server            running at " + url)
 
 	stream, err := bus.JetStream().StreamInfo(eventbus.StreamName)
 	if err != nil {
@@ -408,6 +543,7 @@ func printNATSStatus(url string) {
 	fmt.Printf("  stream bytes      %d\n", stream.State.Bytes)
 
 	for _, durable := range []string{
+		eventworker.SelectionDurable,
 		eventworker.DownloadDurable,
 		eventworker.ProcessDurable,
 		news.DurableName,
@@ -426,9 +562,12 @@ func printNATSStatus(url string) {
 			continue
 		}
 
-		fmt.Printf("  %-17s state=%s pending=%d ack_pending=%d redelivered=%d\n",
-			durable, consumerActivity(consumer), consumer.NumPending,
-			consumer.NumAckPending, consumer.NumRedelivered)
+		remaining := consumer.NumPending + uint64(consumer.NumAckPending)
+		fmt.Printf("  %-17s state=%s remaining=%d pending=%d in_flight=%d\n",
+			durable, consumerActivity(consumer), remaining,
+			consumer.NumPending, consumer.NumAckPending)
+		fmt.Printf("  %-17s redelivered=%d caught_up=%t\n", "",
+			consumer.NumRedelivered, remaining == 0)
 
 		if consumer.Delivered.Last != nil {
 			fmt.Printf("  %-17s last activity %s\n", "",
@@ -454,7 +593,7 @@ func consumerActivity(info *nats.ConsumerInfo) string {
 
 // printViewerStatus prints the status of the viewer server and its associated SQLite database.
 func printViewerStatus(ctx context.Context, path, address string) {
-	fmt.Println("Viewer")
+	fmt.Println("News")
 
 	dialer := net.Dialer{Timeout: 250 * time.Millisecond}
 
@@ -462,9 +601,9 @@ func printViewerStatus(ctx context.Context, path, address string) {
 	if err == nil {
 		_ = connection.Close()
 
-		fmt.Println("  server            listening at " + address)
+		fmt.Println("  URL               " + httpURL(address) + " (listening)")
 	} else {
-		fmt.Println("  server            stopped")
+		fmt.Println("  URL               " + httpURL(address) + " (stopped)")
 	}
 
 	db, err := openSQLiteReadOnly(ctx, path)
@@ -476,6 +615,32 @@ func printViewerStatus(ctx context.Context, path, address string) {
 	defer func() { _ = db.Close() }()
 
 	printCount(ctx, db, "projection rows", `SELECT COUNT(*) FROM feed_items`)
+	fmt.Println()
+}
+
+func printHTTPStatus(name, address string) {
+	fmt.Println(name)
+
+	dialer := net.Dialer{Timeout: 250 * time.Millisecond}
+	connection, err := dialer.Dial("tcp", address)
+	if err == nil {
+		_ = connection.Close()
+
+		fmt.Println("  URL               " + httpURL(address) + " (listening)")
+	} else {
+		fmt.Println("  URL               " + httpURL(address) + " (stopped)")
+	}
+
+	fmt.Println()
+}
+
+func httpURL(address string) string {
+	if strings.HasPrefix(address, "http://") ||
+		strings.HasPrefix(address, "https://") {
+		return address
+	}
+
+	return "http://" + address
 }
 
 func runErrors(ctx context.Context, cfg operationsConfig) error {

@@ -109,10 +109,12 @@ func runBackfill(ctx context.Context, client *http.Client,
 		return fmt.Errorf("discover stage: %w", err)
 	}
 
-	for _, stage := range []string{"download", "process"} {
-		stageCfg, err := parseEventCommandConfig(stage, []string{
-			"--drain", "--nats-url", cfg.natsURL,
-		})
+	for _, stage := range []string{"select", "download", "process"} {
+		stageArgs := []string{"--drain", "--nats-url", cfg.natsURL}
+		if stage == "select" {
+			stageArgs = append(stageArgs, "--set", cfg.setName)
+		}
+		stageCfg, err := parseEventCommandConfig(stage, stageArgs)
 		if err != nil {
 			return err
 		}

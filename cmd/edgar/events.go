@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"wingman.com/fetch-ecb/internal/appdata"
+	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
 	"wingman.com/fetch-ecb/internal/eventbus"
 	"wingman.com/fetch-ecb/internal/eventworker"
@@ -33,6 +34,7 @@ type eventCommandConfig struct {
 	userAgent        string
 	baseURL          string
 	address          string
+	filingsAddress   string
 	interval         time.Duration
 	filter           edgar.IndexFilter
 	setName          string
@@ -45,6 +47,11 @@ type eventCommandConfig struct {
 
 //nolint:maintidx // The switch keeps each role's CLI flags visible together.
 func parseEventCommandConfig(command string, args []string) (appConfig, error) {
+	configuredForms, err := configuredFormTypes()
+	if err != nil {
+		return appConfig{}, err
+	}
+
 	formTypes := stringList{}
 	cfg := appConfig{command: command}
 	cfg.events = eventCommandConfig{
@@ -59,10 +66,13 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		baseURL:          environmentValue(edgarBaseURLEnv, ""),
 		address: environmentValue(edgarNewsAddressEnv,
 			"127.0.0.1:8081"),
+		filingsAddress: environmentValue(edgarWebAddressEnv,
+			"127.0.0.1:8083"),
 		interval:    time.Minute,
 		setName:     environmentValue(edgarSetEnv, ""),
 		maxAttempts: 5,
 	}
+	cfg.events.filter.FormTypes = configuredForms
 
 	if command == "discover" {
 		fromYear, err := environmentFromYear(0)
@@ -123,6 +133,23 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--year <year>", "Select one filing year."},
 			helpOption{"--from-year <year>", "First year; default 2016."},
 			helpOption{"--to-year <year>", "Last filing year."},
+		)
+	case "select":
+		flags.StringVar(&cfg.events.pollingDB, "polling-db",
+			cfg.events.pollingDB, "pipeline state database")
+		flags.StringVar(&cfg.events.setName, "set", cfg.events.setName,
+			"select filings for a constituent set")
+		flags.Var(&formTypes, "form-type",
+			"select this supported form type; may be repeated")
+		flags.BoolVar(&cfg.events.drain, "drain", false,
+			"exit after the current event backlog is empty")
+
+		options = append(options,
+			helpOption{"--polling-db <path>", "Pipeline state database."},
+			helpOption{"--set <name>", "Select a set from the data directory."},
+			helpOption{"--form-type <type>",
+				"Select a supported form; repeatable."},
+			helpOption{"--drain", "Exit after the current backlog is empty."},
 		)
 	case "download":
 		flags.StringVar(&cfg.events.pollingDB, "polling-db",
@@ -195,10 +222,16 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			"SEC base URL override")
 		flags.StringVar(&cfg.events.address, "address", cfg.events.address,
 			"news HTTP listen address")
+		flags.StringVar(&cfg.events.filingsAddress, "filings-address",
+			cfg.events.filingsAddress, "filings web HTTP listen address")
 		flags.DurationVar(&cfg.events.interval, "interval",
 			cfg.events.interval, "Atom polling interval")
 		flags.IntVar(&cfg.events.maxAttempts, "max-attempts",
 			cfg.events.maxAttempts, "attempts before work is marked failed")
+		flags.StringVar(&cfg.events.setName, "set", cfg.events.setName,
+			"automatic processing constituent set")
+		flags.Var(&formTypes, "form-type",
+			"automatic processing form type; may be repeated")
 
 		options = append(options,
 			helpOption{"--polling-db <path>", "Accession and outbox database."},
@@ -209,8 +242,13 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--user-agent <value>", "SEC user agent."},
 			helpOption{"--base-url <url>", "SEC base URL override."},
 			helpOption{"--address <host:port>", "News HTTP address."},
+			helpOption{"--filings-address <host:port>",
+				"Filings web HTTP address."},
 			helpOption{"--interval <duration>", "Atom polling interval."},
 			helpOption{"--max-attempts <count>", "Attempts before work is marked failed."},
+			helpOption{"--set <name>", "Automatic processing constituent set."},
+			helpOption{"--form-type <type>",
+				"Automatic processing form; repeatable."},
 		)
 	}
 
@@ -271,6 +309,27 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		}
 	}
 
+	if command == "select" || command == "run" {
+		formsToValidate := configuredForms
+		if len(formTypes) > 0 {
+			formsToValidate = formTypes
+		}
+		forms, err := edgar.ValidateSupportedFormTypes(formsToValidate)
+		if err != nil {
+			return subcommandError(flags, err)
+		}
+		if len(forms) == 0 {
+			return subcommandError(flags,
+				errors.New("at least one supported form type is required"))
+		}
+		cfg.events.filter.FormTypes = forms
+
+		if err := applyConstituentSet(&cfg.events.filter,
+			cfg.events.setName); err != nil {
+			return subcommandError(flags, err)
+		}
+	}
+
 	return cfg, nil
 }
 
@@ -278,10 +337,11 @@ func eventCommandDescription(command string) string {
 	return map[string]string{
 		"atom":     "Discover current SEC filings and publish durable events.",
 		"discover": "Select filing discoveries from a local master index.",
+		"select":   "Select observed filings for automatic processing.",
 		"download": "Download files for discovery events, serially.",
 		"process":  "Parse downloaded filings and update aggregates, serially.",
 		"news":     "Serve a rebuildable filing news feed.",
-		"run":      "Run the four continuous roles in one process.",
+		"run":      "Run all continuous roles and HTTP services in one process.",
 	}[command]
 }
 
@@ -308,9 +368,11 @@ func runEventCommand(ctx context.Context, command string,
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errorsCh := make(chan error, 4)
+	errorsCh := make(chan error, 5)
 
-	for _, role := range []string{"atom", "download", "process", "news"} {
+	for _, role := range []string{
+		"atom", "select", "download", "process", "news", "filings-web",
+	} {
 		go func() {
 			errorsCh <- runRole(ctx, role, cfg, logger)
 		}()
@@ -327,6 +389,7 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 	logger *slog.Logger,
 ) error {
 	logger = logger.With("role", role)
+	ctx = ctxlog.WithLogger(ctx, logger)
 
 	bus, err := eventbus.Connect(cfg.natsURL)
 	if err != nil {
@@ -344,9 +407,19 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 		})
 	case "discover":
 		return runDiscovery(ctx, bus, cfg, logger)
+	case "select":
+		logger.Info("starting selection worker", "consumer",
+			eventworker.SelectionDurable, "set", cfg.setName,
+			"set_members", len(cfg.filter.CIKs),
+			"form_types", cfg.filter.FormTypes, "drain", cfg.drain)
+
+		return eventworker.Select(ctx, bus, eventworker.SelectionConfig{
+			SetName: cfg.setName, CIKs: cfg.filter.CIKs,
+			FormTypes: cfg.filter.FormTypes, Drain: cfg.drain,
+		}, logger)
 	case "download":
 		logger.Info("starting queue worker", "consumer",
-			eventworker.DownloadDurable, "selection", "all queued discoveries",
+			eventworker.DownloadDurable, "selection", "selected filings only",
 			"drain", cfg.drain, "max_attempts", cfg.maxAttempts)
 
 		failures, err := pollingworker.NewDedupeServiceContext(ctx,
@@ -386,6 +459,12 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 		}, logger)
 	case "news":
 		return runNews(ctx, bus, cfg, logger)
+	case "filings-web":
+		logger.Info("starting filings web", "address", cfg.filingsAddress,
+			"parsed_directory", cfg.parsedDirectory)
+
+		return runServe(ctx, logger, cfg.filingsAddress, cfg.parsedDirectory,
+			"", cfg.analysisDB)
 	default:
 		return fmt.Errorf("unknown event role %q", role)
 	}
@@ -494,7 +573,7 @@ func runNews(ctx context.Context, bus *eventbus.NATS,
 
 	server := &http.Server{
 		Addr:              cfg.address,
-		Handler:           web.NewNewsServer(store, logger),
+		Handler:           web.NewNewsServer(store, bus, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -527,4 +606,10 @@ func ensureParentDirectories(cfg eventCommandConfig) error {
 	}
 
 	return nil
+}
+
+func configuredFormTypes() ([]string, error) {
+	value := environmentValue(edgarFormTypesEnv, "10-K,10-Q,8-K")
+
+	return edgar.ValidateSupportedFormTypes(strings.Split(value, ","))
 }

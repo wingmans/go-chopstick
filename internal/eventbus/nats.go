@@ -16,6 +16,9 @@ const (
 	StreamName        = "EDGAR_EVENTS"
 	StreamSubjects    = "edgar.filing.>"
 	DiscoverySubject  = "edgar.filing.discovered"
+	SelectionSubject  = "edgar.filing.selection"
+	SelectedSubject   = "edgar.filing.selection.selected"
+	SkippedSubject    = "edgar.filing.selection.skipped"
 	DownloadedSubject = "edgar.filing.downloaded"
 )
 

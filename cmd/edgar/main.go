@@ -35,7 +35,9 @@ const (
 	edgarBaseURLEnv     = "EDGAR_BASE_URL"
 	edgarNATSURLEnv     = "EDGAR_NATS_URL"
 	edgarNewsAddressEnv = "EDGAR_NEWS_ADDRESS"
+	edgarWebAddressEnv  = "EDGAR_FILINGS_ADDRESS"
 	edgarSetEnv         = "EDGAR_SET"
+	edgarFormTypesEnv   = "EDGAR_FORM_TYPES"
 	edgarFromYearEnv    = "EDGAR_FROM_YEAR"
 	parseCommand        = "parse"
 	noopHelpFlags       = "-n, --noop"
@@ -46,6 +48,7 @@ type appConfig struct {
 	events     eventCommandConfig
 	backfill   backfillConfig
 	operations operationsConfig
+	artifacts  artifactCommandConfig
 	index      edgar.Config
 	parse      struct {
 		files      stringList
@@ -198,7 +201,7 @@ func run(ctx context.Context, args []string) error {
 	var commandErr error
 
 	switch cfg.command {
-	case "atom", "discover", "download", "process", "news", "run":
+	case "atom", "discover", "select", "download", "process", "news", "run":
 		commandErr = runEventCommand(ctx, cfg.command, cfg.events, logger)
 	case "backfill":
 		commandErr = runBackfill(ctx, client, cfg.backfill, logger)
@@ -210,6 +213,8 @@ func run(ctx context.Context, args []string) error {
 		commandErr = runErrors(ctx, cfg.operations)
 	case "retry":
 		commandErr = runRetry(ctx, cfg.operations)
+	case "artifacts":
+		commandErr = runArtifacts(ctx, cfg.artifacts)
 	case parseCommand:
 		commandErr = runParse(ctx, cfg)
 	case "index":
@@ -325,12 +330,14 @@ func parseConfig(args []string) (appConfig, error) {
 	}
 
 	switch args[0] {
-	case "atom", "discover", "download", "process", "news", "run":
+	case "atom", "discover", "select", "download", "process", "news", "run":
 		return parseEventCommandConfig(args[0], args[1:])
 	case "backfill":
 		return parseBackfillConfig(args[1:])
 	case "doctor", "status", "errors", "retry":
 		return parseOperationsConfig(args[0], args[1:])
+	case "artifacts":
+		return parseArtifactCommand(args[1:])
 	case parseCommand:
 		return parseSubmissionConfig(args[1:])
 	case "index":
@@ -988,6 +995,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
 	fmt.Fprintln(os.Stdout, "  atom              discover current filings from SEC Atom")
+	fmt.Fprintln(os.Stdout, "  select            select observed filings for processing")
 	fmt.Fprintln(os.Stdout, "  discover          select filings from a local master index")
 	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
 	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")
@@ -997,10 +1005,12 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  download          filings from discovery events")
 	fmt.Fprintln(os.Stdout, "  process           parse downloaded filings and aggregate data")
 	fmt.Fprintln(os.Stdout, "  news              serve the stream-backed EDGAR news page")
-	fmt.Fprintln(os.Stdout, "  run               atom, download, process, and news")
+	fmt.Fprintln(os.Stdout,
+		"  run               all continuous roles and HTTP services")
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
+	fmt.Fprintln(os.Stdout, "  artifacts         list, extract, or clean source documents")
 	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
 	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
 	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")

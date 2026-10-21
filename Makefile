@@ -10,9 +10,11 @@ CHOPSTICK_DATA_DIR ?= ./data
 CHOPSTICK_DATA_DIR := $(or $(strip $(CHOPSTICK_DATA_DIR)),./data)
 
 export EDGAR_SET
+export EDGAR_FORM_TYPES
 export EDGAR_FROM_YEAR
 export EDGAR_NATS_URL
 export EDGAR_NEWS_ADDRESS
+export EDGAR_FILINGS_ADDRESS
 export EDGAR_USER_AGENT
 export EDGAR_BASE_URL
 export CHOPSTICK_DATA_DIR
@@ -35,7 +37,8 @@ help:
 		'' \
 		'  help                    Display this command list' \
 		'  setup                   Prepare the development environment' \
-		'  dev                     Run the app in foreground; requires NATS' \
+		'  dev                     Run all services; requires NATS' \
+		'  filings-web             Run only the filings web server' \
 		'  build                   Build all command binaries' \
 		'  test                    Run the Go test suite' \
 		'  lint                    Run golangci-lint with auto-fixes' \
@@ -62,6 +65,16 @@ help:
 		'  errors                  Show unresolved pipeline failures' \
 		'  retry-download          Requeue failed downloads' \
 		'  retry-process           Requeue failed processing work' \
+		'' \
+		'Observability:' \
+		'' \
+		'  logs                    Follow all application logs' \
+		'  logs-atom               Follow Atom discovery logs' \
+		'  logs-download           Follow download worker logs' \
+		'  logs-process            Follow processing worker logs' \
+		'  logs-news               Follow news service logs' \
+		'  logs-filings            Follow filings web logs' \
+		'  logs-errors             Follow warnings and errors' \
 		'' \
 		'More commands: go run ./cmd/edgar --help'
 

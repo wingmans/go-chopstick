@@ -68,7 +68,7 @@ func Download(ctx context.Context, bus *eventbus.NATS, cfg DownloadConfig,
 		return err
 	}
 
-	subscription, err := pullSubscription(bus, eventbus.DiscoverySubject+".>",
+	subscription, err := pullSubscription(bus, eventbus.SelectedSubject+".>",
 		DownloadDurable)
 	if err != nil {
 		return err
@@ -227,8 +227,7 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			_ = message.Term()
 			stats.failed++
 
-			logger.Error("discarding invalid event", "role", stage,
-				"error", err)
+			logger.Error("discarding invalid event", "error", err)
 
 			continue
 		}
@@ -249,7 +248,6 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			stats.skipped++
 
 			logger.Debug("skipping filing before pipeline support boundary",
-				"role", stage,
 				"filing_date", event.FilingDate,
 				"accession", event.AccessionNumber)
 
@@ -274,13 +272,13 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			if attempts >= maxAttempts {
 				_ = message.Term()
 
-				logger.Error("event work exhausted retries", "role", stage,
+				logger.Error("event work exhausted retries",
 					"error", workErr, "accession", event.AccessionNumber,
 					"attempts", attempts)
 			} else {
 				_ = message.NakWithDelay(time.Minute)
 
-				logger.Warn("event work failed; retry scheduled", "role", stage,
+				logger.Warn("event work failed; retry scheduled",
 					"error", workErr, "accession", event.AccessionNumber,
 					"attempt", attempts, "max_attempts", maxAttempts)
 			}
@@ -330,7 +328,7 @@ func reportProgress(subscription *nats.Subscription, logger *slog.Logger,
 		rate = float64(stats.scanned) / elapsed.Seconds()
 	}
 
-	logger.Info("consumer progress", "role", stage,
+	logger.Info("consumer progress",
 		"scanned", stats.scanned, "completed", stats.completed,
 		"skipped", stats.skipped, "failed", stats.failed,
 		"pending", info.NumPending, "ack_pending", info.NumAckPending,

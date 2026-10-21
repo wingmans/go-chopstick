@@ -12,8 +12,17 @@
     <header><a href="/">EDGAR news</a><span>filings as discovered</span></header>
     <form method="get" action="/" hx-get="/" hx-target="#feed"
       hx-push-url="true" hx-trigger="change delay:200ms, submit">
+      <label>Search <input name="q" value="{{.Filter.Query}}"
+        placeholder="company, accession, or CIK"></label>
       <label>Form <input name="form" value="{{.Filter.FormType}}"
         placeholder="10-K"></label>
+      <label>Processing
+        <select name="selection">
+          <option value=""{{if eq .Filter.Selection ""}} selected{{end}}>All</option>
+          <option value="selected"{{if eq .Filter.Selection "selected"}} selected{{end}}>Selected</option>
+          <option value="skipped"{{if eq .Filter.Selection "skipped"}} selected{{end}}>Observed only</option>
+        </select>
+      </label>
       <label>CIK <input name="cik" value="{{.Filter.CIK}}"
         inputmode="numeric"></label>
       <label>Filed from <input type="date" name="from"
@@ -41,6 +50,22 @@
         filed {{.FilingDate}} · CIK {{.CIK}} ·
         {{shortAccession .AccessionNumber}} · {{.SourceFeed}}
       </div>
+      <div class="meta selection-state">
+        {{if .Selected}}
+          <span class="selection selected">{{if eq .SelectionMode "on-demand"}}on demand{{else}}selected{{end}}</span>
+        {{else}}
+          <span class="selection skipped">observed only</span>
+        {{end}}
+        {{.SelectionReason}}
+      </div>
+      {{if not .Selected}}
+      <div id="download-{{.AccessionNumber}}">
+        <button type="button"
+          hx-post="/actions/download/{{.AccessionNumber}}"
+          hx-target="#download-{{.AccessionNumber}}"
+          hx-swap="innerHTML">Download and parse on demand</button>
+      </div>
+      {{end}}
     </li>
     {{end}}
   </ol>
