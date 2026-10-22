@@ -75,7 +75,8 @@ SEC EDGAR
 ### 1. Index
 
 `edgar index` downloads quarterly SEC index archives, extracts their TSV
-records, and can stitch them into `data/indexes/master.tsv`.
+records, and can stitch them into `data/cache/indexes/master.tsv`. The POC
+defaults to 2016 and refuses earlier index years.
 
 Older index files are reused from disk. `--refresh-latest` is deliberately
 explicit: it refreshes the newest available quarter while older quarters stay
@@ -91,7 +92,7 @@ the SEC-relative path so the local file can be traced back to its source URL.
 For the current end-to-end target:
 
 ```bash
-REFRESH_LATEST=1 make integration
+REFRESH_LATEST=1 bash scripts/edgar-e2e.sh
 ```
 
 The integration script selects `10-K` for both download and parse. This is
@@ -198,7 +199,7 @@ while parsing succeeds and the filing remains usable.
 
 The reader's durable evidence is:
 
-- raw bytes under `data/filings`;
+- raw bytes under `data/cache/filings`;
 - verbose parsed facts and diagnostics in `filing.json`;
 - compact selected facts and quality findings in `filing-view.json`.
 
@@ -228,8 +229,8 @@ derived and disposable.
 ```text
 data/
   cache/index-zips/       downloaded SEC index ZIPs
-  indexes/quarterly/     extracted quarterly index TSVs
-  indexes/master.tsv     stitched filing catalog
+  cache/indexes/quarterly/ extracted quarterly index TSVs
+  cache/indexes/master.tsv stitched filing catalog
   filings/edgar/data/    pristine downloaded SEC submissions
   parsed/<cik>/<acc>/
     filing.json           verbose parsed submission and XBRL facts
@@ -307,7 +308,7 @@ backtests.
 
 The current guardrail set is sufficient when:
 
-- `make test`, `make lint`, and `make manual-checks` pass;
+- `make test`, `make lint`, and `scripts/manual-checks.sh` pass;
 - the clean golden-19 run parses every expected 10-K;
 - compact lint has no quality issues;
 - hard core gaps are zero or explicitly accepted with evidence;
@@ -324,9 +325,10 @@ source-level findings.
 make build
 make test
 make lint
-make manual-checks
-REFRESH_LATEST=1 make integration
-SET_NAME=us-gaap-coverage FROM_YEAR=2015 TO_YEAR=2025 make taxonomy-validation
+bash scripts/manual-checks.sh
+REFRESH_LATEST=1 bash scripts/edgar-e2e.sh
+SET_NAME=us-gaap-coverage FROM_YEAR=2015 TO_YEAR=2025 \
+  bash scripts/taxonomy-validation.sh
 make docs-pdf
 ```
 

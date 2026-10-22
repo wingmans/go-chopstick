@@ -145,7 +145,7 @@ A small command-line loop is sufficient:
 taxonomy-tuner scan \
   --taxonomy internal/filingview/taxonomy.json \
   --parsed-dir data/parsed \
-  --filings-dir data/filings \
+  --filings-dir data/cache/filings \
   --out work/taxonomy-review
 ```
 

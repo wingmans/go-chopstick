@@ -1,8 +1,11 @@
 .DS_Store
+.tools/
+.env
 fetch-ecb
 bin/
 data/
-tmp/
+# Legacy runtime state. New application data belongs under data/.
+/var/
 testoutput/
 *.test
 coverage.out

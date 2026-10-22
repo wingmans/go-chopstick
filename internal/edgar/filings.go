@@ -52,7 +52,7 @@ func NewFilingDownloader(client *http.Client, cfg FilingDownloadConfig) (*Filing
 	}, nil
 }
 
-// Download downloads one filing and its referenced HTML index file.
+// Download downloads one authoritative raw filing submission.
 func (d *FilingDownloader) Download(ctx context.Context, record EdgarIndex) error {
 	return downloadReferencedFiles(ctx, d.client, d.cfg, record, &d.pacer)
 }
@@ -99,8 +99,8 @@ func UniqueFormTypes(masterPath string) ([]string, error) {
 	return result, nil
 }
 
-// DownloadIndexFiles streams records from masterPath and downloads their
-// filing and HTML index files sequentially. Existing files are skipped.
+// DownloadIndexFiles streams records from masterPath and downloads their raw
+// filing submissions sequentially. Existing files are skipped.
 func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath string, cfg FilingDownloadConfig, filter IndexFilter) error {
 	file, err := os.Open(masterPath)
 	if err != nil {
@@ -131,8 +131,8 @@ func DownloadIndexFiles(ctx context.Context, client *http.Client, masterPath str
 	}
 }
 
-// DownloadFiling downloads the filing and HTML index files referenced by one
-// EdgarIndex. Existing files are skipped.
+// DownloadFiling downloads the raw submission referenced by one EdgarIndex.
+// Existing files are skipped.
 func DownloadFiling(ctx context.Context, client *http.Client, cfg FilingDownloadConfig, record EdgarIndex) error {
 	downloader, err := NewFilingDownloader(client, cfg)
 	if err != nil {
@@ -155,18 +155,7 @@ func validateFilingDownloadConfig(cfg FilingDownloadConfig) error {
 }
 
 func downloadReferencedFiles(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, record EdgarIndex, pacer *requestPacer) error {
-	paths := []string{record.FilingPath}
-	if record.IndexPath != "" && record.IndexPath != record.FilingPath {
-		paths = append(paths, record.IndexPath)
-	}
-
-	for _, relativePath := range paths {
-		if err := downloadReferencedFile(ctx, client, cfg, relativePath, pacer); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return downloadReferencedFile(ctx, client, cfg, record.FilingPath, pacer)
 }
 
 func downloadReferencedFile(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, relativePath string, pacer *requestPacer) error {

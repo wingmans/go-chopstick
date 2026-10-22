@@ -7,10 +7,11 @@ import (
 	"os"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/coverage"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingview"
+	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
 func parseCoverageConfig(args []string) (appConfig, error) {
@@ -18,25 +19,27 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 
 	cfg.command = "coverage"
 
-	cfg.coverage.masterPath = "./data/indexes/master.tsv"
-	cfg.coverage.indexesDir = "./data/indexes/quarterly"
-	cfg.coverage.filingsDir = edgar.DefaultFilingsDirectory
-	cfg.coverage.parsedDir = edgar.DefaultParsedDirectory
-	cfg.coverage.out = "./data/validation/coverage-report.json"
+	cfg.coverage.masterPath = appdata.Path("cache", "indexes", "master.tsv")
+	cfg.coverage.indexesDir = appdata.Path("cache", "indexes", "quarterly")
+	cfg.coverage.filingsDir = appdata.Path("cache", "filings")
+	cfg.coverage.parsedDir = appdata.Path("parsed")
+	cfg.coverage.analysisDB = appdata.Path("analysis.db")
+	cfg.coverage.out = appdata.Path("validation", "coverage-report.json")
 
 	flags := flag.NewFlagSet("coverage", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
 		printSubcommandHelp("coverage", "Report expected local filing coverage.", []helpOption{
-			{"-s, --set <name>", "Select current members from data/sets/<name>.json."},
+			{"-s, --set <name>", "Select a set from the configured data directory."},
 			{"-c, --cik <cik>", "Select filings for this CIK."},
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"    --from-year <year>", "First filing year to include."},
 			{"    --to-year <year>", "Last filing year to include."},
-			{"-m, --master <path>", "Master TSV; default ./data/indexes/master.tsv."},
+			{"-m, --master <path>", "Master TSV path."},
 			{"    --indexes-dir <path>", "Quarterly indexes directory."},
 			{"    --filings-dir <path>", "Downloaded filings directory."},
-			{"-d, --parsed-dir <path>", "Parsed filing directory."},
+			{"-d, --parsed-dir <path>", "Optional parser artifact directory."},
+			{"    --analysis-db <path>", "Analysis database path."},
 			{"-o, --out <path>", "JSON report path."},
 			{"-h, --help", "Show command help."},
 		})
@@ -55,6 +58,7 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.coverage.filingsDir, "filings-dir", cfg.coverage.filingsDir, "downloaded filings directory")
 	flags.StringVar(&cfg.coverage.parsedDir, "d", cfg.coverage.parsedDir, "parsed filing directory")
 	flags.StringVar(&cfg.coverage.parsedDir, "parsed-dir", cfg.coverage.parsedDir, "parsed filing directory")
+	flags.StringVar(&cfg.coverage.analysisDB, "analysis-db", cfg.coverage.analysisDB, "analysis database path")
 	flags.StringVar(&cfg.coverage.out, "o", cfg.coverage.out, "JSON report path")
 	flags.StringVar(&cfg.coverage.out, "out", cfg.coverage.out, "JSON report path")
 
@@ -105,7 +109,8 @@ func runCoverageCommand(ctx context.Context, cfg appConfig) error {
 	report, err := coverage.Build(ctx, coverage.Config{
 		MasterPath: cfg.coverage.masterPath, IndexesDir: cfg.coverage.indexesDir,
 		FilingsDir: cfg.coverage.filingsDir, ParsedDir: cfg.coverage.parsedDir,
-		Filter: cfg.coverage.filter, SetName: cfg.coverage.setName,
+		AnalysisDB: cfg.coverage.analysisDB,
+		Filter:     cfg.coverage.filter, SetName: cfg.coverage.setName,
 		FromYear: cfg.coverage.fromYear, ToYear: cfg.coverage.toYear,
 		Taxonomy: taxonomy, GeneratedAt: time.Now().UTC(),
 	})

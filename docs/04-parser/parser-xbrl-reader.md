@@ -18,13 +18,16 @@ go run ./cmd/edgar serve
 ```
 
 `filings` is the normal download-and-process command. Existing CIK, form-type,
-and filing-year filters select records from `data/indexes/master.tsv`; an empty
+and filing-year filters select records from `data/cache/indexes/master.tsv`;
+an empty
 year selects all filing years. The source submission and any referenced HTML
 index are downloaded only when missing. Processing then uses the local submission.
 
 `parse` is also batch-oriented. With no `--file`, it reads the default
-`data/indexes/master.tsv`, applies the same `--cik`, `--form-type`, and `--year`
-filters, and processes submissions already present under `data/filings`. It never
+`data/cache/indexes/master.tsv`, applies the same `--cik`, `--form-type`, and
+`--year`
+filters, and processes submissions already present under `data/cache/filings`.
+It never
 downloads missing submissions. Missing local sources are skipped and logged, so
 the command naturally processes all downloaded but unprocessed filings selected
 by the master index. The default year is empty, meaning all years.
@@ -46,16 +49,18 @@ long-only: `-f, --form-type` must retain the same meaning on both `parse` and
 convention.
 
 Both commands provide `-r, --reprocess`, default false. It bypasses reuse and
-rebuilds parsed output; it does not force redownloading or refresh the HTML index.
-No separate skip-processed flag is needed: reuse is the default.
+rebuilds parsed output; it does not force redownloading the raw submission. No
+separate skip-processed flag is needed: reuse is the default.
 
-To reset local EDGAR outputs while keeping downloaded raw SEC submissions, run
-`make clean-derived-data`. The underlying `scripts/clean-derived-data.sh`
-preserves `data/filings` and cached SEC index ZIPs under
-`data/cache/index-zips`; it removes parsed filings, validation runs, generated
-local sets, and stitched/extracted index files. This lets `edgar index
---stitch` rebuild `master.tsv` from disk without network traffic unless
-`--refresh-latest` is also requested.
+To reset processing while keeping downloaded source material, run
+`make clean-dev`. It preserves filings, index ZIPs, extracted quarterly
+indexes, and constituent sets. It removes parsed output, databases, validation
+reports, logs, NATS state, temporary files, and the stitched `master.tsv`.
+This lets `edgar index --stitch` rebuild the master index without downloading
+the quarterly indexes again.
+
+Use `make reset-dev` for a completely empty application data directory. That
+also removes downloaded source material and requires fresh network requests.
 
 Both commands provide `-n, --noop`, default false. This is now a planning operation:
 it reads local headers and checks existing parsed results and source checksums,
@@ -238,7 +243,7 @@ Downloads retain their SEC-relative paths and original filenames. Parsed results
 use a ten-digit, zero-padded CIK and the hyphenated accession number. For example:
 
 ```text
-data/filings/edgar/data/789019/0000950170-25-010491.txt
+data/cache/filings/edgar/data/789019/0000950170-25-010491.txt
 data/parsed/0000789019/0000950170-25-010491/filing.json
 ```
 
@@ -252,7 +257,8 @@ The JSON connects the two layouts explicitly:
 ```
 
 Resolve that path relative to the configured filings directory (normally
-`data/filings`). Explicit inputs outside that directory, such as golden files,
+`data/cache/filings`). Explicit inputs outside that directory, such as golden
+files,
 use `source_base: "absolute"` and an absolute `source_path`. This avoids relying
 on the working directory when downstream code locates the original bytes.
 
@@ -324,7 +330,7 @@ cached diagnostic results, cancellation, and continuing batches after failures.
 
 `serve` starts a standard-library `net/http` server over `data/parsed`. It reads
 the persisted `filing.json` files locally and does not contact SEC EDGAR. Open
-`http://127.0.0.1:8080/` after starting it. The dashboard lists parsed filings
+`http://127.0.0.1:8083/` after starting it. The dashboard lists parsed filings
 and supports CIK filtering. Each filing opens a details page with filing
 metadata, structural counts, and source-level XBRL facts; the JSON API remains
 available for complete persisted-file inspection.

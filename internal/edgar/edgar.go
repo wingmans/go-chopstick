@@ -19,11 +19,12 @@ import (
 )
 
 const (
-	EarliestYear   = 1993
-	DefaultBaseURL = "https://www.sec.gov/Archives"
-	headerLines    = 11
-	separator      = "|"
-	requestBudget  = 125 * time.Millisecond
+	EarliestYear         = 1993
+	EarliestPipelineYear = 2016
+	DefaultBaseURL       = "https://www.sec.gov/Archives"
+	headerLines          = 11
+	separator            = "|"
+	requestBudget        = 125 * time.Millisecond
 )
 
 // Config contains the inputs used to download the quarterly indexes.
@@ -168,9 +169,14 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 			"duration_ms", time.Since(started).Milliseconds(),
 		}
 		if network {
-			logger.Debug("fetched EDGAR index", append(attrs, "source", "network", "url", archive.URL)...)
+			logger.Debug("downloaded and extracted EDGAR index",
+				append(attrs, "source", "network", "url", archive.URL)...)
+		} else if sourcePath == archive.FileName {
+			logger.Debug("reused cached EDGAR index",
+				append(attrs, "source", "cache", "path", sourcePath)...)
 		} else {
-			logger.Debug("fetched EDGAR index", append(attrs, "source", "cache", "path", sourcePath)...)
+			logger.Debug("extracted cached EDGAR index",
+				append(attrs, "source", "cache", "path", sourcePath)...)
 		}
 
 		if network && i < len(archives)-1 {
@@ -502,7 +508,6 @@ func extractIndexContext(ctx context.Context, zipPath, indexPath string) error {
 			return fmt.Errorf("invalid master.idx row: %q", line)
 		}
 
-		line += separator + strings.ReplaceAll(fields[len(fields)-1], ".txt", "-index.html")
 		if _, err := fmt.Fprintln(output, line); err != nil {
 			return fmt.Errorf("write index: %w", err)
 		}

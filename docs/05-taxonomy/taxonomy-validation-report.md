@@ -22,7 +22,7 @@ reviewable taxonomy patch outside the `edgar` application.
 ## Expected-Set Coverage
 
 The separate `edgar coverage` command compares selected master-index records
-with local downloaded filings and parsed views:
+with local downloaded filings and materialized filing views in `analysis.db`:
 
 ```text
 edgar coverage --set us-gaap-coverage --form-type 10-K \
@@ -34,15 +34,16 @@ these states separate:
 
 - `missing`: a master record has no local filing;
 - `downloaded`: the filing exists but has no usable parsed view;
-- `parsed`: both the filing and parsed view exist;
+- `parsed`: the normalized filing view exists in `analysis.db`;
 - `parsed_error`: the parsed view exists but cannot be loaded;
 - `source_error`: the local filing path cannot be inspected.
 
 For parsed views, the report also records which canonical taxonomy metrics are
-present, missing, or supplemental-only. Missing quarterly index files and
-missing filings produce structured acquisition requests. These requests are
-suggestions for a later index, filings, or parse invocation; the coverage
-command never executes them.
+present, missing, or supplemental-only. Raw files and verbose parser artifacts
+are optional evidence; removing them does not make a materialized filing
+unparsed. Missing quarterly index files and missing filings produce structured
+acquisition requests. These requests are suggestions for a later index,
+filings, or parse invocation; the coverage command never executes them.
 
 The expected population is deliberately conservative: it is made from records
 present in `master.tsv` after applying the set, CIK, form-type, and year

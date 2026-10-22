@@ -1,30 +1,93 @@
-.PHONY: help build constituents lint run serve serve-dev integration taxonomy-validation taxonomy-validation-fast manual-checks docs-pdf release test clean clean-derived-data build-polling run-polling test-polling
+.PHONY: help setup build test lint docs-pdf clean
 
 .DEFAULT_GOAL := help
 
 BIN_DIR := bin
+CHOPSTICK_DATA_DIR ?= ./data
+
+-include .env
+
+CHOPSTICK_DATA_DIR := $(or $(strip $(CHOPSTICK_DATA_DIR)),./data)
+
+export EDGAR_SET
+export EDGAR_FORM_TYPES
+export EDGAR_FROM_YEAR
+export EDGAR_NATS_URL
+export EDGAR_NEWS_ADDRESS
+export EDGAR_FILINGS_ADDRESS
+export EDGAR_USER_AGENT
+export EDGAR_BASE_URL
+export CHOPSTICK_DATA_DIR
+export LOGLEVEL
+
+ifneq ($(strip $(SET)),)
+EDGAR_SET := $(SET)
+endif
+
+ifneq ($(strip $(FROM_YEAR)),)
+EDGAR_FROM_YEAR := $(FROM_YEAR)
+endif
+
+include make/development.mk
 
 help:
 	@printf '%s\n' \
 		'' \
-		'Available commands:' \
+		'Development:' \
 		'' \
 		'  help                    Display this command list' \
+		'  setup                   Prepare the development environment' \
+		'  dev                     Start NATS and run all services' \
+		'  watch                   Open the tiled Ghostty development console' \
+		'  overview                Refresh polling and news metrics each minute' \
+		'  index-refresh           Refresh latest SEC index and master.tsv' \
+		'  filings-web             Run only the filings web server' \
 		'  build                   Build all command binaries' \
-		'  docs-pdf                Build one PDF from the documentation chapters' \
-		'  lint                    Run golangci-lint with auto-fixes' \
 		'  test                    Run the Go test suite' \
+		'  lint                    Run golangci-lint with auto-fixes' \
+		'  docs-pdf                Build the documentation PDF' \
 		'  clean                   Remove build artifacts' \
 		'' \
-		'  constituents            Download the current S&P 500 constituent set' \
-		'  clean-derived-data      Remove derived data while preserving raw filings' \
-		'  integration             Run the EDGAR end-to-end test' \
-		'  taxonomy-validation     Run the 19-company taxonomy validation pass' \
-		'  taxonomy-validation-fast Run the five-company one-year validation pass' \
-		'  manual-checks           Compare the confirmed baseline with parsed 10-K views' \
-		'  run                     Run the ECB example command' \
-		'  serve                   Serve locally parsed EDGAR filings' \
-		'  serve-dev               Serve filings with Air auto-rebuilds' \
+		'Local data:' \
+		'' \
+		'  clean-dev               Reset processing but preserve downloads' \
+		'  reset-dev               Remove all local application data' \
+		'' \
+		'Infrastructure:' \
+		'' \
+		'  nats-start              Start project-local NATS' \
+		'  nats-stop               Stop project-local NATS' \
+		'  nats-status             Show project-local NATS status' \
+		'  nats-reset              Remove local NATS state' \
+		'' \
+		'Operations:' \
+		'' \
+		'  doctor                  Validate pipeline dependencies' \
+		'  doctor-verbose          Validate and show configuration' \
+		'  status                  Show pipeline and NATS state' \
+		'  errors                  Show unresolved pipeline failures' \
+		'  retry-download          Requeue failed downloads' \
+		'  retry-process           Requeue failed processing work' \
+		'' \
+		'Observability:' \
+		'' \
+		'  logs                    Follow all application logs' \
+		'  logs-atom               Follow Atom discovery logs' \
+		'  logs-select             Follow filing selection logs' \
+		'  logs-discovery          Follow Atom and selection logs' \
+		'  logs-download           Follow download worker logs' \
+		'  logs-process            Follow processing worker logs' \
+		'  logs-news               Follow news service logs' \
+		'  logs-filings            Follow filings web logs' \
+		'  logs-errors             Follow warnings and errors' \
+		'' \
+		'More commands: go run ./cmd/edgar --help'
+
+setup:
+	@bash -c '[[ -f .env ]] && echo ".env already exists" || { \
+		cp .env.example .env && echo "created .env"; \
+	}'
+	bash scripts/install-tools.sh
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -34,62 +97,14 @@ build:
 	go build -o $(BIN_DIR)/polling ./cmd/polling
 	go build -o $(BIN_DIR)/polling-reader ./cmd/polling-reader
 
-constituents:
-	mkdir -p data/sets
-	go run ./cmd/constituents
-
 lint:
 	golangci-lint run --fix ./cmd/... ./internal/...
 
-integration: build
-	bash scripts/edgar-e2e.sh
-
-taxonomy-validation: build
-	bash scripts/taxonomy-validation.sh
-
-taxonomy-validation-fast: build
-	SET_NAME=golden FROM_YEAR=2024 TO_YEAR=2024 bash scripts/taxonomy-validation.sh
-
-manual-checks:
-	bash scripts/manual-checks.sh
-
 docs-pdf:
 	bash scripts/docs-pdf.sh
-
-clean-derived-data:
-	bash scripts/clean-derived-data.sh
-
-run:
-	go run ./cmd/ecb
-
-serve: build
-	LOGLEVEL=debug ./bin/edgar serve --set us-gaap-coverage
-
-serve-dev:
-	@command -v air >/dev/null || { \
-		printf '%s\n' 'air is not installed. Install it with:'; \
-		printf '%s\n' '  go install github.com/air-verse/air@latest'; \
-		exit 1; \
-	}
-	air -c .air.toml
 
 test:
 	go test ./...
 
 clean:
-	rm -rf $(BIN_DIR) dist tmp
-
-build-polling:
-	mkdir -p $(BIN_DIR)
-	go build -o $(BIN_DIR)/polling ./cmd/polling
-	go build -o $(BIN_DIR)/polling-reader ./cmd/polling-reader
-
-run-polling:
-	mkdir -p var
-	go run ./cmd/polling \
-		-interval=1h \
-		-db-path=./var/polling.db \
-		-user-agent="MyMarketPipeline contact@example.com"
-
-test-polling:
-	go test ./cmd/polling ./internal/pollingworker
+	rm -rf $(BIN_DIR) dist

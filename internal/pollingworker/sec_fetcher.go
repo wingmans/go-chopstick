@@ -8,6 +8,8 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -71,6 +73,7 @@ var (
 	cikRegex             = regexp.MustCompile(`(?i)\bCIK\s*[:=]\s*([0-9]{1,10})`)
 	formTypeRegex        = regexp.MustCompile(`(?i)\bForm Type\s*:\s*([^\s]+)`)
 	titleCIKRegex        = regexp.MustCompile(`\(([0-9]{10})\)`)
+	titleCompanyRegex    = regexp.MustCompile(`^\s*.+?\s+-\s+(.*?)\s+\([0-9]{10}\)`)
 	atomTagRegex         = regexp.MustCompile(`<[^>]+>`)
 )
 
@@ -173,12 +176,38 @@ func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
 		formType = strings.TrimSpace(entry.Category.Term)
 	}
 
+	companyName := strings.TrimSpace(entry.Title)
+	if companyMatch := titleCompanyRegex.FindStringSubmatch(entry.Title); len(companyMatch) >= 2 {
+		companyName = strings.TrimSpace(companyMatch[1])
+	}
+
+	filingPath := atomFilingPath(entry.Link.Href, cik, accessionNo)
+
 	return FilingEvent{
+		SchemaVersion:   filingEventSchemaVersion,
+		EventID:         "filing.discovered:" + accessionNo,
 		AccessionNumber: accessionNo,
 		CIK:             cik,
+		CompanyName:     companyName,
 		FormType:        formType,
 		FilingDate:      entry.Updated.Format("2006-01-02"),
-		SourceFeed:      "RSS",
-		Timestamp:       entry.Updated,
+		FilingPath:      filingPath,
+		IndexPath:       "",
+		FilingURL:       entry.Link.Href,
+		SourceFeed:      "ATOM",
+		Timestamp:       time.Now().UTC(),
 	}, true
+}
+
+func atomFilingPath(href, cik, accession string) string {
+	parsed, err := url.Parse(href)
+	if err == nil {
+		archivePath := strings.TrimPrefix(parsed.Path, "/Archives/")
+		if directory := path.Dir(archivePath); directory != "." {
+			return path.Join(directory, accession+".txt")
+		}
+	}
+
+	return path.Join("edgar/data", strings.TrimLeft(cik, "0"),
+		accession+".txt")
 }

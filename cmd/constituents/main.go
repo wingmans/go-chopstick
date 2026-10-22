@@ -16,13 +16,13 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/constituents"
 )
 
 const (
 	defaultWikipediaURL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 	defaultTickerURL    = "https://www.sec.gov/files/company_tickers.json"
-	defaultOutput       = "./data/sets/sp500.json"
 	userAgent           = "wingman paul@wingmen.io"
 )
 
@@ -45,6 +45,8 @@ func main() {
 
 func run(args []string) error {
 	var output, wikipediaURL, tickerURL string
+
+	defaultOutput := appdata.Path("sets", "sp500.json")
 
 	flags := flag.NewFlagSet("constituents", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)

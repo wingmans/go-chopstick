@@ -1,11 +1,19 @@
 module wingman.com/fetch-ecb
 
-go 1.27.0
+go 1.27.3
 
 require (
 	github.com/lmittmann/tint v1.2.0
 	github.com/mattn/go-sqlite3 v1.14.52
-	golang.org/x/net v0.59.0
+	github.com/nats-io/nats.go v1.41.1
+	golang.org/x/net v0.60.0
 )
 
-require golang.org/x/text v0.42.0 // indirect
+require (
+	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/nats-io/nkeys v0.4.9 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+)

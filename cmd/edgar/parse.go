@@ -8,22 +8,23 @@ import (
 	"path/filepath"
 	"strings"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingworkflow"
+	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
 )
 
 func parseSubmissionConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
 	cfg.command = parseCommand
-	cfg.parse.masterPath = "./data/indexes/master.tsv"
+	cfg.parse.masterPath = appdata.Path("cache", "indexes", "master.tsv")
+	cfg.parse.analysisDB = appdata.Path("analysis.db")
 	flags := flag.NewFlagSet(parseCommand, flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
 		printSubcommandHelp(parseCommand, "Process downloaded local submissions selected from master.tsv.", []helpOption{
 			{flags: "-c, --cik <cik>", description: "Select filings for this CIK."},
-			{flags: "    --set <name>", description: "Select current members from data/sets/<name>.json."},
+			{flags: "    --set <name>", description: "Select a set from the configured data directory."},
 			{flags: "-f, --form-type <type>", description: "Select this form type; may be repeated."},
 			{flags: "-y, --year <year>", description: "Select filings filed in this year; default is all years."},
 			{flags: "    --from-year <year>", description: "First filing year to include."},
@@ -37,6 +38,7 @@ func parseSubmissionConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.parse.filter.CIK, "c", "", "select filings for this CIK")
 	flags.StringVar(&cfg.parse.filter.CIK, "cik", "", "select filings for this CIK")
 	flags.StringVar(&cfg.parse.setName, "set", "", "select filings for this constituent set")
+	flags.StringVar(&cfg.parse.analysisDB, "analysis-db", cfg.parse.analysisDB, "SQLite analysis database")
 	flags.Var(&cfg.parse.formTypes, "f", "select this form type; may be repeated")
 	flags.Var(&cfg.parse.formTypes, "form-type", "select this form type; may be repeated")
 	flags.StringVar(&cfg.parse.year, "y", "", "select filings filed in this year")
@@ -99,8 +101,9 @@ func runParse(ctx context.Context, cfg appConfig) error {
 	)
 
 	processing := filingworkflow.ProcessingConfig{
-		Directory:        edgar.DefaultParsedDirectory,
-		FilingsDirectory: edgar.DefaultFilingsDirectory,
+		Directory:        appdata.Path("parsed"),
+		FilingsDirectory: appdata.Path("cache", "filings"),
+		AnalysisDBPath:   cfg.parse.analysisDB,
 		FormType:         "",
 		Reprocess:        cfg.parse.reprocess,
 		Noop:             cfg.parse.noop,
@@ -111,7 +114,8 @@ func runParse(ctx context.Context, cfg appConfig) error {
 		return err
 	}
 
-	_, err := filingworkflow.ProcessLocalFilings(ctx, cfg.parse.masterPath, edgar.DefaultFilingsDirectory, processing, cfg.parse.filter)
+	_, err := filingworkflow.ProcessLocalFilings(ctx, cfg.parse.masterPath,
+		appdata.Path("cache", "filings"), processing, cfg.parse.filter)
 
 	return err
 }

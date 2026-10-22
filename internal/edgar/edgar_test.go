@@ -73,8 +73,7 @@ func TestDownloadIndexExtractsAndAppendsHTMLURL(t *testing.T) {
 	}
 
 	want := "1000045|NICHOLAS FINANCIAL INC|10-K|2018-06-27|" +
-		"edgar/data/1000045/0001193125-18-205637.txt|" +
-		"edgar/data/1000045/0001193125-18-205637-index.html\n"
+		"edgar/data/1000045/0001193125-18-205637.txt\n"
 	if got := string(data); got != want {
 		t.Fatalf("unexpected extracted index:\n%s", got)
 	}
@@ -146,6 +145,58 @@ func TestDownloadArchiveUsesCachedZipUnlessForced(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(directory, "2026-QTR1.tsv")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDownloadArchiveSkipsExistingIndexWithoutOpeningZip(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "indexes")
+
+	zipDirectory := filepath.Join(t.TempDir(), "cache")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(zipDirectory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := Archive{URL: "https://example.test/master.zip", FileName: "2026-QTR1.tsv"}
+
+	indexPath := filepath.Join(directory, archive.FileName)
+	if err := os.WriteFile(indexPath, []byte("already extracted\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(zipDirectory, "2026-QTR1.zip"),
+		[]byte("not a zip"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	client := edgarClient{httpClient: &http.Client{
+		Transport: roundTripper(func(*http.Request) (*http.Response, error) {
+			t.Fatal("unexpected network request for existing index")
+
+			return nil, errUnexpectedNetworkRequest
+		}),
+	}, userAgent: "Example contact@example.test"}
+
+	network, sourcePath, err := downloadArchive(t.Context(), client,
+		directory, zipDirectory, archive, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if network || sourcePath != archive.FileName {
+		t.Fatalf("network=%v source=%q", network, sourcePath)
+	}
+
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(data) != "already extracted\n" {
+		t.Fatalf("existing index was changed: %q", data)
 	}
 }
 

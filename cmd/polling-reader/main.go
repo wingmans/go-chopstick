@@ -12,9 +12,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/fetch-ecb/internal/eventbus"
 	pw "wingman.com/fetch-ecb/internal/pollingworker"
 )
 
@@ -23,6 +26,7 @@ var quarterlyFilePattern = regexp.MustCompile(`^(\d{4})-QTR([1-4])\.tsv$`)
 type config struct {
 	indexesDir string
 	dbPath     string
+	natsURL    string
 	file       string
 	latest     bool
 	year       int
@@ -83,6 +87,16 @@ func run(ctx context.Context, args []string) error {
 	logger.Info("imported quarterly index events", "new_events", len(newEvents),
 		"duplicates", len(events)-len(newEvents))
 
+	bus, err := eventbus.Connect(cfg.natsURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = bus.Close() }()
+
+	if err := store.PublishPending(ctx, bus); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -91,8 +105,12 @@ func parseConfig(args []string) (config, error) {
 	flags.SetOutput(os.Stderr)
 
 	cfg := config{}
-	flags.StringVar(&cfg.indexesDir, "indexes-dir", "./data/indexes/quarterly", "quarterly index directory")
-	flags.StringVar(&cfg.dbPath, "db-path", "./data/polling.db", "SQLite database path")
+	flags.StringVar(&cfg.indexesDir, "indexes-dir",
+		appdata.Path("cache", "indexes", "quarterly"),
+		"quarterly index directory")
+	flags.StringVar(&cfg.dbPath, "db-path", appdata.Path("polling.db"),
+		"SQLite database path")
+	flags.StringVar(&cfg.natsURL, "nats-url", eventbus.DefaultURL, "NATS server URL")
 	flags.StringVar(&cfg.file, "file", "", "import one quarterly TSV file")
 	flags.BoolVar(&cfg.latest, "latest", false, "import the newest local quarterly TSV")
 	flags.IntVar(&cfg.year, "year", 0, "import all quarters for one year")
@@ -208,13 +226,23 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 				return nil, fmt.Errorf("read %s: %w", path, err)
 			}
 
+			if record.DateFiled.Year() < edgar.EarliestPipelineYear {
+				continue
+			}
+
 			events = append(events, pw.FilingEvent{
+				SchemaVersion:   1,
+				EventID:         "filing.discovered:" + accessionFromPath(record.FilingPath),
 				AccessionNumber: accessionFromPath(record.FilingPath),
 				CIK:             record.CIK,
+				CompanyName:     record.CompanyName,
 				FormType:        record.FormType,
 				FilingDate:      record.DateFiled.Format("2006-01-02"),
+				FilingPath:      record.FilingPath,
+				IndexPath:       "",
+				FilingURL:       filingURL(record),
 				SourceFeed:      "BATCH",
-				Timestamp:       record.DateFiled,
+				Timestamp:       time.Now().UTC(),
 			})
 		}
 
@@ -224,6 +252,11 @@ func readEvents(files []string) ([]pw.FilingEvent, error) {
 	}
 
 	return events, nil
+}
+
+func filingURL(record edgar.EdgarIndex) string {
+	return "https://www.sec.gov/Archives/" +
+		strings.TrimPrefix(record.FilingPath, "/")
 }
 
 func accessionFromPath(path string) string {

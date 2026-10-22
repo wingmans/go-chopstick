@@ -1,7 +1,8 @@
 # EDGAR Indexes and Filing Downloads
 
-The EDGAR downloader stores quarterly index files under `data/indexes/` and
-stores downloaded filing files under `data/filings/` by default.
+The EDGAR downloader stores quarterly index files under
+`data/cache/indexes/` and stores downloaded filing files under
+`data/cache/filings/` by default.
 
 ## Index records
 
@@ -19,11 +20,11 @@ The SEC fields are represented as follows:
 | `FormType` | Submitted SEC form, such as `10-K` or `10-Q` |
 | `DateFiled` | Filing date, parsed as `time.Time` |
 | `FilingPath` | SEC-relative path to the raw submission text file |
-| `IndexPath` | Derived SEC-relative path to the HTML filing index |
+| `IndexPath` | Optional legacy value retained when reading old local TSVs |
 
-`IndexPath` is added by this repository. It is not one of the original master
-index columns. The extractor derives it by changing the submission `.txt` path
-to the corresponding `-index.html` path.
+New extraction writes the five authoritative SEC master-index fields. It does
+not synthesize an HTML index path. `IndexReader` still accepts old six-column
+local TSVs so existing cache files can be read during migration.
 
 ## Unique form types
 
@@ -33,9 +34,9 @@ the source file is very large.
 
 ## Filing downloads
 
-`DownloadIndexFiles` streams records from a master TSV and downloads the files
-referenced by each `EdgarIndex`. It downloads `FilingPath` and `IndexPath`
-sequentially.
+`DownloadIndexFiles` streams records from a master TSV and downloads the raw
+submission referenced by `FilingPath`. Optional legacy `IndexPath` values are
+not downloaded.
 
 The downloader is intentionally single-threaded. Before each network request
 it checks whether the destination file already exists. Existing files are
@@ -72,7 +73,6 @@ data/
       data/
         1000045/
           0000950170-25-021128.txt
-          0000950170-25-021128-index.html
 ```
 
 The filings directory mirrors the SEC-relative paths exactly. CIK is part of
@@ -93,9 +93,10 @@ edgar filings [options]
 `index` downloads quarterly indexes and stitches `master.tsv` by
 default. `filings` reads the existing `master.tsv` and downloads the
 referenced files independently. The default paths are
-`./data/indexes/quarterly` for TSV indexes, `./data/cache/index-zips` for ZIP
-files, `./data/indexes/master.tsv` for the master index, and `./data/filings`
-for filings.
+`./data/cache/indexes/quarterly` for TSV indexes,
+`./data/cache/index-zips` for ZIP files,
+`./data/cache/indexes/master.tsv` for the master index, and
+`./data/cache/filings` for filings.
 
 With no refresh flag, cached quarterly TSV files are reused first, then cached
 ZIP files are extracted if the TSV is missing. `--refresh-latest` only forces a
@@ -105,7 +106,8 @@ TSV files after the download/extract phase.
 
 The integration and taxonomy-validation scripts are offline by default once
 their index ZIP cache exists. Set `REFRESH_LATEST=1` when a run should refresh
-the newest quarter, for example `REFRESH_LATEST=1 make taxonomy-validation`.
+the newest quarter, for example
+`REFRESH_LATEST=1 bash scripts/taxonomy-validation.sh`.
 
 The default user-agent is `wingman paul@wingmen.io`. Set `EDGAR_USER_AGENT` to
 override it. Set `EDGAR_BASE_URL` to override the SEC Archives base URL.

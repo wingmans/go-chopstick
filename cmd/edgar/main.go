@@ -19,31 +19,42 @@ import (
 	"syscall"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/constituents"
 	"wingman.com/fetch-ecb/internal/ctxlog"
 	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/filingview"
-	"wingman.com/fetch-ecb/internal/filingworkflow"
+	filingview "wingman.com/fetch-ecb/internal/filing"
+	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
 	"wingman.com/fetch-ecb/internal/xerr"
 )
 
 const defaultUserAgent = "wingman paul@wingmen.io"
 
 const (
-	edgarUserAgentEnv = "EDGAR_USER_AGENT"
-	edgarBaseURLEnv   = "EDGAR_BASE_URL"
-	parseCommand      = "parse"
-	noopHelpFlags     = "-n, --noop"
-	defaultSetDir     = "./data/sets"
+	edgarUserAgentEnv   = "EDGAR_USER_AGENT"
+	edgarBaseURLEnv     = "EDGAR_BASE_URL"
+	edgarNATSURLEnv     = "EDGAR_NATS_URL"
+	edgarNewsAddressEnv = "EDGAR_NEWS_ADDRESS"
+	edgarWebAddressEnv  = "EDGAR_FILINGS_ADDRESS"
+	edgarSetEnv         = "EDGAR_SET"
+	edgarFormTypesEnv   = "EDGAR_FORM_TYPES"
+	edgarFromYearEnv    = "EDGAR_FROM_YEAR"
+	parseCommand        = "parse"
+	noopHelpFlags       = "-n, --noop"
 )
 
 type appConfig struct {
-	command string
-	index   edgar.Config
-	parse   struct {
+	command    string
+	events     eventCommandConfig
+	backfill   backfillConfig
+	operations operationsConfig
+	artifacts  artifactCommandConfig
+	index      edgar.Config
+	parse      struct {
 		files      stringList
 		formTypes  stringList
 		masterPath string
+		analysisDB string
 		filter     edgar.IndexFilter
 		setName    string
 		year       string
@@ -54,6 +65,7 @@ type appConfig struct {
 	}
 	filings struct {
 		masterPath string
+		analysisDB string
 		config     edgar.FilingDownloadConfig
 		filter     edgar.IndexFilter
 		setName    string
@@ -63,9 +75,10 @@ type appConfig struct {
 		reprocess  bool
 	}
 	serve struct {
-		address   string
-		parsedDir string
-		setName   string
+		address    string
+		parsedDir  string
+		analysisDB string
+		setName    string
 	}
 	taxonomy struct {
 		operation string
@@ -86,6 +99,7 @@ type appConfig struct {
 		indexesDir string
 		filingsDir string
 		parsedDir  string
+		analysisDB string
 		out        string
 		filter     edgar.IndexFilter
 		formTypes  stringList
@@ -175,14 +189,32 @@ func run(ctx context.Context, args []string) error {
 	}
 	logger := ctxlog.FromContext(ctx)
 
-	started := time.Now()
-	defer func() {
-		logger.Info("finished EDGAR command", "command", cfg.command, "duration_ms", time.Since(started).Milliseconds())
-	}()
+	if cfg.command != "doctor" && cfg.command != "status" &&
+		cfg.command != "errors" && cfg.command != "retry" {
+		started := time.Now()
+		defer func() {
+			logger.Info("finished EDGAR command", "command", cfg.command,
+				"duration_ms", time.Since(started).Milliseconds())
+		}()
+	}
 
 	var commandErr error
 
 	switch cfg.command {
+	case "atom", "discover", "select", "download", "process", "news", "run":
+		commandErr = runEventCommand(ctx, cfg.command, cfg.events, logger)
+	case "backfill":
+		commandErr = runBackfill(ctx, client, cfg.backfill, logger)
+	case "doctor":
+		commandErr = runDoctor(ctx, cfg.operations)
+	case "status":
+		commandErr = runStatus(ctx, cfg.operations)
+	case "errors":
+		commandErr = runErrors(ctx, cfg.operations)
+	case "retry":
+		commandErr = runRetry(ctx, cfg.operations)
+	case "artifacts":
+		commandErr = runArtifacts(ctx, cfg.artifacts)
 	case parseCommand:
 		commandErr = runParse(ctx, cfg)
 	case "index":
@@ -210,8 +242,9 @@ func run(ctx context.Context, args []string) error {
 		)
 
 		_, err := filingworkflow.ProcessFilings(ctx, client, cfg.filings.masterPath, cfg.filings.config, filingworkflow.ProcessingConfig{
-			Directory:        edgar.DefaultParsedDirectory,
+			Directory:        appdata.Path("parsed"),
 			FilingsDirectory: cfg.filings.config.Directory,
+			AnalysisDBPath:   cfg.filings.analysisDB,
 			FormType:         "",
 			Reprocess:        cfg.filings.reprocess,
 			Noop:             cfg.filings.config.Noop,
@@ -223,7 +256,7 @@ func run(ctx context.Context, args []string) error {
 			"parsed_directory", cfg.serve.parsedDir, "set", cfg.serve.setName)
 
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir,
-			cfg.serve.setName)
+			cfg.serve.setName, cfg.serve.analysisDB)
 	case "taxonomy":
 		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
 			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter,
@@ -297,6 +330,14 @@ func parseConfig(args []string) (appConfig, error) {
 	}
 
 	switch args[0] {
+	case "atom", "discover", "select", "download", "process", "news", "run":
+		return parseEventCommandConfig(args[0], args[1:])
+	case "backfill":
+		return parseBackfillConfig(args[1:])
+	case "doctor", "status", "errors", "retry":
+		return parseOperationsConfig(args[0], args[1:])
+	case "artifacts":
+		return parseArtifactCommand(args[1:])
 	case parseCommand:
 		return parseSubmissionConfig(args[1:])
 	case "index":
@@ -326,19 +367,19 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 		printSubcommandHelp("taxonomy <lint|coverage>", "Inspect local filing data against the taxonomy.", []helpOption{
 			{"-i, --file <path>", "Inspect one filing-view.json or filing.json."},
 			{"-c, --cik <cik>", "Select locally parsed filings for this CIK."},
-			{"-s, --set <name>", "Select current members from data/sets/<name>.json."},
+			{"-s, --set <name>", "Select a set from the configured data directory."},
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"-y, --year <year>", "Select filings filed in this year."},
 			{"    --from-year <year>", "First filing year to include."},
 			{"    --to-year <year>", "Last filing year to include."},
-			{"-d, --parsed-dir <path>", "Parsed filing directory; default ./data/parsed."},
+			{"-d, --parsed-dir <path>", "Parsed filing directory."},
 			{"-t, --taxonomy <path>", "Use a taxonomy JSON file instead of the embedded default."},
 			{"    --format <text|json>", "Output format; default text."},
 			{"-o, --out <path>", "Write output to this file instead of stdout."},
 			{"-h, --help", "Show command help."},
 		})
 	}
-	cfg.taxonomy.parsedDir = edgar.DefaultParsedDirectory
+	cfg.taxonomy.parsedDir = appdata.Path("parsed")
 	cfg.taxonomy.format = "text"
 	flags.StringVar(&cfg.taxonomy.file, "i", "", "lint one compact filing-view.json")
 	flags.StringVar(&cfg.taxonomy.file, "file", "", "lint one compact filing-view.json")
@@ -774,12 +815,17 @@ func applyYearSelection(filter *edgar.IndexFilter, year string, fromYear, toYear
 func parseDownloadIndexConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
+	fromYear, err := environmentFromYear(edgar.EarliestPipelineYear)
+	if err != nil {
+		return appConfig{}, err
+	}
+
 	cfg.command = "index"
 	cfg.index = edgar.Config{
-		Directory:     "./data/indexes/quarterly",
-		ZipDirectory:  "./data/cache/index-zips",
-		MasterPath:    "./data/indexes/master.tsv",
-		SinceYear:     edgar.EarliestYear,
+		Directory:     appdata.Path("cache", "indexes", "quarterly"),
+		ZipDirectory:  appdata.Path("cache", "index-zips"),
+		MasterPath:    appdata.Path("cache", "indexes", "master.tsv"),
+		SinceYear:     fromYear,
 		UserAgent:     environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		RefreshLatest: false,
 		Stitch:        true,
@@ -814,8 +860,9 @@ func parseDownloadIndexConfig(args []string) (appConfig, error) {
 		return appConfig{}, flag.ErrHelp
 	}
 
-	if cfg.index.SinceYear < edgar.EarliestYear {
-		return subcommandError(flags, fmt.Errorf("--from-year must be %d or later", edgar.EarliestYear))
+	if cfg.index.SinceYear < edgar.EarliestPipelineYear {
+		return subcommandError(flags, fmt.Errorf("--from-year must be %d or later",
+			edgar.EarliestPipelineYear))
 	}
 
 	return cfg, nil
@@ -827,9 +874,10 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	var cfg appConfig
 
 	cfg.command = "filings"
-	cfg.filings.masterPath = "./data/indexes/master.tsv"
+	cfg.filings.masterPath = appdata.Path("cache", "indexes", "master.tsv")
+	cfg.filings.analysisDB = appdata.Path("analysis.db")
 	cfg.filings.config = edgar.FilingDownloadConfig{
-		Directory: edgar.DefaultFilingsDirectory,
+		Directory: appdata.Path("cache", "filings"),
 		UserAgent: environmentValue(edgarUserAgentEnv, defaultUserAgent),
 		BaseURL:   environmentValue(edgarBaseURLEnv, ""),
 		Noop:      false,
@@ -839,7 +887,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	flags.Usage = func() {
 		printSubcommandHelp("filings", "Download filings selected from master.tsv and reuse or rebuild parsed results.", []helpOption{
 			{"-c, --cik <cik>", "Select filings for this CIK."},
-			{"    --set <name>", "Select current members from data/sets/<name>.json."},
+			{"    --set <name>", "Select a set from the configured data directory."},
 			{"-f, --form-type <type>", "Select this form type; may be repeated."},
 			{"-y, --year <year>", "Select filings filed in this year; default is all years."},
 			{"    --from-year <year>", "First filing year to include."},
@@ -851,6 +899,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.filings.filter.CIK, "c", "", "only download filings for this CIK")
 	flags.StringVar(&cfg.filings.filter.CIK, "cik", "", "only download filings for this CIK")
 	flags.StringVar(&cfg.filings.setName, "set", "", "only download filings for this constituent set")
+	flags.StringVar(&cfg.filings.analysisDB, "analysis-db", cfg.filings.analysisDB, "SQLite analysis database")
 	flags.Var(&formTypes, "form-type", "only download this form type; may be repeated")
 	flags.Var(&formTypes, "f", "only download this form type; may be repeated")
 	flags.BoolVar(&cfg.filings.config.Noop, "noop", false, "show actions without downloading or writing files")
@@ -878,7 +927,11 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 		return subcommandError(flags, errors.New("unexpected positional arguments"))
 	}
 
-	cfg.filings.filter.FormTypes = formTypes
+	validatedForms, err := edgar.ValidateSupportedFormTypes(formTypes)
+	if err != nil {
+		return subcommandError(flags, err)
+	}
+	cfg.filings.filter.FormTypes = validatedForms
 	if err := applyConstituentSet(&cfg.filings.filter, cfg.filings.setName); err != nil {
 		return subcommandError(flags, err)
 	}
@@ -902,7 +955,7 @@ func applyConstituentSet(filter *edgar.IndexFilter, name string) error {
 		return errors.New("--set must be a set name, not a path")
 	}
 
-	set, err := constituents.LoadJSON(filepath.Join(defaultSetDir, name+".json"))
+	set, err := constituents.LoadJSON(appdata.Path("sets", name+".json"))
 	if err != nil {
 		return err
 	}
@@ -927,13 +980,41 @@ func environmentValue(name, fallback string) string {
 	return fallback
 }
 
+func environmentFromYear(fallback int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(edgarFromYearEnv))
+	if raw == "" {
+		return fallback, nil
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer", edgarFromYearEnv)
+	}
+
+	return value, nil
+}
+
 func printUsage() {
 	fmt.Fprintln(os.Stdout, "Usage: edgar <command> [options]")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
+	fmt.Fprintln(os.Stdout, "  atom              discover current filings from SEC Atom")
+	fmt.Fprintln(os.Stdout, "  select            select observed filings for processing")
+	fmt.Fprintln(os.Stdout, "  discover          select filings from a local master index")
+	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
+	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")
+	fmt.Fprintln(os.Stdout, "  status            summarize pipeline state and backlogs")
+	fmt.Fprintln(os.Stdout, "  errors            list unresolved pipeline failures")
+	fmt.Fprintln(os.Stdout, "  retry             requeue unresolved pipeline failures")
+	fmt.Fprintln(os.Stdout, "  download          filings from discovery events")
+	fmt.Fprintln(os.Stdout, "  process           parse downloaded filings and aggregate data")
+	fmt.Fprintln(os.Stdout, "  news              serve the stream-backed EDGAR news page")
+	fmt.Fprintln(os.Stdout,
+		"  run               all continuous roles and HTTP services")
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
+	fmt.Fprintln(os.Stdout, "  artifacts         list, extract, or clean source documents")
 	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
 	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
 	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")

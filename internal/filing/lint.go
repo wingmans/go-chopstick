@@ -1,0 +1,160 @@
+package filing
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+type LintTerm struct {
+	Namespace string `json:"namespace"`
+	Concept   string `json:"concept"`
+	Count     int    `json:"count"`
+}
+
+type LintReport struct {
+	TaxonomyVersion string          `json:"taxonomy_version"`
+	Rows            int             `json:"rows"`
+	Mapped          int             `json:"mapped"`
+	Unmapped        []LintTerm      `json:"unmapped"`
+	QualityIssues   []string        `json:"quality_issues"`
+	QualityChecks   []IdentityCheck `json:"quality_checks,omitempty"`
+}
+
+// LintView checks the compact model against the taxonomy. Unmapped terms are
+// findings, not errors: a filing can contain valid facts outside our model.
+func LintView(view View, taxonomy Taxonomy) LintReport {
+	counts := map[string]*LintTerm{}
+	rows := 0
+	mapped := 0
+	seenRows := make(map[string]struct{})
+	unitsByMetric := make(map[string]string)
+	qualityIssues := map[string]struct{}{}
+	visit := func(groups []SummaryGroup) {
+		for _, group := range groups {
+			for _, row := range group.Rows {
+				rowKey := group.Title + "\x00" + row.Namespace + "\x00" +
+					row.Concept + "\x00" + row.Unit
+				if _, seen := seenRows[rowKey]; seen {
+					continue
+				}
+
+				seenRows[rowKey] = struct{}{}
+
+				rows++
+
+				if len(row.Values) == 0 {
+					qualityIssues["row has no values: "+row.Concept] = struct{}{}
+				}
+
+				for period := range row.Values {
+					if !validPeriodKey(period) {
+						qualityIssues["invalid period "+period+": "+row.Concept] = struct{}{}
+					}
+				}
+
+				if row.Key != "" {
+					if previousUnit, ok := unitsByMetric[row.Key]; ok && previousUnit != row.Unit {
+						qualityIssues["metric has multiple units: "+row.Key] = struct{}{}
+					}
+
+					unitsByMetric[row.Key] = row.Unit
+				}
+
+				_, known := taxonomy.metricForConcept(row.Namespace, row.Concept)
+				if row.Key != "" || known {
+					mapped++
+
+					continue
+				}
+
+				key := row.Namespace + "\x00" + row.Concept
+
+				term := counts[key]
+				if term == nil {
+					term = &LintTerm{
+						Namespace: row.Namespace, Concept: row.Concept, Count: 0,
+					}
+					counts[key] = term
+				}
+
+				term.Count++
+			}
+		}
+	}
+
+	visit(view.Summary)
+	visit(view.Statements.Income.Groups)
+	visit(view.Statements.Balance.Groups)
+	visit(view.Statements.CashFlow.Groups)
+
+	var qualityChecks []IdentityCheck
+
+	for _, check := range CheckAccountingIdentities(view) {
+		if check.Status == identityFail {
+			qualityIssues["identity check failed: "+check.Name+
+				" period="+check.Period+" unit="+check.Unit] = struct{}{}
+			qualityChecks = append(qualityChecks, check)
+		}
+	}
+
+	result := make([]LintTerm, 0, len(counts))
+	for _, term := range counts {
+		result = append(result, *term)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Concept != result[j].Concept {
+			return result[i].Concept < result[j].Concept
+		}
+
+		return result[i].Namespace < result[j].Namespace
+	})
+
+	quality := make([]string, 0, len(qualityIssues))
+	for issue := range qualityIssues {
+		quality = append(quality, issue)
+	}
+
+	sort.Strings(quality)
+	sort.Slice(qualityChecks, func(i, j int) bool {
+		if qualityChecks[i].Name != qualityChecks[j].Name {
+			return qualityChecks[i].Name < qualityChecks[j].Name
+		}
+
+		if qualityChecks[i].Period != qualityChecks[j].Period {
+			return qualityChecks[i].Period < qualityChecks[j].Period
+		}
+
+		return qualityChecks[i].Unit < qualityChecks[j].Unit
+	})
+
+	return LintReport{
+		TaxonomyVersion: taxonomy.TaxonomyVersion,
+		Rows:            rows, Mapped: mapped,
+		Unmapped: result, QualityIssues: quality, QualityChecks: qualityChecks,
+	}
+}
+
+func validPeriodKey(value string) bool {
+	if strings.HasPrefix(value, "FY") || strings.HasPrefix(value, "Q") ||
+		strings.HasPrefix(value, "YTD") {
+		return true
+	}
+
+	_, err := parseDate(value)
+
+	return err == nil
+}
+
+func (r LintReport) String() string {
+	var result strings.Builder
+	fmt.Fprintf(&result, "taxonomy=%s rows=%d mapped=%d unmapped=%d quality_issues=%d",
+		r.TaxonomyVersion, r.Rows, r.Mapped, len(r.Unmapped), len(r.QualityIssues))
+
+	for _, term := range r.Unmapped {
+		fmt.Fprintf(&result, "\n  %s %s count=%d", term.Namespace, term.Concept, term.Count)
+	}
+
+	return result.String()
+}
