@@ -1,0 +1,8 @@
+Oct 22 00:35:24.380 WRN submission diagnostic role=process accession=0000093410-26-000010 code=document_count document="" detail="declared document count differs from inventory"
+Oct 22 00:35:24.432 WRN submission diagnostic role=process accession=0000093410-26-000019 code=document_count document="" detail="declared document count differs from inventory"
+Oct 22 00:35:24.465 WRN submission diagnostic role=process accession=0000093410-26-000021 code=document_count document="" detail="declared document count differs from inventory"
+Oct 22 07:08:14.856 WRN polling cycle failed role=atom error="failed fetching feed: Get \"https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=&company=&datea=&dateb=&owner=include&count=100&output=atom\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+Oct 22 14:44:31.857 WRN polling cycle failed role=atom error="failed fetching feed: Get \"https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=&company=&datea=&dateb=&owner=include&count=100&output=atom\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+
+
+does it start again?

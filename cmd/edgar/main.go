@@ -49,6 +49,7 @@ type appConfig struct {
 	backfill   backfillConfig
 	operations operationsConfig
 	artifacts  artifactCommandConfig
+	mirror     mirrorCommandConfig
 	index      edgar.Config
 	parse      struct {
 		files      stringList
@@ -215,6 +216,8 @@ func run(ctx context.Context, args []string) error {
 		commandErr = runRetry(ctx, cfg.operations)
 	case "artifacts":
 		commandErr = runArtifacts(ctx, cfg.artifacts)
+	case "mirror":
+		commandErr = runMirrorCommand(ctx, client, cfg.mirror, logger)
 	case parseCommand:
 		commandErr = runParse(ctx, cfg)
 	case "index":
@@ -338,6 +341,8 @@ func parseConfig(args []string) (appConfig, error) {
 		return parseOperationsConfig(args[0], args[1:])
 	case "artifacts":
 		return parseArtifactCommand(args[1:])
+	case "mirror":
+		return parseMirrorConfig(args[1:])
 	case parseCommand:
 		return parseSubmissionConfig(args[1:])
 	case "index":
@@ -1016,6 +1021,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
 	fmt.Fprintln(os.Stdout, "  artifacts         list, extract, or clean source documents")
+	fmt.Fprintln(os.Stdout, "  mirror            manage the isolated raw filing mirror")
 	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
 	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
 	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")

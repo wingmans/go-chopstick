@@ -94,6 +94,32 @@ func TestConfiguredDataRootControlsCommandDefaults(t *testing.T) {
 	}
 }
 
+func TestMirrorConfigIsIsolatedUnderDataRoot(t *testing.T) {
+	t.Setenv(appdata.EnvName, "/srv/chopstick")
+	t.Setenv(edgarMirrorAddressEnv, "127.0.0.1:9084")
+
+	cfg, err := parseConfig([]string{"mirror", "stats"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.command != "mirror" || cfg.mirror.operation != "stats" {
+		t.Fatalf("unexpected mirror config: %+v", cfg.mirror)
+	}
+
+	if cfg.mirror.objectsDir != "/srv/chopstick/mirror/objects" ||
+		cfg.mirror.catalogDB != "/srv/chopstick/mirror/catalog.db" ||
+		cfg.mirror.address != "127.0.0.1:9084" {
+		t.Fatalf("unexpected mirror defaults: %+v", cfg.mirror)
+	}
+}
+
+func TestMirrorImportRequiresSource(t *testing.T) {
+	if _, err := parseConfig([]string{"mirror", "import"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("mirror import error = %v", err)
+	}
+}
+
 func TestParseDiscoverConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
 	t.Chdir(filepath.Join("..", ".."))
 
