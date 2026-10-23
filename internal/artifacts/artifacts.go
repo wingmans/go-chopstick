@@ -251,6 +251,11 @@ func decodeUU(reader io.Reader, writer io.Writer) error {
 
 		length := int((line[0] - 32) & 63)
 		encoded := line[1:]
+		expected := ((length + 2) / 3) * 4
+		if missing := expected - len(encoded); missing > 0 {
+			// EDGAR submissions sometimes trim trailing zero-padding spaces.
+			encoded += strings.Repeat("`", missing)
+		}
 		decoded := make([]byte, 0, length)
 		for len(encoded) >= 4 && len(decoded) < length {
 			a := (encoded[0] - 32) & 63

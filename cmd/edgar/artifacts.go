@@ -5,9 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"wingman.com/fetch-ecb/internal/appdata"
 	"wingman.com/fetch-ecb/internal/artifacts"
@@ -22,6 +25,7 @@ type artifactCommandConfig struct {
 	parsedDir    string
 	filingsDir   string
 	artifactsDir string
+	address      string
 	types        stringList
 	filenames    stringList
 	all          bool
@@ -33,11 +37,12 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 		parsedDir:    appdata.Path("parsed"),
 		filingsDir:   appdata.Path("cache", "filings"),
 		artifactsDir: appdata.Path("tmp", "artifacts"),
+		address:      "127.0.0.1:8090",
 	}
 	flags := flag.NewFlagSet("artifacts", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.Usage = func() {
-		printSubcommandHelp("artifacts <list|extract|clean>",
+		printSubcommandHelp("artifacts <list|extract|serve|clean>",
 			"Inspect disposable documents from one parsed SEC filing.",
 			[]helpOption{
 				{"--cik <cik>", "Required filing CIK."},
@@ -45,6 +50,7 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 				{"--type <type>", "Extract a document type; repeatable."},
 				{"--document <name>", "Extract one filename; repeatable."},
 				{"--all", "Extract every document."},
+				{"--address <host:port>", "Viewer address; loopback only."},
 				{"--artifacts-dir <path>", "Disposable artifact root."},
 				{"--parsed-dir <path>", "Parsed filing directory."},
 				{"--filings-dir <path>", "Raw filing cache directory."},
@@ -57,14 +63,15 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	}
 	if len(args) == 0 {
 		return subcommandError(flags,
-			errors.New("use 'edgar artifacts <list|extract|clean>'"))
+			errors.New("use 'edgar artifacts <list|extract|serve|clean>'"))
 	}
 	cfg.artifacts.operation = args[0]
 	if cfg.artifacts.operation != "list" &&
 		cfg.artifacts.operation != "extract" &&
+		cfg.artifacts.operation != "serve" &&
 		cfg.artifacts.operation != "clean" {
 		return subcommandError(flags,
-			errors.New("use 'edgar artifacts <list|extract|clean>'"))
+			errors.New("use 'edgar artifacts <list|extract|serve|clean>'"))
 	}
 
 	flags.StringVar(&cfg.artifacts.cik, "cik", "", "filing CIK")
@@ -76,6 +83,8 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 		cfg.artifacts.filingsDir, "raw filing cache directory")
 	flags.StringVar(&cfg.artifacts.artifactsDir, "artifacts-dir",
 		cfg.artifacts.artifactsDir, "disposable artifact root")
+	flags.StringVar(&cfg.artifacts.address, "address", cfg.artifacts.address,
+		"viewer listen address")
 	flags.Var(&cfg.artifacts.types, "type", "document type to extract")
 	flags.Var(&cfg.artifacts.filenames, "document",
 		"document filename to extract")
@@ -103,12 +112,20 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 		return subcommandError(flags, errors.New(
 			"extract requires --type, --document, or --all"))
 	}
+	if cfg.artifacts.operation == "serve" {
+		if err := validateViewerAddress(cfg.artifacts.address); err != nil {
+			return subcommandError(flags, err)
+		}
+	}
 
 	return cfg, nil
 }
 
 func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	destination := filepath.Join(cfg.artifactsDir, cfg.cik, cfg.accession)
+	if cfg.operation == "serve" {
+		return serveArtifacts(ctx, cfg, destination)
+	}
 	if cfg.operation == "clean" {
 		if err := artifacts.Clean(destination, cfg.cik, cfg.accession); err != nil {
 			return err
@@ -156,6 +173,60 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	}
 	fmt.Printf("extracted %d documents (%d bytes) to %s\n",
 		len(manifest.Documents), manifest.TotalBytes, destination)
+
+	return nil
+}
+
+func validateViewerAddress(address string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("--address must be host:port: %w", err)
+	}
+	if !strings.EqualFold(host, "localhost") {
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			return errors.New("--address must use a loopback host")
+		}
+	}
+
+	return nil
+}
+
+func serveArtifacts(ctx context.Context, cfg artifactCommandConfig,
+	destination string,
+) error {
+	handler, err := artifacts.Viewer(destination, cfg.cik, cfg.accession)
+	if err != nil {
+		return err
+	}
+	listener, err := net.Listen("tcp", cfg.address)
+	if err != nil {
+		return fmt.Errorf("listen for artifact viewer: %w", err)
+	}
+
+	server := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(),
+				5*time.Second)
+			defer cancel()
+			_ = server.Shutdown(shutdownCtx)
+		case <-done:
+		}
+	}()
+	defer close(done)
+
+	fmt.Printf("viewing %s at http://%s (press Ctrl-C to stop)\n",
+		destination, listener.Addr())
+	if err := server.Serve(listener); err != nil &&
+		!errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("serve artifact viewer: %w", err)
+	}
 
 	return nil
 }
