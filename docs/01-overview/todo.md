@@ -26,6 +26,23 @@ committed, do a clean full run from SEC download through parsing. That rerun is
 useful for finding remaining legacy parser gaps, but doing it before the patch
 lands would mix parser changes with data churn.
 
+## Test Fixtures
+
+- [ ] Replace the committed `golden/10q-2026` corpus with focused fixtures.
+  Normal parser tests should use small, purpose-built submissions that isolate
+  one parser behavior. Keep at most one representative large filing for each
+  supported form type when whole-submission coverage adds genuine value.
+- [ ] Move broad, multi-company filing regression checks to an opt-in workflow.
+  Add a script that downloads a pinned list of accessions from EDGAR into an
+  ignored local cache, verifies their checksums, and runs the corpus checks on
+  demand. The normal test suite and repository should not require the current
+  230 MB corpus or parse it repeatedly.
+- [ ] After replacing the fixtures, remove the large corpus from Git history
+  with a coordinated history rewrite, then expire unreachable objects and
+  garbage-collect the repository. Deleting the files in a normal commit is not
+  enough to reduce clone size. Document the required fresh clone or rebase for
+  every existing checkout before rewriting shared branches.
+
 ## Product Validation
 
 - Perform manual validation across companies and filing years.
