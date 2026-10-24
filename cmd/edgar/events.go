@@ -79,6 +79,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		if command == "run" {
 			defaultYear = edgar.EarliestPipelineYear
 		}
+
 		fromYear, err := environmentFromYear(defaultYear)
 		if err != nil {
 			return appConfig{}, err
@@ -151,8 +152,10 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		options = append(options,
 			helpOption{"--polling-db <path>", "Pipeline state database."},
 			helpOption{"--set <name>", "Select a set from the data directory."},
-			helpOption{"--form-type <type>",
-				"Select a supported form; repeatable."},
+			helpOption{
+				"--form-type <type>",
+				"Select a supported form; repeatable.",
+			},
 			helpOption{"--drain", "Exit after the current backlog is empty."},
 		)
 	case "download":
@@ -248,15 +251,21 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--user-agent <value>", "SEC user agent."},
 			helpOption{"--base-url <url>", "SEC base URL override."},
 			helpOption{"--address <host:port>", "News HTTP address."},
-			helpOption{"--filings-address <host:port>",
-				"Filings web HTTP address."},
+			helpOption{
+				"--filings-address <host:port>",
+				"Filings web HTTP address.",
+			},
 			helpOption{"--interval <duration>", "Atom polling interval."},
 			helpOption{"--max-attempts <count>", "Attempts before work is marked failed."},
 			helpOption{"--set <name>", "Automatic processing constituent set."},
-			helpOption{"--form-type <type>",
-				"Automatic processing form; repeatable."},
-			helpOption{"--from-year <year>",
-				"First year for startup reconciliation."},
+			helpOption{
+				"--form-type <type>",
+				"Automatic processing form; repeatable.",
+			},
+			helpOption{
+				"--from-year <year>",
+				"First year for startup reconciliation.",
+			},
 		)
 	}
 
@@ -267,13 +276,24 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		return appConfig{}, flag.ErrHelp
 	}
 
+	if err := validateEventCommandConfig(command, flags, &cfg, formTypes,
+		configuredForms); err != nil {
+		return appConfig{}, err
+	}
+
+	return cfg, nil
+}
+
+func validateEventCommandConfig(command string, flags *flag.FlagSet,
+	cfg *appConfig, formTypes, configuredForms []string,
+) error {
 	if flags.NArg() != 0 {
-		return subcommandError(flags, errors.New("unexpected positional argument"))
+		return eventConfigError(flags, errors.New("unexpected positional argument"))
 	}
 
 	if cfg.events.natsURL == "" || cfg.events.interval <= 0 ||
 		cfg.events.maxAttempts <= 0 {
-		return subcommandError(flags,
+		return eventConfigError(flags,
 			errors.New("--nats-url, --interval, and --max-attempts must be valid"))
 	}
 
@@ -290,7 +310,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 
 		if err := applyConstituentSet(&cfg.events.filter,
 			cfg.events.setName); err != nil {
-			return subcommandError(flags, err)
+			return eventConfigError(flags, err)
 		}
 
 		if strings.TrimSpace(cfg.events.year) == "" &&
@@ -300,18 +320,18 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 
 		if err := applyYearSelection(&cfg.events.filter, cfg.events.year,
 			cfg.events.fromYear, cfg.events.toYear); err != nil {
-			return subcommandError(flags, err)
+			return eventConfigError(flags, err)
 		}
 
 		if cfg.events.filter.Year != 0 &&
 			cfg.events.filter.Year < edgar.EarliestPipelineYear {
-			return subcommandError(flags, fmt.Errorf(
+			return eventConfigError(flags, fmt.Errorf(
 				"--year must be %d or later", edgar.EarliestPipelineYear))
 		}
 
 		if cfg.events.filter.FromYear != 0 &&
 			cfg.events.filter.FromYear < edgar.EarliestPipelineYear {
-			return subcommandError(flags, fmt.Errorf(
+			return eventConfigError(flags, fmt.Errorf(
 				"--from-year must be %d or later",
 				edgar.EarliestPipelineYear))
 		}
@@ -322,32 +342,42 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		if len(formTypes) > 0 {
 			formsToValidate = formTypes
 		}
+
 		forms, err := edgar.ValidateSupportedFormTypes(formsToValidate)
 		if err != nil {
-			return subcommandError(flags, err)
+			return eventConfigError(flags, err)
 		}
+
 		if len(forms) == 0 {
-			return subcommandError(flags,
+			return eventConfigError(flags,
 				errors.New("at least one supported form type is required"))
 		}
+
 		cfg.events.filter.FormTypes = forms
 
 		if err := applyConstituentSet(&cfg.events.filter,
 			cfg.events.setName); err != nil {
-			return subcommandError(flags, err)
+			return eventConfigError(flags, err)
 		}
 
 		if command == "run" {
 			if cfg.events.fromYear < edgar.EarliestPipelineYear {
-				return subcommandError(flags, fmt.Errorf(
+				return eventConfigError(flags, fmt.Errorf(
 					"--from-year must be %d or later",
 					edgar.EarliestPipelineYear))
 			}
+
 			cfg.events.filter.FromYear = cfg.events.fromYear
 		}
 	}
 
-	return cfg, nil
+	return nil
+}
+
+func eventConfigError(flags *flag.FlagSet, err error) error {
+	_, err = subcommandError(flags, err)
+
+	return err
 }
 
 func eventCommandDescription(command string) string {
@@ -386,6 +416,7 @@ func runEventCommand(ctx context.Context, command string,
 	defer cancel()
 
 	reconcileLogger := logger.With("role", "reconcile")
+
 	go func() {
 		client := &http.Client{Timeout: 30 * time.Second}
 		if bootstrapErr := ensureMasterIndex(ctx, client, cfg,
@@ -396,6 +427,7 @@ func runEventCommand(ctx context.Context, command string,
 
 			return
 		}
+
 		if reconcileErr := reconcileMasterIndex(ctx, cfg,
 			reconcileLogger); reconcileErr != nil &&
 			!errors.Is(reconcileErr, context.Canceled) {
@@ -436,6 +468,7 @@ func ensureMasterIndex(ctx context.Context, client *http.Client,
 	if err != nil {
 		return err
 	}
+
 	indexCfg.index.MasterPath = cfg.masterPath
 	indexCfg.index.UserAgent = cfg.userAgent
 	indexCfg.index.BaseURL = cfg.baseURL
@@ -443,6 +476,7 @@ func ensureMasterIndex(ctx context.Context, client *http.Client,
 	logger.Info("starting missing master index bootstrap",
 		"from_year", indexCfg.index.SinceYear,
 		"path", indexCfg.index.MasterPath)
+
 	if err := edgar.DownloadIndex(ctx, client, indexCfg.index); err != nil {
 		return err
 	}
@@ -473,6 +507,7 @@ func reconcileMasterIndex(ctx context.Context, cfg eventCommandConfig,
 		"set_members", len(cfg.filter.CIKs),
 		"form_types", cfg.filter.FormTypes,
 		"from_year", cfg.filter.FromYear, "master", cfg.masterPath)
+
 	if err := runDiscovery(ctx, bus, cfg, logger); err != nil {
 		return err
 	}

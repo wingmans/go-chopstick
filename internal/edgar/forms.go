@@ -6,19 +6,10 @@ import (
 	"strings"
 )
 
-var supportedFormTypes = map[string]string{
-	"10-K": "annual report",
-	"10-Q": "quarterly report",
-	"8-K":  "current report",
-}
-
 // SupportedFormTypes returns the forms deliberately supported by the parser
 // pipeline. Callers receive a copy so this remains the single capability list.
 func SupportedFormTypes() []string {
-	forms := make([]string, 0, len(supportedFormTypes))
-	for form := range supportedFormTypes {
-		forms = append(forms, form)
-	}
+	forms := []string{"10-K", "10-Q", "8-K"}
 
 	sort.Strings(forms)
 
@@ -27,9 +18,12 @@ func SupportedFormTypes() []string {
 
 // SupportsFormType reports whether a form is an intentional parser input.
 func SupportsFormType(form string) bool {
-	_, ok := supportedFormTypes[strings.ToUpper(strings.TrimSpace(form))]
-
-	return ok
+	switch strings.ToUpper(strings.TrimSpace(form)) {
+	case "10-K", "10-Q", "8-K":
+		return true
+	default:
+		return false
+	}
 }
 
 // ValidateSupportedFormTypes normalizes and validates an explicit form list.
@@ -42,10 +36,12 @@ func ValidateSupportedFormTypes(forms []string) ([]string, error) {
 		if form == "" {
 			continue
 		}
+
 		if !SupportsFormType(form) {
 			return nil, fmt.Errorf("unsupported form type %q; supported: %s",
 				form, strings.Join(SupportedFormTypes(), ","))
 		}
+
 		if _, exists := seen[form]; exists {
 			continue
 		}

@@ -13,6 +13,7 @@ import (
 
 func TestPathSizeAndFormatBytes(t *testing.T) {
 	directory := t.TempDir()
+
 	path := filepath.Join(directory, "payload")
 	if err := os.WriteFile(path, make([]byte, 1536), 0o600); err != nil {
 		t.Fatal(err)
@@ -22,9 +23,11 @@ func TestPathSizeAndFormatBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pathSize returned error: %v", err)
 	}
+
 	if bytes != 1536 {
 		t.Fatalf("pathSize = %d, want 1536", bytes)
 	}
+
 	if got := formatBytes(bytes); got != "1.5 KiB" {
 		t.Fatalf("formatBytes = %q, want %q", got, "1.5 KiB")
 	}

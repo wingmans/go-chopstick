@@ -23,8 +23,10 @@ var (
 )
 
 // NewSQLiteStore opens the analysis database used by the web application.
-func NewSQLiteStore(parsedDir, databasePath string) (*SQLiteStore, error) {
-	views, err := analysisstore.Open(context.Background(), databasePath)
+func NewSQLiteStore(ctx context.Context, parsedDir,
+	databasePath string,
+) (*SQLiteStore, error) {
+	views, err := analysisstore.Open(ctx, databasePath)
 	if err != nil {
 		return nil, err
 	}

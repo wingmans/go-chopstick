@@ -42,6 +42,7 @@ func Select(ctx context.Context, bus *eventbus.NATS, cfg SelectionConfig,
 		if normalizeErr != nil {
 			return normalizeErr
 		}
+
 		ciks[normalized] = struct{}{}
 	}
 
@@ -68,7 +69,9 @@ func Select(ctx context.Context, bus *eventbus.NATS, cfg SelectionConfig,
 			if selected {
 				base = eventbus.SelectedSubject
 			}
+
 			subject := eventbus.SubjectFor(base, event.FormType)
+
 			messageID := fmt.Sprintf("filing.selection:%s:%t",
 				event.AccessionNumber, selected)
 			if publishErr := bus.Publish(ctx, subject, messageID,
@@ -91,9 +94,11 @@ func selectionDecision(event pollingworker.FilingEvent, setName string,
 	if !edgar.SupportsFormType(form) {
 		return false, "form is not supported by the parser"
 	}
+
 	if _, enabled := forms[form]; !enabled {
 		return false, "form is not enabled by EDGAR_FORM_TYPES"
 	}
+
 	if strings.TrimSpace(setName) == "" {
 		return false, "EDGAR_SET is not configured"
 	}
@@ -102,6 +107,7 @@ func selectionDecision(event pollingworker.FilingEvent, setName string,
 	if err != nil {
 		return false, "filing has an invalid CIK"
 	}
+
 	if _, included := ciks[cik]; !included {
 		return false, "company is outside EDGAR_SET=" + setName
 	}

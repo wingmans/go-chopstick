@@ -82,8 +82,10 @@ func (s *NewsServer) index(w http.ResponseWriter, r *http.Request) {
 		Items          []news.Item
 		Filter         news.Filter
 		SupportedForms []string
-	}{Items: items, Filter: filter,
-		SupportedForms: edgar.SupportedFormTypes()}
+	}{
+		Items: items, Filter: filter,
+		SupportedForms: edgar.SupportedFormTypes(),
+	}
 
 	templateName := "news-page"
 	if strings.EqualFold(r.Header.Get("Hx-Request"), "true") {
@@ -105,6 +107,7 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
 	if s.publisher == nil {
 		http.Error(w, "event publisher unavailable",
 			http.StatusServiceUnavailable)
@@ -125,6 +128,7 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
 	if err != nil {
 		http.Error(w, "could not read filing", http.StatusInternalServerError)
 
@@ -142,12 +146,14 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 		SelectionReason: "requested from the news feed",
 		SelectionMode:   "on-demand", SelectionSet: item.SelectionSet,
 	}
+
 	payload, err := json.Marshal(event)
 	if err != nil {
 		http.Error(w, "could not encode request", http.StatusInternalServerError)
 
 		return
 	}
+
 	if err := s.publisher.Publish(context.WithoutCancel(r.Context()),
 		eventbus.SubjectFor(eventbus.SelectedSubject, event.FormType),
 		event.EventID, payload); err != nil {

@@ -41,6 +41,7 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	}
 	flags := flag.NewFlagSet("artifacts", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
+
 	flags.Usage = func() {
 		printSubcommandHelp("artifacts <list|extract|serve|clean>",
 			"Inspect disposable documents from one parsed SEC filing.",
@@ -61,10 +62,12 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 
 		return appConfig{}, flag.ErrHelp
 	}
+
 	if len(args) == 0 {
 		return subcommandError(flags,
 			errors.New("use 'edgar artifacts <list|extract|serve|clean>'"))
 	}
+
 	cfg.artifacts.operation = args[0]
 	if cfg.artifacts.operation != "list" &&
 		cfg.artifacts.operation != "extract" &&
@@ -89,9 +92,11 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	flags.Var(&cfg.artifacts.filenames, "document",
 		"document filename to extract")
 	flags.BoolVar(&cfg.artifacts.all, "all", false, "extract every document")
+
 	if err := flags.Parse(args[1:]); err != nil {
 		return appConfig{}, flag.ErrHelp
 	}
+
 	if flags.NArg() != 0 {
 		return subcommandError(flags, errors.New("unexpected positional argument"))
 	}
@@ -100,18 +105,22 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	if err != nil {
 		return subcommandError(flags, fmt.Errorf("--cik: %w", err))
 	}
+
 	cfg.artifacts.cik = normalizedCIK
+
 	cfg.artifacts.accession = strings.TrimSpace(cfg.artifacts.accession)
 	if cfg.artifacts.accession == "" ||
 		filepath.Base(cfg.artifacts.accession) != cfg.artifacts.accession {
 		return subcommandError(flags,
 			errors.New("--accession must be a safe accession number"))
 	}
+
 	if cfg.artifacts.operation == "extract" && !cfg.artifacts.all &&
 		len(cfg.artifacts.types) == 0 && len(cfg.artifacts.filenames) == 0 {
 		return subcommandError(flags, errors.New(
 			"extract requires --type, --document, or --all"))
 	}
+
 	if cfg.artifacts.operation == "serve" {
 		if err := validateViewerAddress(cfg.artifacts.address); err != nil {
 			return subcommandError(flags, err)
@@ -126,10 +135,12 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	if cfg.operation == "serve" {
 		return serveArtifacts(ctx, cfg, destination)
 	}
+
 	if cfg.operation == "clean" {
 		if err := artifacts.Clean(destination, cfg.cik, cfg.accession); err != nil {
 			return err
 		}
+
 		fmt.Printf("removed %s\n", destination)
 
 		return nil
@@ -137,12 +148,15 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 
 	parsedPath := filepath.Join(cfg.parsedDir, cfg.cik, cfg.accession,
 		"filing.json")
+
 	filing, err := edgar.LoadParsedFiling(parsedPath)
 	if err != nil {
 		return err
 	}
+
 	if cfg.operation == "list" {
 		fmt.Println("SEQ\tTYPE\tBYTES\tFILENAME\tDESCRIPTION")
+
 		for _, document := range filing.Documents {
 			fmt.Printf("%s\t%s\t%d\t%s\t%s\n", document.Sequence,
 				document.Type, document.ContentLength, document.Filename,
@@ -156,10 +170,12 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	if err != nil {
 		return err
 	}
+
 	matches, err := edgar.SourceFingerprintMatches(ctx, source)
 	if err != nil {
 		return err
 	}
+
 	if !matches {
 		return errors.New("raw source changed since parsing; parse it again")
 	}
@@ -171,6 +187,7 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	if err != nil {
 		return err
 	}
+
 	fmt.Printf("extracted %d documents (%d bytes) to %s\n",
 		len(manifest.Documents), manifest.TotalBytes, destination)
 
@@ -182,6 +199,7 @@ func validateViewerAddress(address string) error {
 	if err != nil {
 		return fmt.Errorf("--address must be host:port: %w", err)
 	}
+
 	if !strings.EqualFold(host, "localhost") {
 		ip := net.ParseIP(host)
 		if ip == nil || !ip.IsLoopback() {
@@ -199,7 +217,10 @@ func serveArtifacts(ctx context.Context, cfg artifactCommandConfig,
 	if err != nil {
 		return err
 	}
-	listener, err := net.Listen("tcp", cfg.address)
+
+	listenConfig := net.ListenConfig{}
+
+	listener, err := listenConfig.Listen(ctx, "tcp", cfg.address)
 	if err != nil {
 		return fmt.Errorf("listen for artifact viewer: %w", err)
 	}
@@ -209,20 +230,25 @@ func serveArtifacts(ctx context.Context, cfg artifactCommandConfig,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan struct{})
+
 	go func() {
 		select {
 		case <-ctx.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(),
+			shutdownCtx, cancel := context.WithTimeout(
+				context.WithoutCancel(ctx),
 				5*time.Second)
 			defer cancel()
+
 			_ = server.Shutdown(shutdownCtx)
 		case <-done:
 		}
 	}()
+
 	defer close(done)
 
 	fmt.Printf("viewing %s at http://%s (press Ctrl-C to stop)\n",
 		destination, listener.Addr())
+
 	if err := server.Serve(listener); err != nil &&
 		!errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve artifact viewer: %w", err)
@@ -239,6 +265,7 @@ func artifactSourcePath(filingsDir string,
 		return filing.SourcePath, nil
 	case "filings":
 		path := filepath.Join(filingsDir, filepath.FromSlash(filing.SourcePath))
+
 		relative, err := filepath.Rel(filingsDir, path)
 		if err != nil || !filepath.IsLocal(relative) {
 			return "", errors.New("parsed source escapes the filings directory")

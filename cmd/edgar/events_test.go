@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,9 +22,9 @@ func TestEnsureMasterIndexSkipsExistingFile(t *testing.T) {
 	) {
 		t.Fatal("existing master index triggered a network request")
 
-		return nil, nil
+		return nil, errors.New("unexpected network request")
 	})}
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	if err := ensureMasterIndex(t.Context(), client, eventCommandConfig{
 		masterPath: masterPath,

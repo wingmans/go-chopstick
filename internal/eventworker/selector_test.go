@@ -18,11 +18,14 @@ func TestSelectionDecision(t *testing.T) {
 		selected bool
 	}{
 		{name: "selected", event: pollingworker.FilingEvent{
-			CIK: "320193", FormType: "8-K"}, selected: true},
+			CIK: "320193", FormType: "8-K",
+		}, selected: true},
 		{name: "outside set", event: pollingworker.FilingEvent{
-			CIK: "1", FormType: "10-K"}, selected: false},
+			CIK: "1", FormType: "10-K",
+		}, selected: false},
 		{name: "unsupported", event: pollingworker.FilingEvent{
-			CIK: "320193", FormType: "S-1"}, selected: false},
+			CIK: "320193", FormType: "S-1",
+		}, selected: false},
 	}
 
 	for _, test := range tests {

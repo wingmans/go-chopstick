@@ -209,7 +209,8 @@ documents. Search, document-type, and graphics-only filters can be combined;
 navigation and progress apply to the visible results. Image previews support
 fit, zoom, rotation, and their corresponding keyboard shortcuts. The viewer
 serves only a generated bundle with a matching manifest and does not require
-Python or another external web server.
+Python or another external web server. Its template, stylesheet, and script
+are separate source files embedded into the Go executable at build time.
 
 Artifact tests are self-contained and generate only tiny temporary submissions
 and manifests. They do not read from `data/`. Large downloaded filings may be

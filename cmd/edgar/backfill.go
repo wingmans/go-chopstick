@@ -21,7 +21,7 @@ type backfillConfig struct {
 	natsURL  string
 }
 
-// parseBackfillConfig parses the command-line arguments and environment variables
+// parseBackfillConfig parses the command-line arguments and environment variables.
 func parseBackfillConfig(args []string) (appConfig, error) {
 	fromYear, err := environmentFromYear(edgar.EarliestPipelineYear)
 	if err != nil {
@@ -114,6 +114,7 @@ func runBackfill(ctx context.Context, client *http.Client,
 		if stage == "select" {
 			stageArgs = append(stageArgs, "--set", cfg.setName)
 		}
+
 		stageCfg, err := parseEventCommandConfig(stage, stageArgs)
 		if err != nil {
 			return err

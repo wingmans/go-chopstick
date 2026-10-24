@@ -35,8 +35,6 @@ type FilingEvent struct {
 
 const filingEventSchemaVersion = 1
 
-var databaseInitializationMu sync.Mutex
-
 func normalizeEvent(event FilingEvent) FilingEvent {
 	if event.SchemaVersion == 0 {
 		event.SchemaVersion = filingEventSchemaVersion
@@ -72,9 +70,6 @@ func NewDedupeService(dbPath string) (*DedupeService, error) {
 }
 
 func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService, error) {
-	databaseInitializationMu.Lock()
-	defer databaseInitializationMu.Unlock()
-
 	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite db: %w", err)

@@ -101,6 +101,12 @@ linters:
   exclusions:
     generated: lax
     rules:
+      # Tests favor explicit setup and assertions over production-sized
+      # functions and complexity limits.
+      - path: _test\.go$
+        linters:
+          - funlen
+          - gocyclo
       - path: internal/ecb/client\.go
         text: "package-comments: should have a package comment"
         linters:

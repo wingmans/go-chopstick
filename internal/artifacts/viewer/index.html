@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SEC artifact viewer</title>
+  <link rel="stylesheet" href="/viewer-assets/viewer.css">
+  <script src="/viewer-assets/viewer.js" defer></script>
+</head>
+<body>
+  <header><strong>SEC artifact viewer</strong>
+    <span>CIK {{.CIK}} · accession {{.Accession}}</span></header>
+  <main>
+    <aside id="document-rail">
+      <div class="rail-controls">
+        <div class="rail-summary"><span id="visible-count">{{len .Documents}}</span>
+          of {{len .Documents}} documents · {{.Images}} graphics</div>
+        <input id="document-search" type="search"
+          placeholder="Search filename or description" aria-label="Search documents">
+        <div class="rail-filter-row">
+          <select id="type-filter" aria-label="Filter by document type">
+            <option value="">All document types</option>
+            {{range .Types}}<option value="{{.}}">{{.}}</option>{{end}}
+          </select>
+          <button id="graphics-only" type="button" aria-pressed="false"
+            title="Show graphics only (G)">Graphics</button>
+        </div>
+      </div>
+      {{range $index, $document := .Documents}}
+      <button class="document" type="button" data-index="{{$index}}"
+        data-url="{{$document.URL}}" data-name="{{$document.Filename}}"
+        data-type="{{$document.Type}}" data-image="{{$document.Image}}"
+        data-description="{{$document.Description}}"
+        title="{{$document.Description}}">
+        <span class="thumb">{{if $document.Image}}
+          <img src="{{$document.URL}}" alt="" loading="lazy">
+          {{else}}{{$document.Type}}{{end}}</span>
+        <span class="document-details">
+          <span class="filename">{{$document.Filename}}</span>
+          <span class="meta">#{{$document.Sequence}} · {{$document.Type}} ·
+            {{$document.Size}}</span>
+        </span>
+      </button>
+      {{end}}
+    </aside>
+    <section class="preview">
+      <div class="toolbar">
+        <button id="previous" type="button" title="Previous document (←)">←</button>
+        <button id="next" type="button" title="Next document (→)">→</button>
+        <span id="progress" aria-live="polite"></span>
+        <span id="current-name"></span>
+        <span class="image-controls">
+          <button id="fit-image" type="button" title="Fit image (F)">Fit</button>
+          <button id="zoom-out" type="button" title="Zoom out (-)">−</button>
+          <span id="zoom-status">Fit</span>
+          <button id="zoom-in" type="button" title="Zoom in (+)">+</button>
+          <button id="rotate-image" type="button" title="Rotate image (R)">↻</button>
+        </span>
+        <a id="open-document" target="_blank" rel="noopener">Open separately</a>
+      </div>
+      <div class="stage">
+        <div id="image-canvas" class="image-canvas" hidden>
+          <img id="viewer-image" class="viewer-image fit" alt="">
+        </div>
+        <iframe id="viewer-frame" class="viewer-frame"
+          title="Selected filing document" sandbox="allow-same-origin"></iframe>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

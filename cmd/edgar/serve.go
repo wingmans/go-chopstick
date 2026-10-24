@@ -65,7 +65,7 @@ func parseServeConfig(args []string) (appConfig, error) {
 }
 
 func runServe(ctx context.Context, logger *slog.Logger, address, parsedDir, setName, analysisDB string) error {
-	server, err := filingweb.NewConfiguredServerWithDB(parsedDir, analysisDB,
+	server, err := filingweb.NewConfiguredServerWithDB(ctx, parsedDir, analysisDB,
 		appdata.Path("sets"), setName, logger)
 	if err != nil {
 		return err
