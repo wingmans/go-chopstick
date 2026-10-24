@@ -27,6 +27,12 @@ now. Atom publishes every normalized entry as an observed discovery. The
 selection worker publishes a second decision for every discovery. Only
 selected decisions enter the download queue.
 
+The combined `run` command supervises its NATS-backed roles. If a connection
+or JetStream pull ends while NATS restarts, the affected role closes its old
+connection and subscription, then reconnects with exponential backoff from one
+to 30 seconds. Durable consumers resume from their last acknowledged message;
+the HTTP filing viewer remains available during the broker outage.
+
 Automatic processing uses `EDGAR_SET` and `EDGAR_FORM_TYPES`. The default
 development scope is the 19-member `us-gaap` set and forms `10-K`, `10-Q`, and
 `8-K`. The parser capability list validates the CLI and is shown by Doctor and
@@ -108,9 +114,18 @@ Open the same development process with a tiled Ghostty console:
 make watch
 ```
 
-The console runs `make dev`, follows discovery, download, processing, and error
-logs, and refreshes a SQLite pipeline overview every minute. Ghostty may ask
-for macOS Automation permission the first time the AppleScript launcher runs.
+Before opening the console, `make watch` refreshes the latest SEC quarterly
+index and rebuilds `master.tsv`. The console then runs `make dev`, so startup
+reconciliation reads the refreshed index. It also follows discovery, download,
+processing, and error logs, and refreshes a SQLite pipeline overview every
+minute. Ghostty may ask for macOS Automation permission the first time the
+AppleScript launcher runs.
+
+Index downloads and `master.tsv` rebuilds use temporary files followed by an
+atomic rename. Running `make index-refresh` beside an active ingest therefore
+does not expose a partially written index. A reconciliation that already has
+`master.tsv` open continues reading its previous snapshot; restart the ingest
+or run discovery again to reconcile the replacement.
 
 Run the overview independently when needed:
 

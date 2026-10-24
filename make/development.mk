@@ -12,7 +12,7 @@ dev: nats-start prepare-dev-data
 		bash -o pipefail -c \
 		'go run ./cmd/edgar run 2>&1 | tee -a "$${EDGAR_LOG}"'
 
-watch:
+watch: index-refresh
 	/usr/bin/osascript scripts/watch.applescript "$(CURDIR)"
 
 overview:
