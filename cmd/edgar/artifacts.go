@@ -89,8 +89,7 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.artifacts.address, "address", cfg.artifacts.address,
 		"viewer listen address")
 	flags.Var(&cfg.artifacts.types, "type", "document type to extract")
-	flags.Var(&cfg.artifacts.filenames, "document",
-		"document filename to extract")
+	flags.Var(&cfg.artifacts.filenames, "document", "document filename to extract")
 	flags.BoolVar(&cfg.artifacts.all, "all", false, "extract every document")
 
 	if err := flags.Parse(args[1:]); err != nil {
@@ -111,8 +110,7 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	cfg.artifacts.accession = strings.TrimSpace(cfg.artifacts.accession)
 	if cfg.artifacts.accession == "" ||
 		filepath.Base(cfg.artifacts.accession) != cfg.artifacts.accession {
-		return subcommandError(flags,
-			errors.New("--accession must be a safe accession number"))
+		return subcommandError(flags, errors.New("--accession must be a safe accession number"))
 	}
 
 	if cfg.artifacts.operation == "extract" && !cfg.artifacts.all &&

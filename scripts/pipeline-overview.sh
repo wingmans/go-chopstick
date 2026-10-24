@@ -24,7 +24,7 @@ has_table() {
   local table="$2"
 
   [[ -f "${database}" ]] &&
-    [[ "$(sqlite3 -readonly "${database}" \
+    [[ "$(sqlite3 -readonly -cmd ".timeout 2000" "${database}" \
       "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='${table}';" \
       2>/dev/null)" == "1" ]]
 }
@@ -34,7 +34,7 @@ has_column() {
   local table="$2"
   local column="$3"
 
-  [[ "$(sqlite3 -readonly "${database}" \
+  [[ "$(sqlite3 -readonly -cmd ".timeout 2000" "${database}" \
     "SELECT COUNT(*) FROM pragma_table_info('${table}') WHERE name='${column}';" \
     2>/dev/null)" == "1" ]]
 }

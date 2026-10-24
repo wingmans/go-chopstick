@@ -45,6 +45,13 @@ type eventCommandConfig struct {
 	maxAttempts      int
 }
 
+const (
+	initialRoleRetryDelay = time.Second
+	maximumRoleRetryDelay = 30 * time.Second
+	stableRoleRun         = time.Minute
+	newsShutdownTimeout   = 5 * time.Second
+)
+
 //nolint:maintidx // The switch keeps each role's CLI flags visible together.
 func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 	configuredForms, err := configuredFormTypes()
@@ -53,24 +60,24 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 	}
 
 	formTypes := stringList{}
-	cfg := appConfig{command: command}
-	cfg.events = eventCommandConfig{
-		natsURL:          environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
-		pollingDB:        appdata.Path("polling.db"),
-		newsDB:           appdata.Path("feed.db"),
-		filingsDirectory: appdata.Path("cache", "filings"),
-		parsedDirectory:  appdata.Path("parsed"),
-		analysisDB:       appdata.Path("analysis.db"),
-		masterPath:       appdata.Path("cache", "indexes", "master.tsv"),
-		userAgent:        environmentValue(edgarUserAgentEnv, defaultUserAgent),
-		baseURL:          environmentValue(edgarBaseURLEnv, ""),
-		address: environmentValue(edgarNewsAddressEnv,
-			"127.0.0.1:8081"),
-		filingsAddress: environmentValue(edgarWebAddressEnv,
-			"127.0.0.1:8083"),
-		interval:    time.Minute,
-		setName:     environmentValue(edgarSetEnv, ""),
-		maxAttempts: 5,
+	cfg := appConfig{
+		command: command,
+		events: eventCommandConfig{
+			natsURL:          environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
+			pollingDB:        appdata.Path("polling.db"),
+			newsDB:           appdata.Path("feed.db"),
+			filingsDirectory: appdata.Path("cache", "filings"),
+			parsedDirectory:  appdata.Path("parsed"),
+			analysisDB:       appdata.Path("analysis.db"),
+			masterPath:       appdata.Path("cache", "indexes", "master.tsv"),
+			userAgent:        environmentValue(edgarUserAgentEnv, defaultUserAgent),
+			baseURL:          environmentValue(edgarBaseURLEnv, ""),
+			address:          environmentValue(edgarNewsAddressEnv, "127.0.0.1:8081"),
+			filingsAddress:   environmentValue(edgarWebAddressEnv, "127.0.0.1:8083"),
+			interval:         time.Minute,
+			setName:          environmentValue(edgarSetEnv, ""),
+			maxAttempts:      5,
+		},
 	}
 	cfg.events.filter.FormTypes = configuredForms
 
@@ -436,11 +443,19 @@ func runEventCommand(ctx context.Context, command string,
 		}
 	}()
 
-	errorsCh := make(chan error, 6)
+	errorsCh := make(chan error, 1)
 
 	for _, role := range []string{
 		"atom", "select", "download", "process", "news", "filings-web",
 	} {
+		if role != "filings-web" {
+			go superviseRole(ctx, role, logger, func() error {
+				return runRole(ctx, role, cfg, logger)
+			})
+
+			continue
+		}
+
 		go func() {
 			errorsCh <- runRole(ctx, role, cfg, logger)
 		}()
@@ -451,6 +466,56 @@ func runEventCommand(ctx context.Context, command string,
 	cancel()
 
 	return err
+}
+
+func superviseRole(ctx context.Context, role string, logger *slog.Logger,
+	run func() error,
+) {
+	retryDelay := initialRoleRetryDelay
+	logger = logger.With("role", role)
+
+	for ctx.Err() == nil {
+		started := time.Now()
+		err := run()
+
+		if ctx.Err() != nil {
+			return
+		}
+
+		runDuration := time.Since(started)
+		if runDuration >= stableRoleRun {
+			retryDelay = initialRoleRetryDelay
+		}
+
+		logger.Warn("role stopped; retrying", "error", err,
+			"retry_in", retryDelay)
+
+		if !waitForRoleRetry(ctx, retryDelay) {
+			return
+		}
+
+		retryDelay = nextRoleRetryDelay(retryDelay, runDuration)
+	}
+}
+
+func nextRoleRetryDelay(current, runDuration time.Duration) time.Duration {
+	if runDuration >= stableRoleRun {
+		return initialRoleRetryDelay
+	}
+
+	return min(current*2, maximumRoleRetryDelay)
+}
+
+func waitForRoleRetry(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func ensureMasterIndex(ctx context.Context, client *http.Client,
@@ -592,6 +657,9 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 			Failures:         failures,
 		}, logger)
 	case "news":
+		logger.Info("starting news feed", "address", cfg.address,
+			"database", cfg.newsDB)
+
 		return runNews(ctx, bus, cfg, logger)
 	case "filings-web":
 		logger.Info("starting filings web", "address", cfg.filingsAddress,
@@ -694,7 +762,10 @@ func runDiscovery(ctx context.Context, bus *eventbus.NATS,
 func runNews(ctx context.Context, bus *eventbus.NATS,
 	cfg eventCommandConfig, logger *slog.Logger,
 ) error {
-	store, replay, err := news.Open(ctx, cfg.newsDB)
+	roleCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	store, replay, err := news.Open(roleCtx, cfg.newsDB)
 	if err != nil {
 		return err
 	}
@@ -702,7 +773,7 @@ func runNews(ctx context.Context, bus *eventbus.NATS,
 
 	consumerErr := make(chan error, 1)
 	go func() {
-		consumerErr <- news.Consume(ctx, bus, store, replay, logger)
+		consumerErr <- news.Consume(roleCtx, bus, store, replay, logger)
 	}()
 
 	server := &http.Server{
@@ -714,21 +785,87 @@ func runNews(ctx context.Context, bus *eventbus.NATS,
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- server.ListenAndServe() }()
 
+	var result error
+
+	waitForConsumer := false
+
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx),
-			5*time.Second)
-		defer cancel()
+	case err := <-consumerErr:
+		result = err
+	case err := <-serverErr:
+		waitForConsumer = true
 
-		return server.Shutdown(shutdownCtx)
+		if !errors.Is(err, http.ErrServerClosed) {
+			result = err
+		}
+	}
+
+	cancel()
+
+	shutdownErr := shutdownNewsServer(ctx, server)
+
+	if waitForConsumer {
+		consumerStopErr := waitForNewsConsumer(consumerErr, bus, logger)
+		if result == nil && ctx.Err() == nil &&
+			!errors.Is(consumerStopErr, context.Canceled) {
+			result = consumerStopErr
+		}
+	} else {
+		serverStopErr := <-serverErr
+		if result == nil && ctx.Err() == nil &&
+			!errors.Is(serverStopErr, http.ErrServerClosed) {
+			result = serverStopErr
+		}
+	}
+
+	if result != nil {
+		return errors.Join(result, shutdownErr)
+	}
+
+	if shutdownErr != nil && !errors.Is(shutdownErr, http.ErrServerClosed) {
+		return shutdownErr
+	}
+
+	return nil
+}
+
+func shutdownNewsServer(ctx context.Context, server *http.Server) error {
+	shutdownCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx), newsShutdownTimeout)
+	defer cancel()
+
+	err := server.Shutdown(shutdownCtx)
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+
+	if closeErr := server.Close(); closeErr != nil &&
+		!errors.Is(closeErr, http.ErrServerClosed) {
+		return errors.Join(err, fmt.Errorf("force close news server: %w",
+			closeErr))
+	}
+
+	return fmt.Errorf("graceful news server shutdown: %w", err)
+}
+
+func waitForNewsConsumer(consumerErr <-chan error, bus *eventbus.NATS,
+	logger *slog.Logger,
+) error {
+	timer := time.NewTimer(newsShutdownTimeout)
+	defer timer.Stop()
+
+	select {
 	case err := <-consumerErr:
 		return err
-	case err := <-serverErr:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
+	case <-timer.C:
+		logger.Error("news consumer did not stop after cancellation; " +
+			"forcing NATS connection closed")
+		bus.CloseImmediately()
 
-		return err
+		// Do not let the supervisor overlap another consumer and store with the
+		// one being stopped. Closing NATS unblocks its outstanding fetch.
+		return <-consumerErr
 	}
 }
 

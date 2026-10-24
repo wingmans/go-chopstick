@@ -145,3 +145,9 @@ func (n *NATS) Close() error {
 
 	return nil
 }
+
+// CloseImmediately closes the connection without waiting for buffered work.
+// It is reserved for shutdown recovery after cancellation was not sufficient.
+func (n *NATS) CloseImmediately() {
+	n.connection.Close()
+}

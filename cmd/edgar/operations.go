@@ -41,25 +41,23 @@ type operationsConfig struct {
 // parseOperationsConfig parses the command-line arguments and environment variables
 // for the operations subcommands, returning an appConfig with the parsed settings.
 func parseOperationsConfig(command string, args []string) (appConfig, error) {
-	cfg := appConfig{command: command}
-	cfg.operations = operationsConfig{
-		natsURL:    environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
-		pollingDB:  appdata.Path("polling.db"),
-		newsDB:     appdata.Path("feed.db"),
-		masterPath: appdata.Path("cache", "indexes", "master.tsv"),
-		newsAddress: environmentValue(edgarNewsAddressEnv,
-			"127.0.0.1:8081"),
-		filingsAddress: environmentValue(edgarWebAddressEnv,
-			"127.0.0.1:8083"),
-		limit: 50,
+	cfg := appConfig{
+		command: command,
+		operations: operationsConfig{
+			natsURL:        environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
+			pollingDB:      appdata.Path("polling.db"),
+			newsDB:         appdata.Path("feed.db"),
+			masterPath:     appdata.Path("cache", "indexes", "master.tsv"),
+			newsAddress:    environmentValue(edgarNewsAddressEnv, "127.0.0.1:8081"),
+			filingsAddress: environmentValue(edgarWebAddressEnv, "127.0.0.1:8083"),
+			limit:          50,
+		},
 	}
 
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
-	flags.StringVar(&cfg.operations.natsURL, "nats-url",
-		cfg.operations.natsURL, "NATS server URL")
-	flags.StringVar(&cfg.operations.pollingDB, "polling-db",
-		cfg.operations.pollingDB, "pipeline state database")
+	flags.StringVar(&cfg.operations.natsURL, "nats-url", cfg.operations.natsURL, "NATS server URL")
+	flags.StringVar(&cfg.operations.pollingDB, "polling-db", cfg.operations.pollingDB, "pipeline state database")
 
 	options := []helpOption{
 		{"--nats-url <url>", "NATS server; default nats://127.0.0.1:4222."},
@@ -68,12 +66,9 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 
 	switch command {
 	case "doctor":
-		flags.StringVar(&cfg.operations.newsDB, "news-db",
-			cfg.operations.newsDB, "disposable news database")
-		flags.StringVar(&cfg.operations.masterPath, "master",
-			cfg.operations.masterPath, "stitched master index")
-		flags.BoolVar(&cfg.operations.verbose, "verbose", false,
-			"show resolved configuration and details")
+		flags.StringVar(&cfg.operations.newsDB, "news-db", cfg.operations.newsDB, "disposable news database")
+		flags.StringVar(&cfg.operations.masterPath, "master", cfg.operations.masterPath, "stitched master index")
+		flags.BoolVar(&cfg.operations.verbose, "verbose", false, "show resolved configuration and details")
 
 		options = append(options,
 			helpOption{"--news-db <path>", "Disposable news database."},
@@ -81,28 +76,23 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--verbose", "Show configuration and check details."},
 		)
 	case "status":
-		flags.StringVar(&cfg.operations.newsDB, "news-db",
-			cfg.operations.newsDB, "disposable news database")
-		flags.StringVar(&cfg.operations.newsAddress, "address",
-			cfg.operations.newsAddress, "news HTTP listen address")
+		flags.StringVar(&cfg.operations.newsDB, "news-db", cfg.operations.newsDB, "disposable news database")
+		flags.StringVar(&cfg.operations.newsAddress, "address", cfg.operations.newsAddress, "news HTTP listen address")
 
 		options = append(options,
 			helpOption{"--news-db <path>", "Disposable news database."},
 			helpOption{"--address <host:port>", "News HTTP address."},
 		)
 	case "errors":
-		flags.StringVar(&cfg.operations.stage, "stage", "",
-			"limit failures to download or process")
-		flags.IntVar(&cfg.operations.limit, "limit", cfg.operations.limit,
-			"maximum failures to show")
+		flags.StringVar(&cfg.operations.stage, "stage", "", "limit failures to download or process")
+		flags.IntVar(&cfg.operations.limit, "limit", cfg.operations.limit, "maximum failures to show")
 
 		options = append(options,
 			helpOption{"--stage <stage>", "Limit failures to download or process."},
 			helpOption{"--limit <count>", "Maximum failures to show; default 50."},
 		)
 	case "retry":
-		flags.StringVar(&cfg.operations.stage, "stage", "",
-			"failure stage to retry")
+		flags.StringVar(&cfg.operations.stage, "stage", "", "failure stage to retry")
 
 		options = append(options,
 			helpOption{"--stage <stage>", "Required: download or process."},
@@ -195,11 +185,9 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 		report.check("FAIL", "master index", err.Error())
 	}
 
-	checkSQLite(ctx, &report, cfg.pollingDB, "polling DB",
-		[]string{"processed_accessions", "polling_outbox"})
+	checkSQLite(ctx, &report, cfg.pollingDB, "polling DB", []string{"processed_accessions", "polling_outbox"})
 	checkOptionalSQLiteTable(ctx, &report, cfg.pollingDB, "work_failures")
-	checkSQLite(ctx, &report, cfg.newsDB, "viewer DB",
-		[]string{"feed_items"})
+	checkSQLite(ctx, &report, cfg.newsDB, "viewer DB", []string{"feed_items"})
 
 	bus, err := eventbus.Inspect(cfg.natsURL)
 	if err != nil {
@@ -235,8 +223,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 	}
 
 	fmt.Println()
-	fmt.Printf("Result: %d failure(s), %d warning(s)\n", report.failures,
-		report.warnings)
+	fmt.Printf("Result: %d failure(s), %d warning(s)\n", report.failures, report.warnings)
 
 	if report.failures > 0 {
 		return errors.New("doctor found failed checks")
@@ -357,16 +344,12 @@ func printResolvedConfiguration(cfg operationsConfig) {
 		"not configured"))
 	fmt.Printf("  from year         %d\n", fromYear)
 	fmt.Printf("  form types        %s\n", strings.Join(forms, ","))
-	fmt.Printf("  parser supports   %s\n",
-		strings.Join(edgar.SupportedFormTypes(), ","))
+	fmt.Printf("  parser supports   %s\n", strings.Join(edgar.SupportedFormTypes(), ","))
 	fmt.Printf("  SEC archives      %s\n", baseURL)
-	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv,
-		defaultUserAgent))
+	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv, defaultUserAgent))
 	fmt.Printf("  NATS              %s\n", cfg.natsURL)
-	fmt.Printf("  news URL          %s (started by make dev)\n",
-		httpURL(cfg.newsAddress))
-	fmt.Printf("  filings web URL   %s (started by make dev)\n",
-		httpURL(cfg.filingsAddress))
+	fmt.Printf("  news URL          %s (started by make dev)\n", httpURL(cfg.newsAddress))
+	fmt.Printf("  filings web URL   %s (started by make dev)\n", httpURL(cfg.filingsAddress))
 	fmt.Printf("  data directory    %s\n", appdata.Root())
 	fmt.Printf("  filings cache     %s\n", appdata.Path("cache", "filings"))
 	fmt.Printf("  parsed filings    %s\n", appdata.Path("parsed"))
@@ -375,8 +358,7 @@ func printResolvedConfiguration(cfg operationsConfig) {
 
 	setName := environmentValue(edgarSetEnv, "")
 	if setName != "" {
-		fmt.Printf("  selected set      %s\n",
-			appdata.Path("sets", setName+".json"))
+		fmt.Printf("  selected set      %s\n", appdata.Path("sets", setName+".json"))
 	}
 
 	fmt.Printf("  polling DB        %s\n", cfg.pollingDB)
@@ -425,6 +407,7 @@ func printStorageUsage(root string) {
 	}
 }
 
+// pathSize calculates the total size of the given path in bytes. It walks through all files and sums their sizes.
 func pathSize(path string) (int64, error) {
 	var total int64
 
@@ -452,6 +435,7 @@ func pathSize(path string) (int64, error) {
 	return total, err
 }
 
+// formatBytes converts a byte count into a human-readable string with appropriate units.
 func formatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -494,8 +478,7 @@ func printDatabaseStatus(ctx context.Context, path string) {
 
 	defer func() { _ = db.Close() }()
 
-	printCount(ctx, db, "accessions",
-		`SELECT COUNT(*) FROM processed_accessions`)
+	printCount(ctx, db, "accessions", `SELECT COUNT(*) FROM processed_accessions`)
 	printCount(ctx, db, "outbox pending", `SELECT COUNT(*) FROM polling_outbox
 		WHERE published_at IS NULL`)
 	printCount(ctx, db, "outbox published", `SELECT COUNT(*) FROM polling_outbox
@@ -637,6 +620,7 @@ func printViewerStatus(ctx context.Context, path, address string) {
 	fmt.Println()
 }
 
+// printHTTPStatus prints the status of an HTTP service by attempting to connect to its address.
 func printHTTPStatus(name, address string) {
 	fmt.Println(name)
 
@@ -663,6 +647,7 @@ func httpURL(address string) string {
 	return "http://" + address
 }
 
+// runErrors retrieves and displays unresovled work failures from the polling database.
 func runErrors(ctx context.Context, cfg operationsConfig) error {
 	db, err := openSQLiteReadOnly(ctx, cfg.pollingDB)
 	if err != nil {
@@ -696,14 +681,14 @@ func runErrors(ctx context.Context, cfg operationsConfig) error {
 	}
 	defer func() { _ = rows.Close() }()
 
-	fmt.Printf("%-10s %-22s %-8s %-19s %s\n", "STAGE", "ACCESSION",
-		"ATTEMPTS", "LAST FAILURE", "ERROR")
+	fmt.Printf("%-10s %-22s %-8s %-19s %s\n", "STAGE", "ACCESSION", "ATTEMPTS", "LAST FAILURE", "ERROR")
 
 	for rows.Next() {
 		var (
 			stage, accession, failedAt, message string
 			attempts                            int
 		)
+
 		if err := rows.Scan(&stage, &accession, &attempts, &failedAt,
 			&message); err != nil {
 			return err
