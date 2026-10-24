@@ -10,3 +10,5 @@ damage a table, URL, code block, command, or another fixed-format example.
 
 When adding or updating prose, wrap it to 80 columns before finishing the
 change.
+
+do not add //nolint to suppress linting warnigs unless given permission

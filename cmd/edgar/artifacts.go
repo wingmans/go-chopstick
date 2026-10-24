@@ -32,14 +32,12 @@ type artifactCommandConfig struct {
 }
 
 func parseArtifactCommand(args []string) (appConfig, error) {
-	cfg := appConfig{
-		command: "artifacts",
-		artifacts: artifactCommandConfig{
-			parsedDir:    appdata.Path("parsed"),
-			filingsDir:   appdata.Path("cache", "filings"),
-			artifactsDir: appdata.Path("tmp", "artifacts"),
-			address:      "127.0.0.1:8090",
-		},
+	cfg := appConfig{command: "artifacts"}
+	cfg.artifacts = artifactCommandConfig{
+		parsedDir:    appdata.Path("parsed"),
+		filingsDir:   appdata.Path("cache", "filings"),
+		artifactsDir: appdata.Path("tmp", "artifacts"),
+		address:      "127.0.0.1:8090",
 	}
 	flags := flag.NewFlagSet("artifacts", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
@@ -80,11 +78,16 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	}
 
 	flags.StringVar(&cfg.artifacts.cik, "cik", "", "filing CIK")
-	flags.StringVar(&cfg.artifacts.accession, "accession", "", "filing accession number")
-	flags.StringVar(&cfg.artifacts.parsedDir, "parsed-dir", cfg.artifacts.parsedDir, "parsed filing directory")
-	flags.StringVar(&cfg.artifacts.filingsDir, "filings-dir", cfg.artifacts.filingsDir, "raw filing cache directory")
-	flags.StringVar(&cfg.artifacts.artifactsDir, "artifacts-dir", cfg.artifacts.artifactsDir, "disposable artifact root")
-	flags.StringVar(&cfg.artifacts.address, "address", cfg.artifacts.address, "viewer listen address")
+	flags.StringVar(&cfg.artifacts.accession, "accession", "",
+		"filing accession number")
+	flags.StringVar(&cfg.artifacts.parsedDir, "parsed-dir",
+		cfg.artifacts.parsedDir, "parsed filing directory")
+	flags.StringVar(&cfg.artifacts.filingsDir, "filings-dir",
+		cfg.artifacts.filingsDir, "raw filing cache directory")
+	flags.StringVar(&cfg.artifacts.artifactsDir, "artifacts-dir",
+		cfg.artifacts.artifactsDir, "disposable artifact root")
+	flags.StringVar(&cfg.artifacts.address, "address", cfg.artifacts.address,
+		"viewer listen address")
 	flags.Var(&cfg.artifacts.types, "type", "document type to extract")
 	flags.Var(&cfg.artifacts.filenames, "document", "document filename to extract")
 	flags.BoolVar(&cfg.artifacts.all, "all", false, "extract every document")
@@ -205,7 +208,9 @@ func validateViewerAddress(address string) error {
 	return nil
 }
 
-func serveArtifacts(ctx context.Context, cfg artifactCommandConfig, destination string) error {
+func serveArtifacts(ctx context.Context, cfg artifactCommandConfig,
+	destination string,
+) error {
 	handler, err := artifacts.Viewer(destination, cfg.cik, cfg.accession)
 	if err != nil {
 		return err
@@ -239,16 +244,19 @@ func serveArtifacts(ctx context.Context, cfg artifactCommandConfig, destination 
 
 	defer close(done)
 
-	fmt.Printf("viewing %s at http://%s (press Ctrl-C to stop)\n", destination, listener.Addr())
+	fmt.Printf("viewing %s at http://%s (press Ctrl-C to stop)\n",
+		destination, listener.Addr())
 
-	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := server.Serve(listener); err != nil &&
+		!errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve artifact viewer: %w", err)
 	}
 
 	return nil
 }
 
-func artifactSourcePath(filingsDir string, filing *edgar.ParsedFiling,
+func artifactSourcePath(filingsDir string,
+	filing *edgar.ParsedFiling,
 ) (string, error) {
 	switch filing.SourceBase {
 	case "absolute":
