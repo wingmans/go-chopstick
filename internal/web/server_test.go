@@ -45,44 +45,14 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if filing.Metadata.Accession != expected.Accession ||
-		filing.Metadata.FormType != expected.FormType {
-		t.Fatalf("golden identity changed: accession=%s form=%s",
-			filing.Metadata.Accession, filing.Metadata.FormType)
-	}
-
-	if len(filing.Metadata.Filers) == 0 ||
-		filing.Metadata.Filers[0].Name != expected.Company {
-		t.Fatalf("golden company changed: got %q", filing.Metadata.Filers)
-	}
+	requireGoldenIdentity(t, filing, expected)
 
 	view, err := filingview.Build(filing)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for groupName, expectedRows := range expected.Groups {
-		group := summaryGroupByTitle(view.Summary, groupName)
-		if group == nil {
-			t.Fatalf("summary group %q is missing", groupName)
-		}
-
-		for concept, expectedValues := range expectedRows {
-			row := summaryRowByConcept(group.Rows, concept)
-			if row == nil {
-				t.Fatalf("summary concept %q is missing from %q", concept,
-					groupName)
-			}
-
-			for period, expectedValue := range expectedValues {
-				actual, ok := row.Values[period]
-				if !ok || actual.Nil || actual.Value != expectedValue {
-					t.Fatalf("%s %s %s: got %+v, want %q", groupName,
-						concept, period, actual, expectedValue)
-				}
-			}
-		}
-	}
+	requireGoldenGroups(t, view, expected.Groups)
 
 	parsedDir := t.TempDir()
 	if _, err := edgar.SaveParsedFiling(parsedDir, filing); err != nil {
@@ -144,7 +114,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 	}
 
 	body := record.Body.String()
-	for _, marker := range []string{
+	requireMarkers(t, body,
 		"<title>10-K 0001193125-26-323660</title>",
 		"<th>Line item</th>",
 		"data-statement=\"Income statement\"",
@@ -171,11 +141,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"758376000000",
 		"data-ratio=\"gross_margin\"",
 		"67.94%",
-	} {
-		if !strings.Contains(body, marker) {
-			t.Errorf("details page is missing %q", marker)
-		}
-	}
+	)
 
 	record = httptest.NewRecorder()
 	request = httptest.NewRequestWithContext(context.Background(),
@@ -187,24 +153,71 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 			record.Body.String())
 	}
 
-	for _, marker := range []string{
-		"id=\"dividend-register\"", "$0.83/share", "$1.2B",
-	} {
-		if !strings.Contains(record.Body.String(), marker) {
-			t.Errorf("company page is missing %q", marker)
-		}
-	}
+	requireMarkers(t, record.Body.String(),
+		"id=\"dividend-register\"", "$0.83/share", "$1.2B")
 
 	body = record.Body.String()
-	for _, marker := range []string{
+	requireMarkers(t, body,
 		"data-statement=\"Income statement\"",
 		"data-statement=\"Balance sheet\"",
 		"data-statement=\"Cash flow\"",
 		"class=\"history-table\"",
 		"--history-width:",
-	} {
+	)
+}
+
+func requireGoldenIdentity(t *testing.T, filing *edgar.ParsedFiling,
+	expected goldenDetailResults,
+) {
+	t.Helper()
+
+	if filing.Metadata.Accession != expected.Accession ||
+		filing.Metadata.FormType != expected.FormType {
+		t.Fatalf("golden identity changed: accession=%s form=%s",
+			filing.Metadata.Accession, filing.Metadata.FormType)
+	}
+
+	if len(filing.Metadata.Filers) == 0 ||
+		filing.Metadata.Filers[0].Name != expected.Company {
+		t.Fatalf("golden company changed: got %q", filing.Metadata.Filers)
+	}
+}
+
+func requireGoldenGroups(t *testing.T, view filingview.View,
+	expected map[string]map[string]map[string]string,
+) {
+	t.Helper()
+
+	for groupName, expectedRows := range expected {
+		group := summaryGroupByTitle(view.Summary, groupName)
+		if group == nil {
+			t.Fatalf("summary group %q is missing", groupName)
+		}
+
+		for concept, expectedValues := range expectedRows {
+			row := summaryRowByConcept(group.Rows, concept)
+			if row == nil {
+				t.Fatalf("summary concept %q is missing from %q", concept,
+					groupName)
+			}
+
+			for period, expectedValue := range expectedValues {
+				actual, ok := row.Values[period]
+				if !ok || actual.Nil || actual.Value != expectedValue {
+					t.Fatalf("%s %s %s: got %+v, want %q", groupName,
+						concept, period, actual, expectedValue)
+				}
+			}
+		}
+	}
+}
+
+func requireMarkers(t *testing.T, body string, markers ...string) {
+	t.Helper()
+
+	for _, marker := range markers {
 		if !strings.Contains(body, marker) {
-			t.Errorf("company page is missing %q", marker)
+			t.Errorf("page is missing %q", marker)
 		}
 	}
 }
@@ -417,27 +430,30 @@ func TestServerFiltersByCIK(t *testing.T) {
 	server := newCIKTestServer(t)
 	for _, test := range []struct{ name, cik string }{{"unpadded", "789019"}, {"padded", "0000789019"}} {
 		t.Run(test.name, func(t *testing.T) {
-			requireResponse(t, requestServer(t, server, http.MethodGet, "/api/filings?cik="+test.cik), http.StatusOK, "0001193125-26-027207")
+			requireResponse(t, requestServer(t, server,
+				"/api/filings?cik="+test.cik), "0001193125-26-027207")
 		})
 	}
 }
 
 func TestServerFiltersByTicker(t *testing.T) {
-	requireResponse(t, requestServer(t, newCIKTestServer(t), http.MethodGet, "/api/filings?q=MSFT"), http.StatusOK, `"ticker":"MSFT"`)
+	requireResponse(t, requestServer(t, newCIKTestServer(t),
+		"/api/filings?q=MSFT"), `"ticker":"MSFT"`)
 }
 
 func TestServerRendersDetails(t *testing.T) {
-	requireResponse(t, requestServer(t, newCIKTestServer(t), http.MethodGet, "/filings/789019/0001193125-26-027207"), http.StatusOK, "XBRL facts")
+	requireResponse(t, requestServer(t, newCIKTestServer(t),
+		"/filings/789019/0001193125-26-027207"), "XBRL facts")
 }
 
 func TestRawFilingInspectorIsolatedFromAnalyticalRoutes(t *testing.T) {
 	server := newCIKTestServer(t)
 
-	requireResponse(t, requestServer(t, server, http.MethodGet,
+	requireResponse(t, requestServer(t, server,
 		"/debug/raw/filings/789019/0001193125-26-027207"),
-		http.StatusOK, "Raw Filing Inspector", "Debug data")
+		"Raw Filing Inspector", "Debug data")
 
-	legacy := requestServer(t, server, http.MethodGet,
+	legacy := requestServer(t, server,
 		"/filings/789019/0001193125-26-027207/documents/0")
 	if legacy.Code != http.StatusNotFound {
 		t.Fatalf("legacy raw route status=%d body=%s", legacy.Code,
@@ -448,7 +464,7 @@ func TestRawFilingInspectorIsolatedFromAnalyticalRoutes(t *testing.T) {
 func TestRawFilingInspectorReportsMissingRawData(t *testing.T) {
 	server := NewServer(t.TempDir(), nil)
 
-	record := requestServer(t, server, http.MethodGet,
+	record := requestServer(t, server,
 		"/debug/raw/filings/789019/0001193125-26-027207")
 	if record.Code != http.StatusNotFound ||
 		!strings.Contains(record.Body.String(), "raw filing unavailable") {
@@ -458,8 +474,9 @@ func TestRawFilingInspectorReportsMissingRawData(t *testing.T) {
 }
 
 func TestServerRendersDashboard(t *testing.T) {
-	record := requestServer(t, newCIKTestServer(t), http.MethodGet, "/?q=MSFT")
-	requireResponse(t, record, http.StatusOK, "id=\"dashboard\"", "value=\"MSFT\"", "0001193125-26-027207")
+	record := requestServer(t, newCIKTestServer(t), "/?q=MSFT")
+	requireResponse(t, record, "id=\"dashboard\"", "value=\"MSFT\"",
+		"0001193125-26-027207")
 }
 
 func TestServerRendersHTMX(t *testing.T) {
@@ -479,7 +496,8 @@ func TestServerRendersHTMX(t *testing.T) {
 			server.ServeHTTP(record, request)
 
 			if test.fullPage {
-				requireResponse(t, record, http.StatusOK, "<!doctype html>", "class=\"dashboard-page\"")
+				requireResponse(t, record, "<!doctype html>",
+					"class=\"dashboard-page\"")
 
 				return
 			}
@@ -488,7 +506,8 @@ func TestServerRendersHTMX(t *testing.T) {
 				t.Fatalf("unexpected dashboard fragment: status=%d body=%s", record.Code, record.Body.String())
 			}
 
-			requireResponse(t, record, http.StatusOK, "id=\"dashboard\"", "0001193125-26-027207")
+			requireResponse(t, record, "id=\"dashboard\"",
+				"0001193125-26-027207")
 		})
 	}
 }
@@ -501,7 +520,7 @@ func TestServerServesAssets(t *testing.T) {
 		{"/assets/chopstick.svg", "image/svg+xml", "<svg"},
 	} {
 		t.Run(test.path, func(t *testing.T) {
-			record := requestServer(t, server, http.MethodGet, test.path)
+			record := requestServer(t, server, test.path)
 			if record.Code != http.StatusOK ||
 				!strings.Contains(record.Header().Get("Content-Type"), test.contentType) ||
 				!strings.Contains(record.Body.String(), test.marker) {
@@ -512,20 +531,25 @@ func TestServerServesAssets(t *testing.T) {
 }
 
 // requestServer sends an HTTP request to the given server and returns the response recorder.
-func requestServer(t *testing.T, server http.Handler, method, path string) *httptest.ResponseRecorder {
+func requestServer(t *testing.T, server http.Handler,
+	path string,
+) *httptest.ResponseRecorder {
 	t.Helper()
 
 	record := httptest.NewRecorder()
-	server.ServeHTTP(record, httptest.NewRequestWithContext(context.Background(), method, path, nil))
+	server.ServeHTTP(record, httptest.NewRequestWithContext(
+		context.Background(), http.MethodGet, path, nil))
 
 	return record
 }
 
 // requireResponse asserts that the HTTP response has the expected status code and contains the specified markers in the body.
-func requireResponse(t *testing.T, record *httptest.ResponseRecorder, status int, markers ...string) {
+func requireResponse(t *testing.T, record *httptest.ResponseRecorder,
+	markers ...string,
+) {
 	t.Helper()
 
-	if record.Code != status {
+	if record.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", record.Code, record.Body.String())
 	}
 

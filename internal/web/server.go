@@ -3,6 +3,7 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -51,13 +52,17 @@ func NewServer(parsedDir string, logger *slog.Logger) *Server {
 // NewConfiguredServer creates a dashboard with an optional constituent set.
 // The set is only a human-name lookup; CIK and accession remain filing keys.
 func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger) (*Server, error) {
-	return NewConfiguredServerWithDB(parsedDir, filepath.Join(filepath.Dir(parsedDir), "analysis.db"), setDir, setName, logger)
+	return NewConfiguredServerWithDB(context.Background(), parsedDir,
+		filepath.Join(filepath.Dir(parsedDir), "analysis.db"), setDir, setName,
+		logger)
 }
 
 // NewConfiguredServerWithDB creates a dashboard backed by an explicit
 // normalized-view database.
-func NewConfiguredServerWithDB(parsedDir, databasePath, setDir, setName string, logger *slog.Logger) (*Server, error) {
-	store, err := filingstore.NewSQLiteStore(parsedDir, databasePath)
+func NewConfiguredServerWithDB(ctx context.Context, parsedDir, databasePath,
+	setDir, setName string, logger *slog.Logger,
+) (*Server, error) {
+	store, err := filingstore.NewSQLiteStore(ctx, parsedDir, databasePath)
 	if err != nil {
 		return nil, err
 	}

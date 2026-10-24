@@ -931,6 +931,7 @@ func parseDownloadFilingsConfig(args []string) (appConfig, error) {
 	if err != nil {
 		return subcommandError(flags, err)
 	}
+
 	cfg.filings.filter.FormTypes = validatedForms
 	if err := applyConstituentSet(&cfg.filings.filter, cfg.filings.setName); err != nil {
 		return subcommandError(flags, err)
@@ -999,7 +1000,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
 	fmt.Fprintln(os.Stdout, "  atom              discover current filings from SEC Atom")
-	fmt.Fprintln(os.Stdout, "  select            select observed filings for processing")
+	fmt.Fprintln(os.Stdout, "  select            observed filings for processing")
 	fmt.Fprintln(os.Stdout, "  discover          select filings from a local master index")
 	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
 	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")

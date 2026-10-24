@@ -82,6 +82,7 @@ func Open(ctx context.Context, path string) (*Store, bool, error) {
 
 		return nil, false, fmt.Errorf("create news schema: %w", err)
 	}
+
 	if err := migrateFeedItems(ctx, db); err != nil {
 		_ = db.Close()
 
@@ -204,6 +205,7 @@ func (s *Store) List(ctx context.Context, filter Filter) ([]Item, error) {
 // Get returns one observed filing for an explicit on-demand request.
 func (s *Store) Get(ctx context.Context, accession string) (Item, error) {
 	var item Item
+
 	err := s.db.QueryRowContext(ctx, `
 		SELECT stream_sequence, accession_number, cik, company_name,
 			form_type, filing_date, filing_url, filing_path, source_feed,
@@ -221,47 +223,76 @@ func (s *Store) Get(ctx context.Context, accession string) (Item, error) {
 }
 
 func migrateFeedItems(ctx context.Context, db *sql.DB) error {
-	columns := []struct {
-		name       string
-		definition string
-	}{
-		{name: "filing_path", definition: "TEXT NOT NULL DEFAULT ''"},
-		{name: "selected", definition: "INTEGER NOT NULL DEFAULT 0"},
-		{name: "selection_reason", definition: "TEXT NOT NULL DEFAULT ''"},
-		{name: "selection_mode", definition: "TEXT NOT NULL DEFAULT ''"},
-		{name: "selection_set", definition: "TEXT NOT NULL DEFAULT ''"},
+	columns := []string{
+		"filing_path",
+		"selected",
+		"selection_reason",
+		"selection_mode",
+		"selection_set",
 	}
 
 	rows, err := db.QueryContext(ctx, `PRAGMA table_info(feed_items)`)
 	if err != nil {
 		return fmt.Errorf("inspect news schema: %w", err)
 	}
+	defer func() { _ = rows.Close() }()
+
 	existing := make(map[string]struct{})
+
 	for rows.Next() {
-		var cid int
-		var name, columnType string
-		var notNull, primaryKey int
-		var defaultValue any
+		var (
+			cid                 int
+			name, columnType    string
+			notNull, primaryKey int
+			defaultValue        any
+		)
 		if err := rows.Scan(&cid, &name, &columnType, &notNull,
 			&defaultValue, &primaryKey); err != nil {
 			_ = rows.Close()
 
 			return fmt.Errorf("read news schema: %w", err)
 		}
+
 		existing[name] = struct{}{}
 	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate news schema: %w", err)
+	}
+
 	if err := rows.Close(); err != nil {
 		return fmt.Errorf("close news schema rows: %w", err)
 	}
 
 	for _, column := range columns {
-		if _, exists := existing[column.name]; exists {
+		if _, exists := existing[column]; exists {
 			continue
 		}
-		statement := "ALTER TABLE feed_items ADD COLUMN " + column.name +
-			" " + column.definition
+
+		var statement string
+
+		switch column {
+		case "filing_path":
+			statement = `ALTER TABLE feed_items ADD COLUMN
+				filing_path TEXT NOT NULL DEFAULT ''`
+		case "selected":
+			statement = `ALTER TABLE feed_items ADD COLUMN
+				selected INTEGER NOT NULL DEFAULT 0`
+		case "selection_reason":
+			statement = `ALTER TABLE feed_items ADD COLUMN
+				selection_reason TEXT NOT NULL DEFAULT ''`
+		case "selection_mode":
+			statement = `ALTER TABLE feed_items ADD COLUMN
+				selection_mode TEXT NOT NULL DEFAULT ''`
+		case "selection_set":
+			statement = `ALTER TABLE feed_items ADD COLUMN
+				selection_set TEXT NOT NULL DEFAULT ''`
+		default:
+			return fmt.Errorf("unsupported news column %q", column)
+		}
+
 		if _, err := db.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("add news column %s: %w", column.name, err)
+			return fmt.Errorf("add news column %s: %w", column, err)
 		}
 	}
 

@@ -189,6 +189,10 @@ go run ./cmd/edgar artifacts extract \
   --accession 0001213900-26-111193 \
   --type EX-99.1 --type GRAPHIC
 
+go run ./cmd/edgar artifacts serve \
+  --cik 0001898496 \
+  --accession 0001213900-26-111193
+
 go run ./cmd/edgar artifacts clean \
   --cik 0001898496 \
   --accession 0001213900-26-111193
@@ -197,7 +201,23 @@ go run ./cmd/edgar artifacts clean \
 Extraction preserves filenames so local HTML can find its images, decodes
 uuencoded `GRAPHIC` documents, and stops at 300 MiB per bundle. Cleanup only
 removes a directory with a matching generated manifest; it never removes the
-raw filing or parsed result.
+raw filing or parsed result. The Go-native viewer binds to
+`http://127.0.0.1:8090`, lists every extracted document, and provides a lazy
+loading thumbnail rail beside a large document preview. The Left and Right
+arrow keys select adjacent documents; Home and End jump to the first and last
+documents. Search, document-type, and graphics-only filters can be combined;
+navigation and progress apply to the visible results. Image previews support
+fit, zoom, rotation, and their corresponding keyboard shortcuts. The viewer
+serves only a generated bundle with a matching manifest and does not require
+Python or another external web server. Its template, stylesheet, and script
+are separate source files embedded into the Go executable at build time.
+
+Artifact tests are self-contained and generate only tiny temporary submissions
+and manifests. They do not read from `data/`. Large downloaded filings may be
+used for optional manual smoke tests, but `data/` remains ignored and those
+filings must not become committed fixtures or required test dependencies. A
+filing-specific regression should be reduced to the smallest representative
+bytes before it is added to the test suite.
 
 The explicit stages remain available for debugging.
 

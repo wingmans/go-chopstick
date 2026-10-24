@@ -11,20 +11,18 @@ func TestConcurrentDedupeServiceInitialization(t *testing.T) {
 
 	dbPath := filepath.Join(t.TempDir(), "polling.db")
 	errorsCh := make(chan error, workers)
+
 	var group sync.WaitGroup
 
 	for range workers {
-		group.Add(1)
-
-		go func() {
-			defer group.Done()
-
+		group.Go(func() {
 			store, err := NewDedupeServiceContext(t.Context(), dbPath)
 			if err == nil {
 				err = store.Close()
 			}
+
 			errorsCh <- err
-		}()
+		})
 	}
 
 	group.Wait()

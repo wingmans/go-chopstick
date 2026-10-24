@@ -1,0 +1,265 @@
+:root {
+  font: 14px/1.4 system-ui, sans-serif;
+  color: #171717;
+  background: #f1f1ec;
+}
+
+body {
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+}
+
+header {
+  box-sizing: border-box;
+  height: 48px;
+  padding: 7px 14px;
+  background: #e75b20;
+  border-bottom: 1px solid #a63f14;
+}
+
+header strong { display: block; }
+header span { font-size: 11px; }
+
+main {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  height: calc(100vh - 48px);
+}
+
+aside {
+  overflow-y: auto;
+  padding: 8px;
+  background: #f7f7f1;
+  border-right: 1px solid #d9d9d1;
+}
+
+.rail-controls {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  margin: -8px -8px 8px;
+  padding: 8px;
+  color: #555;
+  background: #f7f7f1;
+  border-bottom: 1px solid #d9d9d1;
+  font-size: 11px;
+}
+
+.rail-summary { margin-bottom: 6px; }
+
+.rail-controls input,
+.rail-controls select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 6px;
+  background: white;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  font: inherit;
+}
+
+.rail-filter-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+#graphics-only {
+  padding: 4px 7px;
+  color: #555;
+  background: white;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+#graphics-only.active {
+  color: #111;
+  background: #f5c6b2;
+  border-color: #e75b20;
+}
+
+.document {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 6px;
+  color: #171717;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.document:hover { background: #ecece5; }
+
+.document.selected {
+  background: #fff;
+  border-color: #e75b20;
+}
+
+.thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 140px;
+  overflow: hidden;
+  color: #777;
+  background: white;
+  border: 1px solid #d9d9d1;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.document-details {
+  display: block;
+  min-width: 0;
+  margin-top: 5px;
+}
+
+.filename {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: block;
+  margin-top: 3px;
+  color: #777;
+  font-size: 10px;
+}
+
+.preview {
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f7f7f1;
+  border-bottom: 1px solid #d9d9d1;
+}
+
+.toolbar button {
+  min-width: 32px;
+  padding: 4px 8px;
+  color: #171717;
+  background: white;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toolbar button:disabled {
+  color: #aaa;
+  cursor: default;
+}
+
+#progress {
+  min-width: 72px;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+#current-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+#zoom-status {
+  min-width: 42px;
+  color: #555;
+  font-size: 11px;
+  text-align: center;
+}
+
+#open-document {
+  flex: 0 0 auto;
+  color: #a63f14;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.stage {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px;
+  background: #deded7;
+}
+
+.viewer-frame,
+.image-canvas {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: white;
+  border: 0;
+}
+
+.image-canvas {
+  display: grid;
+  overflow: auto;
+  place-items: center;
+}
+
+.image-canvas.actual { place-items: start; }
+
+.viewer-image.fit {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.viewer-image.actual {
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  transform-origin: top left;
+}
+
+[hidden] { display: none !important; }
+
+@media (max-width: 700px) {
+  main { grid-template-columns: 120px minmax(0, 1fr); }
+  .thumb { width: 100%; height: 90px; }
+  #current-name { display: none; }
+  #zoom-out, #zoom-in, #zoom-status { display: none; }
+  #open-document { font-size: 0; }
+  #open-document::after { content: "Open"; font-size: 12px; }
+}

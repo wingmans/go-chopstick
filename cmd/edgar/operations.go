@@ -180,6 +180,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 	}
 
 	checkConfiguredSet(&report)
+
 	if forms, err := configuredFormTypes(); err != nil {
 		report.check("FAIL", "form types", err.Error())
 	} else {
@@ -333,6 +334,7 @@ func checkConfiguredSet(report *doctorReport) {
 	}
 
 	path := appdata.Path("sets", setName+".json")
+
 	set, err := constituents.LoadJSON(path)
 	if err != nil {
 		report.check("FAIL", "constituent set", err.Error())
@@ -370,11 +372,13 @@ func printResolvedConfiguration(cfg operationsConfig) {
 	fmt.Printf("  parsed filings    %s\n", appdata.Path("parsed"))
 	fmt.Printf("  temp artifacts    %s\n", appdata.Path("tmp", "artifacts"))
 	fmt.Printf("  constituent sets  %s\n", appdata.Path("sets"))
+
 	setName := environmentValue(edgarSetEnv, "")
 	if setName != "" {
 		fmt.Printf("  selected set      %s\n",
 			appdata.Path("sets", setName+".json"))
 	}
+
 	fmt.Printf("  polling DB        %s\n", cfg.pollingDB)
 	fmt.Printf("  news DB           %s\n", cfg.newsDB)
 	fmt.Printf("  analysis DB       %s\n", appdata.Path("analysis.db"))
@@ -409,6 +413,7 @@ func printStorageUsage(root string) {
 
 			continue
 		}
+
 		if err != nil {
 			fmt.Printf("  %-17s unavailable: %v\n", entry.label, err)
 
@@ -429,6 +434,7 @@ func pathSize(path string) (int64, error) {
 		if walkErr != nil {
 			return walkErr
 		}
+
 		if entry.IsDir() {
 			return nil
 		}
@@ -453,6 +459,7 @@ func formatBytes(bytes int64) string {
 	}
 
 	divisor := int64(unit)
+
 	exponent := 0
 	for value := bytes / unit; value >= unit && exponent < 4; value /= unit {
 		divisor *= unit
@@ -569,7 +576,12 @@ func printNATSStatus(url string) {
 			continue
 		}
 
-		remaining := consumer.NumPending + uint64(consumer.NumAckPending)
+		ackPending := uint64(0)
+		if consumer.NumAckPending > 0 {
+			ackPending = uint64(consumer.NumAckPending)
+		}
+
+		remaining := consumer.NumPending + ackPending
 		fmt.Printf("  %-17s state=%s remaining=%d pending=%d in_flight=%d\n",
 			durable, consumerActivity(consumer), remaining,
 			consumer.NumPending, consumer.NumAckPending)
@@ -629,6 +641,7 @@ func printHTTPStatus(name, address string) {
 	fmt.Println(name)
 
 	dialer := net.Dialer{Timeout: 250 * time.Millisecond}
+
 	connection, err := dialer.Dial("tcp", address)
 	if err == nil {
 		_ = connection.Close()

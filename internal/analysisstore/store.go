@@ -124,7 +124,7 @@ func (s *Store) migrate(ctx context.Context) error {
 		}
 	}
 
-	if err := s.migrateDividendObservations(ctx); err != nil {
+	if err := migrateDividendObservations(ctx, s.db); err != nil {
 		return err
 	}
 
@@ -143,8 +143,8 @@ func (s *Store) migrate(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) migrateDividendObservations(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(dividend_observations)`)
+func migrateDividendObservations(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(dividend_observations)`)
 	if err != nil {
 		return fmt.Errorf("inspect dividend observations schema: %w", err)
 	}
@@ -175,7 +175,7 @@ func (s *Store) migrateDividendObservations(ctx context.Context) error {
 		return nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin dividend observation migration: %w", err)
 	}
@@ -215,6 +215,7 @@ func (s *Store) migrateDividendObservations(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read legacy dividend observations: %w", err)
 	}
+	defer func() { _ = legacyRows.Close() }()
 
 	for legacyRows.Next() {
 		var (

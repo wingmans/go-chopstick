@@ -230,6 +230,7 @@ func TestNewsAddressUsesEnvironmentDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig with address returned error: %v", err)
 	}
+
 	if cfg.events.address != "127.0.0.1:8083" {
 		t.Fatalf("CLI address did not override environment: %q",
 			cfg.events.address)
@@ -245,9 +246,11 @@ func TestRunUsesEnvironmentReconciliationScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if cfg.events.filter.FromYear != 2022 {
 		t.Fatalf("run from year = %d", cfg.events.filter.FromYear)
 	}
+
 	if len(cfg.events.filter.FormTypes) != 3 {
 		t.Fatalf("run forms = %v", cfg.events.filter.FormTypes)
 	}
@@ -260,6 +263,7 @@ func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig run returned error: %v", err)
 	}
+
 	if cfg.events.filingsAddress != "127.0.0.1:8084" {
 		t.Fatalf("run filings address = %q", cfg.events.filingsAddress)
 	}
@@ -270,6 +274,7 @@ func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig run with address returned error: %v", err)
 	}
+
 	if cfg.events.filingsAddress != "127.0.0.1:8085" {
 		t.Fatalf("run CLI address did not override environment: %q",
 			cfg.events.filingsAddress)
@@ -279,6 +284,7 @@ func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
+
 	if cfg.serve.address != "127.0.0.1:8084" {
 		t.Fatalf("serve address = %q", cfg.serve.address)
 	}
@@ -289,6 +295,7 @@ func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig with address returned error: %v", err)
 	}
+
 	if cfg.serve.address != "127.0.0.1:8085" {
 		t.Fatalf("CLI address did not override environment: %q",
 			cfg.serve.address)

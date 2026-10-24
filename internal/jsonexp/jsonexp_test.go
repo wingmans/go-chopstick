@@ -65,6 +65,8 @@ func BenchmarkParsedFilingDecode(b *testing.B) {
 }
 
 func benchDecode(b *testing.B, path string) {
+	b.Helper()
+
 	// The subtest name includes the artifact directory so results remain
 	// readable when more small, medium, and large filings are added later.
 	b.Run(filepath.Base(filepath.Dir(path))+"/current", func(b *testing.B) {
