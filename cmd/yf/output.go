@@ -27,12 +27,14 @@ var (
 	yearPattern   = regexp.MustCompile(`^[0-9]{4}\.csv$`)
 )
 
+// member represents a single constituent in a basket or index.
 type member struct {
 	CIK    string `json:"cik"`
 	Ticker string `json:"ticker"`
 	Name   string `json:"name"`
 }
 
+// constituentManifest represents a manifest of constituents for a basket or index.
 type constituentManifest struct {
 	Name    string   `json:"name"`
 	AsOf    string   `json:"as_of"`
@@ -40,6 +42,7 @@ type constituentManifest struct {
 	Members []member `json:"members"`
 }
 
+// candidateRow represents a single row of price data for a security.
 type candidateRow struct {
 	CIK      string
 	Ticker   string
@@ -50,30 +53,37 @@ type candidateRow struct {
 	AdjClose float64
 }
 
+// observationKey uniquely identifies a price observation by ticker and date.
 type observationKey struct {
 	ticker string
 	date   string
 }
 
+// downloadResult represents the outcome of a price download operation.
 type downloadResult struct {
 	observations int
 	partitions   int
 }
 
+// priceReader defines the interface for reading the latest available price dates.
 type priceReader interface {
 	LatestDates(ctx context.Context) (map[string]time.Time, error)
 }
 
+// priceRows defines a callback-based iterator for candidate price rows.
 type priceRows func(yield func(candidateRow, error) bool)
 
+// priceWriter defines the interface for writing candidate price rows.
 type priceWriter interface {
 	UpsertPrices(ctx context.Context, rows priceRows) (int, error)
 }
 
+// csvPriceStore implements a priceWriter and priceReader backed by CSV files.
 type csvPriceStore struct {
 	directory string
 }
 
+// priceSpool represents an open CSV file and its writer for a specific year.
 type priceSpool struct {
 	file   *os.File
 	writer *csv.Writer
@@ -92,9 +102,7 @@ func newCSVPriceStore(root string) (*csvPriceStore, error) {
 	return &csvPriceStore{directory: directory}, nil
 }
 
-func (store *csvPriceStore) LatestDates(
-	ctx context.Context,
-) (map[string]time.Time, error) {
+func (store *csvPriceStore) LatestDates(ctx context.Context) (map[string]time.Time, error) {
 	return loadLatestDates(ctx, store.directory)
 }
 
@@ -160,12 +168,7 @@ func (store *csvPriceStore) upsertYear(ctx context.Context, year int, stagedPath
 	return writeCandidateAtomic(path, sortedRows(rows))
 }
 
-func consumePriceRows(
-	ctx context.Context,
-	rows priceRows,
-	directory string,
-	spools map[int]*priceSpool,
-) error {
+func consumePriceRows(ctx context.Context, rows priceRows, directory string, spools map[int]*priceSpool) error {
 	var consumeErr error
 
 	rows(func(row candidateRow, rowErr error) bool {
@@ -206,11 +209,8 @@ func consumePriceRows(
 	return consumeErr
 }
 
-func openPriceSpool(
-	directory string,
-	year int,
-	spools map[int]*priceSpool,
-) (*priceSpool, error) {
+// openPriceSpool opens or creates a price spool for the given year in the specified directory.
+func openPriceSpool(directory string, year int, spools map[int]*priceSpool) (*priceSpool, error) {
 	if spool := spools[year]; spool != nil {
 		return spool, nil
 	}
@@ -489,10 +489,7 @@ func selectMembers(all []member, requested []string) ([]member, error) {
 	return selected, nil
 }
 
-func loadLatestDates(
-	ctx context.Context,
-	directory string,
-) (map[string]time.Time, error) {
+func loadLatestDates(ctx context.Context, directory string) (map[string]time.Time, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return nil, fmt.Errorf("read prices directory: %w", err)
@@ -521,9 +518,7 @@ func loadLatestDates(
 		}
 
 		rows := make(map[observationKey]candidateRow)
-		if err := loadCandidatePartition(
-			ctx, filepath.Join(directory, entry.Name()), year, rows, latest,
-		); err != nil {
+		if err := loadCandidatePartition(ctx, filepath.Join(directory, entry.Name()), year, rows, latest); err != nil {
 			return nil, err
 		}
 	}
@@ -531,13 +526,7 @@ func loadLatestDates(
 	return latest, nil
 }
 
-func loadCandidatePartition(
-	ctx context.Context,
-	path string,
-	year int,
-	rows map[observationKey]candidateRow,
-	latest map[string]time.Time,
-) error {
+func loadCandidatePartition(ctx context.Context, path string, year int, rows map[observationKey]candidateRow, latest map[string]time.Time) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open price partition %s: %w", path, err)
