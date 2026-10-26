@@ -37,7 +37,8 @@ help:
 		'' \
 		'  help                    Display this command list' \
 		'  setup                   Prepare the development environment' \
-		'  dev                     Start NATS and run all services' \
+		'  dev                     Start NATS and run the EDGAR service' \
+		'  market-dev              Run the daily Yahoo market-data service' \
 		'  watch                   Open the tiled Ghostty development console' \
 		'  overview                Refresh polling and news metrics each minute' \
 		'  index-refresh           Refresh latest SEC index and master.tsv' \

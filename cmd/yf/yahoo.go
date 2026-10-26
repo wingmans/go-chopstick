@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +27,32 @@ type dailyPrice struct {
 	Open     float64
 	Close    float64
 	AdjClose float64
+}
+
+type corporateAction struct {
+	SourceID    string
+	Date        time.Time
+	Type        string
+	Amount      float64
+	Numerator   float64
+	Denominator float64
+}
+
+type yahooResult struct {
+	Prices  []dailyPrice
+	Actions []corporateAction
+}
+
+type chartEvents struct {
+	Dividends map[string]struct {
+		Amount float64 `json:"amount"`
+		Date   int64   `json:"date"`
+	} `json:"dividends"`
+	Splits map[string]struct {
+		Date        int64   `json:"date"`
+		Numerator   float64 `json:"numerator"`
+		Denominator float64 `json:"denominator"`
+	} `json:"splits"`
 }
 
 type yahooClient struct {
@@ -83,27 +110,27 @@ func (p *pacer) wait(ctx context.Context) error {
 
 func (client *yahooClient) fetch(
 	ctx context.Context, ticker string, from, to time.Time,
-) ([]dailyPrice, error) {
+) (yahooResult, error) {
 	requestURL, err := client.requestURL(ticker, from, to)
 	if err != nil {
-		return nil, err
+		return yahooResult{}, err
 	}
 
 	var lastErr error
 
 	for attempt := 1; attempt <= client.maxAttempts; attempt++ {
 		if err := client.pacer.wait(ctx); err != nil {
-			return nil, err
+			return yahooResult{}, err
 		}
 
 		raw, retry, err := client.request(ctx, requestURL)
 		if err == nil {
-			prices, parseErr := parseYahooResponse(ticker, raw, from, to)
+			result, parseErr := parseYahooResponse(ticker, raw, from, to)
 			if parseErr != nil {
-				return nil, parseErr
+				return yahooResult{}, parseErr
 			}
 
-			return prices, nil
+			return result, nil
 		}
 
 		lastErr = err
@@ -120,7 +147,7 @@ func (client *yahooClient) fetch(
 		)
 	}
 
-	return nil, fmt.Errorf(
+	return yahooResult{}, fmt.Errorf(
 		"fetch Yahoo prices for %s: %w", ticker, lastErr,
 	)
 }
@@ -225,6 +252,7 @@ type chartResponse struct {
 					Values []*float64 `json:"adjclose"`
 				} `json:"adjclose"`
 			} `json:"indicators"`
+			Events chartEvents `json:"events"`
 		} `json:"result"`
 		Error *struct {
 			Code        string `json:"code"`
@@ -233,21 +261,28 @@ type chartResponse struct {
 	} `json:"chart"`
 }
 
-func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyPrice, error) {
+func parseYahooResponse(
+	ticker string,
+	raw []byte,
+	from time.Time,
+	to time.Time,
+) (yahooResult, error) {
 	var data chartResponse
 	if err := json.Unmarshal(raw, &data); err != nil {
-		return nil, fmt.Errorf("decode Yahoo response for %s: %w", ticker, err)
+		return yahooResult{}, fmt.Errorf(
+			"decode Yahoo response for %s: %w", ticker, err,
+		)
 	}
 
 	if data.Chart.Error != nil {
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo %s for %s: %s", data.Chart.Error.Code, ticker,
 			data.Chart.Error.Description,
 		)
 	}
 
 	if len(data.Chart.Result) != 1 {
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo returned %d results for %s, expected one",
 			len(data.Chart.Result), ticker,
 		)
@@ -255,14 +290,14 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 
 	result := data.Chart.Result[0]
 	if !strings.EqualFold(result.Meta.Currency, "USD") {
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo returned currency %q for %s, expected USD",
 			result.Meta.Currency, ticker,
 		)
 	}
 
 	if !strings.EqualFold(result.Meta.Symbol, ticker) {
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo returned symbol %q for requested ticker %s",
 			result.Meta.Symbol, ticker,
 		)
@@ -272,7 +307,9 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 	if want == 0 {
 		if len(result.Indicators.Quote) == 0 &&
 			len(result.Indicators.AdjClose) == 0 {
-			return []dailyPrice{}, nil
+			actions, err := parseYahooActions(result.Events, from, to)
+
+			return yahooResult{Actions: actions}, err
 		}
 
 		if len(result.Indicators.Quote) == 1 &&
@@ -280,23 +317,25 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 			len(result.Indicators.Quote[0].Open) == 0 &&
 			len(result.Indicators.Quote[0].Close) == 0 &&
 			len(result.Indicators.AdjClose[0].Values) == 0 {
-			return []dailyPrice{}, nil
+			actions, err := parseYahooActions(result.Events, from, to)
+
+			return yahooResult{Actions: actions}, err
 		}
 
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo returned values without timestamps for %s", ticker,
 		)
 	}
 
 	if len(result.Indicators.Quote) != 1 {
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo returned %d quote series for %s, expected one",
 			len(result.Indicators.Quote), ticker,
 		)
 	}
 
 	if len(result.Indicators.AdjClose) != 1 {
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo returned %d adjusted-close series for %s, expected one",
 			len(result.Indicators.AdjClose), ticker,
 		)
@@ -307,7 +346,7 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 
 	if len(quote.Open) != want || len(quote.Close) != want ||
 		len(adjusted) != want {
-		return nil, fmt.Errorf(
+		return yahooResult{}, fmt.Errorf(
 			"yahoo series length mismatch for %s: timestamps=%d open=%d "+
 				"close=%d adjusted_close=%d",
 			ticker, want, len(quote.Open), len(quote.Close), len(adjusted),
@@ -321,7 +360,7 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 	for index, timestamp := range result.Timestamp {
 		date := time.Unix(timestamp, 0).UTC()
 		if !date.Before(to.AddDate(0, 0, 1)) {
-			return nil, fmt.Errorf(
+			return yahooResult{}, fmt.Errorf(
 				"yahoo date %s for %s is after the requested range",
 				date.Format(time.RFC3339), ticker,
 			)
@@ -329,7 +368,7 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 
 		observationDate := date.Format(dateLayout)
 		if previousDate != "" && observationDate <= previousDate {
-			return nil, fmt.Errorf(
+			return yahooResult{}, fmt.Errorf(
 				"yahoo dates for %s are duplicate or unordered at %s",
 				ticker, date.Format(time.RFC3339),
 			)
@@ -338,7 +377,7 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 		if err := validatePriceValues(
 			ticker, date, quote.Open[index], quote.Close[index], adjusted[index],
 		); err != nil {
-			return nil, err
+			return yahooResult{}, err
 		}
 
 		previousDate = observationDate
@@ -355,7 +394,72 @@ func parseYahooResponse(ticker string, raw []byte, from, to time.Time) ([]dailyP
 		})
 	}
 
-	return prices, nil
+	actions, err := parseYahooActions(result.Events, from, to)
+	if err != nil {
+		return yahooResult{}, fmt.Errorf(
+			"validate Yahoo actions for %s: %w", ticker, err,
+		)
+	}
+
+	return yahooResult{Prices: prices, Actions: actions}, nil
+}
+
+func parseYahooActions(
+	events chartEvents,
+	from time.Time,
+	to time.Time,
+) ([]corporateAction, error) {
+	actions := make([]corporateAction, 0, len(events.Dividends)+len(events.Splits))
+
+	for sourceID, dividend := range events.Dividends {
+		date := time.Unix(dividend.Date, 0).UTC()
+		if date.Before(from) || !date.Before(to.AddDate(0, 0, 1)) {
+			continue
+		}
+
+		if dividend.Amount <= 0 || math.IsNaN(dividend.Amount) ||
+			math.IsInf(dividend.Amount, 0) {
+			return nil, fmt.Errorf("invalid dividend on %s", date.Format(dateLayout))
+		}
+
+		actions = append(actions, corporateAction{
+			SourceID: "dividend:" + sourceID,
+			Date:     date,
+			Type:     "dividend",
+			Amount:   dividend.Amount,
+		})
+	}
+
+	for sourceID, split := range events.Splits {
+		date := time.Unix(split.Date, 0).UTC()
+		if date.Before(from) || !date.Before(to.AddDate(0, 0, 1)) {
+			continue
+		}
+
+		if split.Numerator <= 0 || split.Denominator <= 0 ||
+			math.IsNaN(split.Numerator) || math.IsNaN(split.Denominator) ||
+			math.IsInf(split.Numerator, 0) || math.IsInf(split.Denominator, 0) {
+			return nil, fmt.Errorf("invalid split on %s", date.Format(dateLayout))
+		}
+
+		actions = append(actions, corporateAction{
+			SourceID:    "split:" + sourceID,
+			Date:        date,
+			Type:        "split",
+			Numerator:   split.Numerator,
+			Denominator: split.Denominator,
+		})
+	}
+
+	sort.Slice(actions, func(left, right int) bool {
+		if actions[left].Date.Equal(actions[right].Date) {
+			return actions[left].SourceID < actions[right].SourceID
+		}
+
+		return actions[left].Date.Before(actions[right].Date)
+	})
+
+	return actions, nil
 }
 
 func validatePriceValues(ticker string, date time.Time, open, closeValue, adjusted *float64) error {

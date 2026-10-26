@@ -39,7 +39,7 @@ func TestYahooClientFetch(t *testing.T) {
 
 	client := testYahooClient(server)
 
-	prices, err := client.fetch(context.Background(), "MSFT", from, to)
+	result, err := client.fetch(context.Background(), "MSFT", from, to)
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -56,11 +56,11 @@ func TestYahooClientFetch(t *testing.T) {
 		)
 	}
 
-	if len(prices) != 2 {
-		t.Fatalf("price count = %d, want 2", len(prices))
+	if len(result.Prices) != 2 {
+		t.Fatalf("price count = %d, want 2", len(result.Prices))
 	}
 
-	first := prices[0]
+	first := result.Prices[0]
 	if first.Open != 25 || first.Close != 26 || first.AdjClose != 0.06 {
 		t.Fatalf("first price = %+v", first)
 	}
@@ -136,13 +136,50 @@ func TestParseYahooResponseIgnoresLeadingOverlap(t *testing.T) {
 		from.Add(14 * time.Hour).Unix(),
 	}))
 
-	prices, err := parseYahooResponse("MSFT", raw, from, from)
+	result, err := parseYahooResponse("MSFT", raw, from, from)
 	if err != nil {
 		t.Fatalf("parse response: %v", err)
 	}
 
-	if len(prices) != 1 || prices[0].Date.Format(dateLayout) != "2024-01-03" {
-		t.Fatalf("prices = %+v, want only 2024-01-03", prices)
+	if len(result.Prices) != 1 ||
+		result.Prices[0].Date.Format(dateLayout) != "2024-01-03" {
+		t.Fatalf("prices = %+v, want only 2024-01-03", result.Prices)
+	}
+}
+
+func TestParseYahooResponseIncludesCorporateActions(t *testing.T) {
+	from := mustDate(t, "2024-01-02")
+	to := mustDate(t, "2024-01-03")
+	raw := yahooFixture([]int64{from.Add(14 * time.Hour).Unix()})
+	events := fmt.Sprintf(`"events": {
+        "dividends": {%q: {"amount": 0.75, "date": %d}},
+        "splits": {%q: {
+          "date": %d, "numerator": 2, "denominator": 1
+        }}
+      },
+      "indicators":`,
+		"dividend-event", from.Add(14*time.Hour).Unix(),
+		"split-event", to.Add(14*time.Hour).Unix(),
+	)
+	raw = strings.Replace(raw, `"indicators":`, events, 1)
+
+	result, err := parseYahooResponse("MSFT", []byte(raw), from, to)
+	if err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+
+	if len(result.Actions) != 2 {
+		t.Fatalf("actions = %+v, want dividend and split", result.Actions)
+	}
+
+	if result.Actions[0].Type != "dividend" || result.Actions[0].Amount != 0.75 {
+		t.Fatalf("dividend = %+v", result.Actions[0])
+	}
+
+	if result.Actions[1].Type != "split" ||
+		result.Actions[1].Numerator != 2 ||
+		result.Actions[1].Denominator != 1 {
+		t.Fatalf("split = %+v", result.Actions[1])
 	}
 }
 

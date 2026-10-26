@@ -1,4 +1,4 @@
-.PHONY: dev watch overview index-refresh prepare-dev-data clean-dev \
+.PHONY: dev market-dev watch overview index-refresh prepare-dev-data clean-dev \
 	reset-dev nats-start nats-stop \
 	nats-status nats-reset \
 	doctor doctor-verbose status errors retry-download retry-process logs \
@@ -11,6 +11,11 @@ dev: nats-start prepare-dev-data
 	EDGAR_LOG="$(CHOPSTICK_DATA_DIR)/logs/edgar.log" \
 		bash -o pipefail -c \
 		'go run ./cmd/edgar run 2>&1 | tee -a "$${EDGAR_LOG}"'
+
+market-dev:
+	go run ./cmd/yf serve \
+		--manifest "$(CHOPSTICK_DATA_DIR)/sets/sp500.json" \
+		--from 2026-01-01
 
 watch: index-refresh
 	/usr/bin/osascript scripts/watch.applescript "$(CURDIR)"

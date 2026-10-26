@@ -14,7 +14,7 @@ V1 will:
 - calculate cumulative total return, CAGR, calendar-year returns, and excess
   return;
 - generate Markdown and JSON reports;
-- operate through repeatable CLI commands without a built-in scheduler;
+- support bounded manual runs and a daily in-process Yahoo sync service;
 - keep market-data acquisition outside the return engine.
 
 This is historical portfolio analysis, not a real-account tracker or strategy
@@ -27,18 +27,19 @@ Use four independent layers:
 
 ```text
 Yahoo downloader ─┐
-                  ├─> market-data verification ─> canonical dataset
-Stooq downloader ─┘                                 │
-Manual CSV import ──────────────────────────────────┘
-                                                    │
-                                                    v
-                                               analysis.db
-                                                    │
-                                                    v
-                                           return calculation
-                                                    │
-                                                    v
-                                           Markdown and JSON
+                  ├─> CSV batches ─> market.db ─> verification
+Stooq downloader ─┘                                  │
+                                                     v
+Manual CSV import ───────────────────────────> canonical dataset
+                                                     │
+                                                     v
+                                                analysis.db
+                                                     │
+                                                     v
+                                            return calculation
+                                                     │
+                                                     v
+                                            Markdown and JSON
 ```
 
 ### Source-specific downloaders
@@ -51,11 +52,53 @@ Add two small console applications:
 Each downloader will:
 
 - accept stable security IDs, provider symbols, and a date range;
-- retain the unmodified upstream response as immutable evidence;
-- produce a normalized candidate file and provenance sidecar;
+- write normalized provider observations to inspectable CSV landing batches;
+- bulk-upsert each validated CSV batch into `market.db`;
 - validate HTTP status, response shape, dates, numeric fields, and duplicates;
-- never write directly to `analysis.db`;
 - never calculate portfolio returns.
+
+Yahoo CSV batches are retained below `data/market/yahoo/batches/<ticker>/`.
+Each file covers one work item and contains both price and corporate-action
+records. The downloader writes the file atomically, reads and validates it
+through the CSV contract, and then imports the complete batch in one database
+transaction. These are normalized landing files, not raw provider responses.
+
+The Yahoo downloader uses four independently retryable work types:
+
+- bootstrap all available history when a selected security has no stored data;
+- increment after that security's successful coverage watermark;
+- reconcile its complete history after a new or changed corporate action;
+- repair an explicitly identified historical interval.
+
+`fetch` attempts a bounded number of symbols and can also use a duration limit,
+allowing a broad universe to converge over many small runs. `status` lists every
+selected symbol that still requires work. `repair` records work for a future
+fetch. A failed task retains its error and retry time, while successful price
+and corporate-action upserts advance the watermark in the same transaction.
+
+`sync` repeats bounded runs until the selected universe reaches the requested
+date or its cycle deadline expires. `serve` performs an immediate catch-up and
+then starts a new sync cycle at 21:00 `America/New_York` each day. The service
+recomputes the next local wall-clock time after every run so daylight-saving
+changes do not shift the schedule. It also reloads the constituent manifest on
+each cycle so newly selected securities become pending work.
+
+`sync` exits with status 0 when no selected symbol remains pending, status 2
+when its deadline expires with pending work, and status 1 for an operational
+failure. `status` is informational and exits successfully even when it reports
+pending work. `make market-dev` runs the daily service separately from
+`make dev`; development startup does not implicitly make provider requests.
+
+The database is authoritative during normal incremental operation. Retained
+CSV batches are not scanned when a security has stored prices. If its database
+prices are absent, bootstrap planning triggers a CSV recovery scan first. The
+longest contiguous retained prefix is bulk-upserted, after which Yahoo is only
+asked for the remaining interval. Explicit repair and reconciliation work is
+never suppressed merely because a CSV file exists.
+
+The provider price table in `market.db` is not partitioned. Its primary key is
+provider, security ID, and observation date. Repeating work is safe because
+database writes use upsert semantics.
 
 Yahoo is the initial total-return candidate. Yahoo describes adjusted close as
 including split and distribution adjustments on its
@@ -85,7 +128,7 @@ It will:
 5. Promote exactly one source for the complete comparison.
 6. Require explicit approval, including a reason, when differences exceed the
    configured tolerance.
-7. Produce an immutable, checksummed canonical dataset.
+7. Produce a canonical dataset.
 
 The default numerical tolerance will be 25 basis points in a daily percentage
 change. Structural errors, such as duplicate dates, non-positive values,
@@ -108,8 +151,8 @@ Its only market-data input is an approved canonical dataset imported into the
 existing `analysis.db`. The calculation layer will depend on a
 `MarketSeriesRepository` interface, with SQLite as the only V1 implementation.
 
-The import will be idempotent by dataset checksum. Promoted datasets remain
-immutable, so an older report can always be reproduced.
+The import will be idempotent by dataset ID and observation key. Older dataset
+IDs remain available so an older report can be reproduced.
 
 ## Data Contracts and Commands
 
@@ -180,7 +223,6 @@ A downloader candidate contains:
 - adjusted close where available;
 - dividend and split events where available;
 - provider and provider symbol;
-- retrieval time and source-response checksum;
 - declared adjustment capability.
 
 The promoted canonical observation contract contains only:
@@ -194,37 +236,29 @@ The promoted canonical observation contract contains only:
 `total_return_value` is an index-like value whose ratios represent total
 return. Its absolute level has no meaning.
 
-A sidecar records:
-
-- schema version;
-- selected source;
-- requested and covered periods;
-- all security IDs;
-- raw-response checksums;
-- verification result;
-- tolerance used;
-- approval reason when applicable;
-- canonical CSV checksum.
-
 A manual import must use this canonical format. Broker-specific conversion is
 outside V1; the tool must not guess column meanings from arbitrary exports.
 
 ### Persistence
 
-Extend `analysis.db`; do not create a feature-specific database.
+Use `market.db` for downloaded provider observations and their update state.
+Keep promoted canonical datasets and return-analysis data in `analysis.db`.
 
-Add normalized concepts for:
+Add normalized market-data concepts for:
 
 - securities and optional CIK links;
-- immutable market datasets;
+- provider prices, corporate actions, and update watermarks;
+- retained CSV landing batches;
+
+Add normalized analysis concepts for:
+
+- market datasets;
 - dataset observations;
-- import checksums and provenance.
+- import state and selected source.
 
 Basket definitions remain user-authored JSON. Reports and canonical bundles
 are files; normalized observations and import lineage are stored in SQLite.
-
-Raw downloads belong below `data/cache/market/`. Generated reports belong
-below `data/reports/returns/`.
+Generated reports belong below `data/reports/returns/`.
 
 ### CLI workflow
 
@@ -238,15 +272,20 @@ The public workflow will be:
 
 Representative command responsibilities are:
 
-- `yahoo-prices fetch`: download Yahoo evidence and candidate rows;
-- `stooq-prices fetch`: download Stooq evidence and candidate rows;
+- `yahoo-prices fetch`: execute a bounded batch of due Yahoo work;
+- `yahoo-prices sync`: run bounded batches until the target is complete;
+- `yahoo-prices serve`: catch up, then sync daily after the US market session;
+- `yahoo-prices status`: list missing, stale, or deferred Yahoo work;
+- `yahoo-prices repair`: queue a historical interval for repair;
+- `stooq-prices fetch`: download Stooq provider candidate rows;
 - `marketdata verify`: compare candidates without changing canonical data;
 - `marketdata promote`: approve and create one canonical dataset;
 - `returns import`: import a canonical dataset idempotently;
 - `returns validate`: validate portfolio definitions;
 - `returns report`: calculate and write Markdown and JSON reports.
 
-Every command will return a non-zero status for incomplete or invalid work.
+Commands return a non-zero status for invalid work or a failed fetch attempt.
+A successful bounded fetch may leave work visible to `status` for a later run.
 Promotion and import will use atomic writes or transactions.
 
 ## Return Calculation and Reporting
@@ -298,7 +337,7 @@ The Markdown report contains:
 - initial weights;
 - total return, CAGR, and excess return;
 - annual return comparison;
-- data source, dataset ID, and checksums;
+- data source and dataset ID;
 - validation or approval warnings;
 - methodology and limitations.
 
@@ -312,10 +351,10 @@ only after both formats complete successfully.
 
 1. Define the portfolio, source-mapping, candidate, canonical, and report
    schemas with fixture files.
-2. Implement the Yahoo and Stooq downloaders with immutable raw capture.
+2. Implement Yahoo and Stooq acquisition with database upserts and watermarks.
 3. Implement verification, discrepancy reporting, whole-source selection, and
    explicit promotion.
-4. Extend `analysis.db` for immutable market datasets and idempotent imports.
+4. Extend `analysis.db` for market datasets and idempotent imports.
 5. Implement the storage-independent return engine.
 6. Implement validation and report commands.
 7. Add operating documentation and link this document from `docs/index.md`.
@@ -335,7 +374,8 @@ Test from local fixtures rather than live services:
 - malformed dates and numbers;
 - duplicate or unordered observations;
 - dividend and split events;
-- immutable raw-response naming and checksums.
+- bootstrap, incremental, reconciliation, and repair work;
+- retry visibility and incremental coverage watermarks.
 
 Live-provider tests remain optional manual smoke tests.
 
@@ -350,7 +390,7 @@ Cover:
 - rejection of mixed-source datasets;
 - whole-comparison fallback to an eligible canonical source;
 - rejection of Stooq as a total-return fallback;
-- idempotent promotion by checksum.
+- idempotent promotion by dataset ID.
 
 ### Return mathematics
 
@@ -371,8 +411,8 @@ Use hand-calculated fixtures for:
 Verify:
 
 - atomic and idempotent imports;
-- preservation of older immutable datasets;
-- report reproduction from matching config and dataset checksums;
+- preservation of older datasets;
+- report reproduction from matching config and dataset ID;
 - deterministic Markdown and JSON golden files;
 - no network access during return calculation;
 - failure without partial report replacement.
