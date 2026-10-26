@@ -96,6 +96,7 @@ build:
 	go build -o $(BIN_DIR)/constituents ./cmd/constituents
 	go build -o $(BIN_DIR)/polling ./cmd/polling
 	go build -o $(BIN_DIR)/polling-reader ./cmd/polling-reader
+	go build -o $(BIN_DIR)/yahoo-prices ./cmd/yf
 
 lint:
 	golangci-lint run --fix ./cmd/... ./internal/...
