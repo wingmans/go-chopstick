@@ -2,6 +2,7 @@ package marketstore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -96,6 +97,15 @@ func TestWorkLifecycle(t *testing.T) {
 	if pending := pendingWork(t, store, security, from, nextThrough); len(pending) != 0 {
 		t.Fatalf("pending work after reconciliation = %+v", pending)
 	}
+
+	olderFrom := testDate(t, "2019-01-01")
+
+	work = requireWork(
+		t, store, security, olderFrom, nextThrough, WorkBootstrap,
+	)
+	if !work.From.Equal(olderFrom) {
+		t.Fatalf("historical backfill starts at %s, want %s", work.From, olderFrom)
+	}
 }
 
 func TestRepairFailureAndDataLossRemainDetectable(t *testing.T) {
@@ -150,6 +160,85 @@ func TestRepairFailureAndDataLossRemainDetectable(t *testing.T) {
 	work = requireWork(t, store, security, from, through, WorkBootstrap)
 	if work.FailureCount != 1 {
 		t.Fatalf("bootstrap after data loss lost failure state: %+v", work)
+	}
+}
+
+func TestOpenAddsLowerCoverageWatermark(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "market.db")
+
+	database, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatalf("open old database: %v", err)
+	}
+
+	_, err = database.ExecContext(t.Context(), `CREATE TABLE market_sync_state (
+		provider TEXT NOT NULL,
+		security_id TEXT NOT NULL,
+		bootstrap_complete INTEGER NOT NULL DEFAULT 0,
+		covered_through TEXT,
+		observed_from TEXT,
+		observed_through TEXT,
+		reconciliation_required INTEGER NOT NULL DEFAULT 0,
+		next_attempt_at TEXT,
+		failure_count INTEGER NOT NULL DEFAULT 0,
+		last_error TEXT,
+		lease_until TEXT,
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (provider, security_id)
+	)`)
+	if err != nil {
+		t.Fatalf("create old sync state: %v", err)
+	}
+
+	if err := database.Close(); err != nil {
+		t.Fatalf("close old database: %v", err)
+	}
+
+	store, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	rows, err := store.db.QueryContext(
+		t.Context(),
+		"PRAGMA table_info(market_sync_state)",
+	)
+	if err != nil {
+		t.Fatalf("inspect migrated schema: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	found := false
+
+	for rows.Next() {
+		var (
+			columnID            int
+			name, dataType      string
+			notNull, primaryKey int
+			defaultValue        any
+		)
+
+		if err := rows.Scan(
+			&columnID,
+			&name,
+			&dataType,
+			&notNull,
+			&defaultValue,
+			&primaryKey,
+		); err != nil {
+			t.Fatalf("scan migrated schema: %v", err)
+		}
+
+		found = found || name == "covered_from"
+	}
+
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate migrated schema: %v", err)
+	}
+
+	if !found {
+		t.Fatal("covered_from column was not added")
 	}
 }
 

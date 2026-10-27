@@ -4,6 +4,8 @@ set -uo pipefail
 data_dir="${CHOPSTICK_DATA_DIR:-./data}"
 polling_db="${data_dir}/polling.db"
 feed_db="${data_dir}/feed.db"
+market_db="${data_dir}/market.db"
+market_batches="${data_dir}/market/yahoo/batches"
 refresh_seconds="${OVERVIEW_INTERVAL_SECONDS:-60}"
 once=false
 
@@ -24,7 +26,8 @@ has_table() {
   local table="$2"
 
   [[ -f "${database}" ]] &&
-    [[ "$(sqlite3 -readonly -cmd ".timeout 2000" "${database}" \
+    [[ "$(sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=ON" \
+      "${database}" \
       "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='${table}';" \
       2>/dev/null)" == "1" ]]
 }
@@ -34,7 +37,8 @@ has_column() {
   local table="$2"
   local column="$3"
 
-  [[ "$(sqlite3 -readonly -cmd ".timeout 2000" "${database}" \
+  [[ "$(sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=ON" \
+    "${database}" \
     "SELECT COUNT(*) FROM pragma_table_info('${table}') WHERE name='${column}';" \
     2>/dev/null)" == "1" ]]
 }
@@ -46,7 +50,8 @@ polling_overview() {
     return
   fi
 
-  sqlite3 -readonly -cmd ".timeout 2000" "${polling_db}" <<'SQL'
+  sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=ON" \
+    "${polling_db}" <<'SQL'
 .headers off
 .mode column
 .width 27 12
@@ -95,7 +100,8 @@ feed_overview() {
   fi
 
   if ! has_column "${feed_db}" "feed_items" "selected"; then
-    sqlite3 -readonly -cmd ".timeout 2000" "${feed_db}" <<'SQL'
+    sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=ON" \
+      "${feed_db}" <<'SQL'
 .headers off
 .mode column
 .width 27 12
@@ -108,7 +114,8 @@ SQL
     return
   fi
 
-  sqlite3 -readonly -cmd ".timeout 2000" "${feed_db}" <<'SQL'
+  sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=ON" \
+    "${feed_db}" <<'SQL'
 .headers off
 .mode column
 .width 27 12
@@ -143,6 +150,122 @@ LIMIT 5;
 SQL
 }
 
+market_overview() {
+  echo
+  echo "MARKET DATA"
+  if ! has_table "${market_db}" "market_sync_state"; then
+    echo "  ${market_db} has not been initialized"
+    return
+  fi
+
+  if ! has_column "${market_db}" "market_sync_state" "covered_from"; then
+    echo "  Restart a Yahoo command to migrate market coverage tracking"
+    return
+  fi
+
+  sqlite3 -cmd ".timeout 2000" -cmd "PRAGMA query_only=ON" \
+    "${market_db}" <<'SQL'
+.headers off
+.mode column
+.width 27 42
+WITH metrics AS (
+  SELECT
+    (SELECT COUNT(*) FROM market_securities
+      WHERE provider = 'yahoo') AS securities,
+    (SELECT COUNT(DISTINCT security_id) FROM market_prices
+      WHERE provider = 'yahoo') AS priced,
+    (SELECT COUNT(*) FROM market_prices
+      WHERE provider = 'yahoo') AS prices,
+    (SELECT COUNT(*) FROM market_corporate_actions
+      WHERE provider = 'yahoo') AS actions,
+    (SELECT COUNT(*) FROM market_sync_state
+      WHERE provider = 'yahoo' AND covered_from IS NOT NULL) AS history_known,
+    (SELECT MIN(covered_through) FROM market_sync_state
+      WHERE provider = 'yahoo') AS all_checked,
+    (SELECT MAX(covered_through) FROM market_sync_state
+      WHERE provider = 'yahoo') AS newest_check,
+    (SELECT MAX(covered_from) FROM market_sync_state
+      WHERE provider = 'yahoo') AS common_start,
+    (SELECT MIN(observation_date) FROM market_prices
+      WHERE provider = 'yahoo') AS first_price,
+    (SELECT MAX(observation_date) FROM market_prices
+      WHERE provider = 'yahoo') AS last_price,
+    (SELECT COUNT(*) FROM market_sync_state
+      WHERE provider = 'yahoo' AND failure_count > 0) AS retries,
+    (SELECT COUNT(*) FROM market_sync_state
+      WHERE provider = 'yahoo' AND reconciliation_required = 1) AS reconciles,
+    (SELECT COUNT(*) FROM market_sync_state
+      WHERE provider = 'yahoo'
+        AND datetime(lease_until) > datetime('now')) AS leased,
+    (SELECT COUNT(*) FROM market_sync_state
+      WHERE provider = 'yahoo'
+        AND datetime(next_attempt_at) > datetime('now')) AS deferred
+)
+SELECT 'Pulse',
+  CASE
+    WHEN retries > 0 THEN printf('ATTENTION  %d retr%s', retries,
+      CASE WHEN retries = 1 THEN 'y' ELSE 'ies' END)
+    WHEN reconciles > 0 THEN printf('RECONCILING  %d securities', reconciles)
+    WHEN priced < securities THEN printf('LOADING  %d/%d priced',
+      priced, securities)
+    WHEN history_known < securities THEN printf('BACKFILL  %d/%d histories',
+      history_known, securities)
+    ELSE 'READY  watermarks and observations agree'
+  END
+FROM metrics
+UNION ALL
+SELECT 'History progress',
+  printf('[%s%s] %d/%d',
+    substr('####################', 1,
+      CASE WHEN securities = 0 OR history_known = 0 THEN 0
+        WHEN history_known * 20 / securities = 0 THEN 1
+        ELSE history_known * 20 / securities END),
+    substr('....................', 1,
+      20 - CASE WHEN securities = 0 OR history_known = 0 THEN 0
+        WHEN history_known * 20 / securities = 0 THEN 1
+        ELSE history_known * 20 / securities END),
+    history_known, securities)
+FROM metrics
+UNION ALL
+SELECT 'Universe / priced', printf('%d / %d', securities, priced)
+FROM metrics
+UNION ALL
+SELECT 'Common requested span',
+  CASE WHEN securities > 0 AND history_known = securities
+    THEN printf('%s -> %s', common_start, all_checked)
+    ELSE '-'
+  END
+FROM metrics
+UNION ALL
+SELECT 'Checked through',
+  CASE WHEN all_checked = newest_check THEN COALESCE(all_checked, '-')
+    ELSE printf('%s .. %s', all_checked, newest_check)
+  END
+FROM metrics
+UNION ALL
+SELECT 'Observed price span',
+  printf('%s -> %s', COALESCE(first_price, '-'), COALESCE(last_price, '-'))
+FROM metrics
+UNION ALL
+SELECT 'Prices / actions', printf('%d / %d', prices, actions)
+FROM metrics
+UNION ALL
+SELECT 'Retry / reconcile', printf('%d / %d', retries, reconciles)
+FROM metrics
+UNION ALL
+SELECT 'Leased / deferred', printf('%d / %d', leased, deferred)
+FROM metrics;
+SQL
+
+  local batch_count=0
+  [[ -d "${market_batches}" ]] &&
+    batch_count="$(find "${market_batches}" -type f -name '*.csv' 2>/dev/null |
+      wc -l | tr -d ' ')"
+
+  printf '  %-27s %s\n' "Retained CSV batches" "${batch_count}"
+  printf '  %-27s %s\n' "Daily rendezvous" "21:00 America/New_York"
+}
+
 while true; do
   if [[ -t 1 ]]; then
     printf '\033[2J\033[H'
@@ -152,6 +275,7 @@ while true; do
 
   polling_overview
   feed_overview
+  market_overview
 
   if [[ "${once}" == true ]]; then
     break

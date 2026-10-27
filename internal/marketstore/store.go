@@ -79,6 +79,7 @@ type Store struct {
 // syncState represents the synchronization state of a security with a provider.
 type syncState struct {
 	bootstrapComplete      bool
+	coveredFrom            string
 	coveredThrough         string
 	observedThrough        string
 	reconciliationRequired bool
@@ -165,6 +166,7 @@ func createschema(ctx context.Context, db *sql.DB) error {
 			provider TEXT NOT NULL,
 			security_id TEXT NOT NULL,
 			bootstrap_complete INTEGER NOT NULL DEFAULT 0,
+			covered_from TEXT,
 			covered_through TEXT,
 			observed_from TEXT,
 			observed_through TEXT,
@@ -202,7 +204,86 @@ func createschema(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
+	if err := addColumnIfMissing(
+		ctx,
+		db,
+		"market_sync_state",
+		"covered_from",
+		"TEXT",
+	); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func addColumnIfMissing(
+	ctx context.Context,
+	db *sql.DB,
+	table string,
+	column string,
+	definition string,
+) error {
+	found, err := hasColumn(ctx, db, table, column)
+	if err != nil {
+		return err
+	}
+
+	if found {
+		return nil
+	}
+
+	if _, err := db.ExecContext(
+		ctx,
+		"ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition,
+	); err != nil {
+		return fmt.Errorf("add %s.%s: %w", table, column, err)
+	}
+
+	return nil
+}
+
+func hasColumn(
+	ctx context.Context,
+	db *sql.DB,
+	table string,
+	column string,
+) (bool, error) {
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return false, fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var (
+			columnID            int
+			name, dataType      string
+			notNull, primaryKey int
+			defaultValue        any
+		)
+
+		if err := rows.Scan(
+			&columnID,
+			&name,
+			&dataType,
+			&notNull,
+			&defaultValue,
+			&primaryKey,
+		); err != nil {
+			return false, fmt.Errorf("inspect %s columns: %w", table, err)
+		}
+
+		if name == column {
+			return true, nil
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("inspect %s columns: %w", table, err)
+	}
+
+	return false, nil
 }
 
 // Close releases the database connection.
@@ -326,6 +407,10 @@ func pendingSecurity(
 	case !hasPrices || !state.bootstrapComplete:
 		item.Kind = WorkBootstrap
 		item.From = bootstrapFrom
+	case state.coveredFrom == "" ||
+		state.coveredFrom > formatDate(bootstrapFrom):
+		item.Kind = WorkBootstrap
+		item.From = bootstrapFrom
 	case state.reconciliationRequired:
 		item.Kind = WorkReconcile
 		item.From = bootstrapFrom
@@ -414,17 +499,25 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 	}
 
 	observedFrom, observedThrough := priceBounds(prices)
+	coveredFrom := coverageStart(item)
 	reconciliationRequired := actionsChanged &&
 		item.Kind != WorkBootstrap && item.Kind != WorkReconcile
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO market_sync_state
-			(provider, security_id, bootstrap_complete, covered_through,
-			 observed_from, observed_through, reconciliation_required,
-			 failure_count, updated_at)
-		VALUES (?, ?, 1, ?, ?, ?, ?, 0, ?)
+			(provider, security_id, bootstrap_complete, covered_from,
+			 covered_through, observed_from, observed_through,
+			 reconciliation_required, failure_count, updated_at)
+		VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?)
 		ON CONFLICT(provider, security_id) DO UPDATE SET
 			bootstrap_complete=1,
+			covered_from=CASE
+				WHEN excluded.covered_from IS NULL
+				THEN market_sync_state.covered_from
+				WHEN market_sync_state.covered_from IS NULL
+					OR excluded.covered_from < market_sync_state.covered_from
+				THEN excluded.covered_from
+				ELSE market_sync_state.covered_from END,
 			covered_through=CASE
 				WHEN market_sync_state.covered_through IS NULL
 					OR market_sync_state.covered_through < excluded.covered_through
@@ -454,7 +547,8 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 			last_error=NULL,
 			lease_until=NULL,
 			updated_at=excluded.updated_at`,
-		item.Provider, item.Security.ID, formatDate(item.Through),
+		item.Provider, item.Security.ID, coveredFrom,
+		formatDate(item.Through),
 		nullDate(observedFrom), nullDate(observedThrough),
 		boolInt(reconciliationRequired), formatTime(now),
 		boolInt(item.Kind == WorkReconcile)); err != nil {
@@ -645,14 +739,15 @@ func (store *Store) QueueRepair(ctx context.Context, provider string, security S
 // loadSyncState loads the current synchronization state for a given provider and security ID.
 func (store *Store) loadSyncState(ctx context.Context, provider string, securityID string) (syncState, error) {
 	var (
-		state                                            syncState
-		bootstrap, reconcile                             int
-		covered, observed, nextAttempt, lease, lastError sql.NullString
+		state                                 syncState
+		bootstrap, reconcile                  int
+		coveredFrom, coveredThrough, observed sql.NullString
+		nextAttempt, lease, lastError         sql.NullString
 	)
 
 	err := store.db.QueryRowContext(ctx, `
-		SELECT s.bootstrap_complete, s.covered_through, s.observed_through,
-			s.reconciliation_required, s.next_attempt_at,
+		SELECT s.bootstrap_complete, s.covered_from, s.covered_through,
+			s.observed_through, s.reconciliation_required, s.next_attempt_at,
 			s.failure_count, s.last_error, s.lease_until,
 			(SELECT r.from_date FROM market_repairs r
 			 WHERE r.provider = s.provider
@@ -667,7 +762,8 @@ func (store *Store) loadSyncState(ctx context.Context, provider string, security
 		FROM market_sync_state s
 		WHERE s.provider = ? AND s.security_id = ?`,
 		provider, securityID).Scan(
-		&bootstrap, &covered, &observed, &reconcile, &nextAttempt,
+		&bootstrap, &coveredFrom, &coveredThrough, &observed,
+		&reconcile, &nextAttempt,
 		&state.failureCount, &lastError, &lease,
 		&state.repairFrom, &state.repairThrough,
 	)
@@ -686,7 +782,8 @@ func (store *Store) loadSyncState(ctx context.Context, provider string, security
 	}
 
 	state.bootstrapComplete = bootstrap != 0
-	state.coveredThrough = covered.String
+	state.coveredFrom = coveredFrom.String
+	state.coveredThrough = coveredThrough.String
 	state.observedThrough = observed.String
 	state.reconciliationRequired = reconcile != 0
 	state.lastError = lastError.String
@@ -805,6 +902,14 @@ func priceBounds(prices []Price) (time.Time, time.Time) {
 	}
 
 	return first, last
+}
+
+func coverageStart(item WorkItem) any {
+	if item.Kind == WorkBootstrap || item.Kind == WorkReconcile {
+		return formatDate(item.From)
+	}
+
+	return nil
 }
 
 func workPriority(kind WorkKind) int {
