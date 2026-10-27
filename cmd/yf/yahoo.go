@@ -24,7 +24,7 @@ const (
 
 type dailyPrice struct {
 	Date     time.Time
-	Open     float64
+	Open     *float64
 	Close    float64
 	AdjClose float64
 }
@@ -374,13 +374,18 @@ func parseYahooResponse(
 			)
 		}
 
+		previousDate = observationDate
+
+		if quote.Open[index] == nil && quote.Close[index] == nil &&
+			adjusted[index] == nil {
+			continue
+		}
+
 		if err := validatePriceValues(
 			ticker, date, quote.Open[index], quote.Close[index], adjusted[index],
 		); err != nil {
 			return yahooResult{}, err
 		}
-
-		previousDate = observationDate
 
 		if date.Before(from) {
 			continue
@@ -388,7 +393,7 @@ func parseYahooResponse(
 
 		prices = append(prices, dailyPrice{
 			Date:     date,
-			Open:     *quote.Open[index],
+			Open:     quote.Open[index],
 			Close:    *quote.Close[index],
 			AdjClose: *adjusted[index],
 		})
@@ -464,16 +469,21 @@ func parseYahooActions(
 
 func validatePriceValues(ticker string, date time.Time, open, closeValue, adjusted *float64) error {
 	values := []struct {
-		name  string
-		value *float64
+		name     string
+		value    *float64
+		required bool
 	}{
 		{name: "open", value: open},
-		{name: "close", value: closeValue},
-		{name: "adjusted close", value: adjusted},
+		{name: "close", value: closeValue, required: true},
+		{name: "adjusted close", value: adjusted, required: true},
 	}
 
 	for _, item := range values {
 		if item.value == nil {
+			if !item.required {
+				continue
+			}
+
 			return fmt.Errorf(
 				"yahoo %s is null for %s on %s",
 				item.name, ticker, date.Format(dateLayout),

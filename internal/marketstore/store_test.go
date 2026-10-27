@@ -33,8 +33,14 @@ func TestWorkLifecycle(t *testing.T) {
 	}
 
 	prices := []Price{
-		{Date: testDate(t, "2020-01-02"), Open: 10, Close: 11, AdjustedClose: 9},
-		{Date: through, Open: 20, Close: 21, AdjustedClose: 19},
+		{
+			Date: testDate(t, "2020-01-02"), Open: new(10.0),
+			Close: 11, AdjustedClose: 9,
+		},
+		{
+			Date: through, Open: new(20.0), Close: 21,
+			AdjustedClose: 19,
+		},
 	}
 	actions := []CorporateAction{{
 		SourceID: "dividend:1",
@@ -71,7 +77,7 @@ func TestWorkLifecycle(t *testing.T) {
 	}
 
 	changed, err = store.Save(ctx, work, []Price{{
-		Date: nextThrough, Open: 21, Close: 22, AdjustedClose: 20,
+		Date: nextThrough, Open: new(21.0), Close: 22, AdjustedClose: 20,
 	}}, []CorporateAction{newAction}, now)
 	if err != nil || !changed {
 		t.Fatalf("save incremental: changed=%v error=%v", changed, err)
@@ -124,7 +130,7 @@ func TestRepairFailureAndDataLossRemainDetectable(t *testing.T) {
 
 	work := requireWork(t, store, security, from, through, WorkBootstrap)
 	if _, err := store.Save(ctx, work, []Price{{
-		Date: through, Open: 10, Close: 11, AdjustedClose: 9,
+		Date: through, Open: new(10.0), Close: 11, AdjustedClose: 9,
 	}}, nil, now); err != nil {
 		t.Fatalf("save bootstrap: %v", err)
 	}
@@ -239,6 +245,97 @@ func TestOpenAddsLowerCoverageWatermark(t *testing.T) {
 
 	if !found {
 		t.Fatal("covered_from column was not added")
+	}
+}
+
+func TestOpenMakesPriceOpenNullable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "market.db")
+
+	database, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatalf("open old database: %v", err)
+	}
+
+	_, err = database.ExecContext(t.Context(), `
+		CREATE TABLE market_securities (
+			provider TEXT NOT NULL,
+			security_id TEXT NOT NULL,
+			symbol TEXT NOT NULL,
+			name TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (provider, security_id),
+			UNIQUE (provider, symbol)
+		);
+		CREATE TABLE market_prices (
+			provider TEXT NOT NULL,
+			security_id TEXT NOT NULL,
+			observation_date TEXT NOT NULL,
+			currency TEXT NOT NULL,
+			open REAL NOT NULL,
+			close REAL NOT NULL,
+			adjusted_close REAL NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (provider, security_id, observation_date),
+			FOREIGN KEY (provider, security_id)
+				REFERENCES market_securities (provider, security_id)
+		);
+		INSERT INTO market_securities
+			(provider, security_id, symbol, name, updated_at)
+		VALUES ('yahoo', 'msft', 'MSFT', 'Microsoft', '2026-10-27T00:00:00Z');
+		INSERT INTO market_prices
+			(provider, security_id, observation_date, currency, open, close,
+			 adjusted_close, updated_at)
+		VALUES
+			('yahoo', 'msft', '2026-10-23', 'USD', 10, 11, 9,
+			 '2026-10-27T00:00:00Z');
+	`)
+	if err != nil {
+		t.Fatalf("create old market prices: %v", err)
+	}
+
+	if err := database.Close(); err != nil {
+		t.Fatalf("close old database: %v", err)
+	}
+
+	store, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	item := WorkItem{
+		Provider: "yahoo",
+		Security: Security{
+			ID: "msft", Symbol: "MSFT", Name: "Microsoft",
+		},
+		Kind:    WorkIncremental,
+		From:    testDate(t, "2026-10-23"),
+		Through: testDate(t, "2026-10-26"),
+	}
+
+	if _, err := store.Save(t.Context(), item, []Price{{
+		Date:          item.Through,
+		Close:         12,
+		AdjustedClose: 10,
+	}}, nil, time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("save nullable open: %v", err)
+	}
+
+	var (
+		rows      int
+		nullOpens int
+	)
+
+	if err := store.db.QueryRowContext(t.Context(), `
+		SELECT COUNT(*), SUM(CASE WHEN open IS NULL THEN 1 ELSE 0 END)
+		FROM market_prices
+		WHERE provider = 'yahoo' AND security_id = 'msft'`,
+	).Scan(&rows, &nullOpens); err != nil {
+		t.Fatalf("inspect migrated prices: %v", err)
+	}
+
+	if rows != 2 || nullOpens != 1 {
+		t.Fatalf("migrated rows=%d null opens=%d", rows, nullOpens)
 	}
 }
 

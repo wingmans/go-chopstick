@@ -61,7 +61,8 @@ func TestYahooClientFetch(t *testing.T) {
 	}
 
 	first := result.Prices[0]
-	if first.Open != 25 || first.Close != 26 || first.AdjClose != 0.06 {
+	if first.Open == nil || *first.Open != 25 || first.Close != 26 ||
+		first.AdjClose != 0.06 {
 		t.Fatalf("first price = %+v", first)
 	}
 }
@@ -183,6 +184,48 @@ func TestParseYahooResponseIncludesCorporateActions(t *testing.T) {
 	}
 }
 
+func TestParseYahooResponseAllowsNullOpen(t *testing.T) {
+	date := mustDate(t, "2024-01-02")
+	raw := strings.Replace(
+		yahooFixture([]int64{date.Add(14 * time.Hour).Unix()}),
+		`"open": [25]`,
+		`"open": [null]`,
+		1,
+	)
+
+	result, err := parseYahooResponse(
+		"MSFT", []byte(raw), date, date,
+	)
+	if err != nil {
+		t.Fatalf("parse nullable open: %v", err)
+	}
+
+	if len(result.Prices) != 1 || result.Prices[0].Open != nil {
+		t.Fatalf("prices = %+v", result.Prices)
+	}
+}
+
+func TestParseYahooResponseSkipsEmptyCandle(t *testing.T) {
+	date := mustDate(t, "2024-01-02")
+	raw := yahooFixture([]int64{date.Add(14 * time.Hour).Unix()})
+	raw = strings.Replace(raw, `"open": [25]`, `"open": [null]`, 1)
+	raw = strings.Replace(raw, `"close": [26]`, `"close": [null]`, 1)
+	raw = strings.Replace(
+		raw, `"adjclose": [0.06]`, `"adjclose": [null]`, 1,
+	)
+
+	result, err := parseYahooResponse(
+		"MSFT", []byte(raw), date, date,
+	)
+	if err != nil {
+		t.Fatalf("parse empty candle: %v", err)
+	}
+
+	if len(result.Prices) != 0 {
+		t.Fatalf("prices = %+v", result.Prices)
+	}
+}
+
 func TestParseYahooResponseRejectsInvalidData(t *testing.T) {
 	from := mustDate(t, "2024-01-02")
 	valid := yahooFixture([]int64{from.Add(14 * time.Hour).Unix()})
@@ -196,8 +239,14 @@ func TestParseYahooResponseRejectsInvalidData(t *testing.T) {
 			raw:  strings.Replace(valid, `"currency": "USD"`, `"currency": "EUR"`, 1),
 		},
 		{
-			name: "null open",
-			raw:  strings.Replace(valid, `"open": [25]`, `"open": [null]`, 1),
+			name: "null close",
+			raw:  strings.Replace(valid, `"close": [26]`, `"close": [null]`, 1),
+		},
+		{
+			name: "null adjusted close",
+			raw: strings.Replace(
+				valid, `"adjclose": [0.06]`, `"adjclose": [null]`, 1,
+			),
 		},
 	}
 

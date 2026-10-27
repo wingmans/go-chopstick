@@ -140,7 +140,7 @@ func writeBatchRows(ctx context.Context, writer *csv.Writer, item marketstore.Wo
 			item.Security.Symbol,
 			price.Date.UTC().Format(dateLayout),
 			"USD",
-			formatFloat(price.Open),
+			formatOptionalPriceFloat(price.Open),
 			formatFloat(price.Close),
 			formatFloat(price.AdjustedClose),
 			"",
@@ -483,9 +483,14 @@ func parseBatchPrice(record []string, date time.Time) (marketstore.Price, error)
 		return marketstore.Price{}, errors.New("price has action values")
 	}
 
-	open, err := parseRequiredFloat("open", record[5])
+	openValue, openValid, err := parseOptionalPriceFloat("open", record[5])
 	if err != nil {
 		return marketstore.Price{}, err
+	}
+
+	var open *float64
+	if openValid {
+		open = &openValue
 	}
 
 	closeValue, err := parseRequiredFloat("close", record[6])
@@ -570,6 +575,19 @@ func parseRequiredFloat(name, value string) (float64, error) {
 	return parsed, nil
 }
 
+func parseOptionalPriceFloat(name, value string) (float64, bool, error) {
+	if value == "" {
+		return 0, false, nil
+	}
+
+	parsed, err := parseRequiredFloat(name, value)
+	if err != nil {
+		return 0, false, err
+	}
+
+	return parsed, true, nil
+}
+
 func batchCSVHeader() []string {
 	return []string{
 		"record_type",
@@ -610,6 +628,14 @@ func validBatchKind(kind marketstore.WorkKind) bool {
 
 func formatFloat(value float64) string {
 	return strconv.FormatFloat(value, 'g', -1, 64)
+}
+
+func formatOptionalPriceFloat(value *float64) string {
+	if value == nil {
+		return ""
+	}
+
+	return formatFloat(*value)
 }
 
 func formatOptionalFloat(value float64) string {

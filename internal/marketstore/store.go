@@ -43,7 +43,7 @@ type Security struct {
 // Price is one daily provider observation.
 type Price struct {
 	Date          time.Time
-	Open          float64
+	Open          *float64
 	Close         float64
 	AdjustedClose float64
 }
@@ -134,7 +134,7 @@ func createschema(ctx context.Context, db *sql.DB) error {
 			security_id TEXT NOT NULL,
 			observation_date TEXT NOT NULL,
 			currency TEXT NOT NULL,
-			open REAL NOT NULL,
+			open REAL,
 			close REAL NOT NULL,
 			adjusted_close REAL NOT NULL,
 			updated_at TEXT NOT NULL,
@@ -214,7 +214,107 @@ func createschema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	if err := makePriceOpenNullable(ctx, db); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func makePriceOpenNullable(ctx context.Context, db *sql.DB) error {
+	required, err := columnIsRequired(ctx, db, "market_prices", "open")
+	if err != nil {
+		return err
+	}
+
+	if !required {
+		return nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin nullable market open migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	statements := []string{
+		`CREATE TABLE market_prices_nullable_migration (
+			provider TEXT NOT NULL,
+			security_id TEXT NOT NULL,
+			observation_date TEXT NOT NULL,
+			currency TEXT NOT NULL,
+			open REAL,
+			close REAL NOT NULL,
+			adjusted_close REAL NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (provider, security_id, observation_date),
+			FOREIGN KEY (provider, security_id)
+				REFERENCES market_securities (provider, security_id)
+		)`,
+		`INSERT INTO market_prices_nullable_migration
+			SELECT provider, security_id, observation_date, currency, open,
+				close, adjusted_close, updated_at
+			FROM market_prices`,
+		`DROP TABLE market_prices`,
+		`ALTER TABLE market_prices_nullable_migration RENAME TO market_prices`,
+		`CREATE INDEX market_prices_date
+			ON market_prices (provider, observation_date, security_id)`,
+	}
+
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("make market price open nullable: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit nullable market open migration: %w", err)
+	}
+
+	return nil
+}
+
+func columnIsRequired(
+	ctx context.Context,
+	db *sql.DB,
+	table string,
+	column string,
+) (bool, error) {
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return false, fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var (
+			columnID            int
+			name, dataType      string
+			notNull, primaryKey int
+			defaultValue        any
+		)
+
+		if err := rows.Scan(
+			&columnID,
+			&name,
+			&dataType,
+			&notNull,
+			&defaultValue,
+			&primaryKey,
+		); err != nil {
+			return false, fmt.Errorf("inspect %s columns: %w", table, err)
+		}
+
+		if name == column {
+			return notNull != 0, nil
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("inspect %s columns: %w", table, err)
+	}
+
+	return false, fmt.Errorf("column %s.%s does not exist", table, column)
 }
 
 func addColumnIfMissing(
@@ -849,7 +949,8 @@ func validateBatch(item WorkItem, prices []Price, actions []CorporateAction) err
 				priceDate)
 		}
 
-		if !positiveFinite(price.Open) || !positiveFinite(price.Close) ||
+		if (price.Open != nil && !positiveFinite(*price.Open)) ||
+			!positiveFinite(price.Close) ||
 			!positiveFinite(price.AdjustedClose) {
 			return fmt.Errorf("invalid price on %s", formatDate(price.Date))
 		}

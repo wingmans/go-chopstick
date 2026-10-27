@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -22,12 +23,19 @@ func TestCSVBatchStoreRoundTrip(t *testing.T) {
 		From:    mustDate(t, "2024-01-01"),
 		Through: mustDate(t, "2024-12-31"),
 	}
-	prices := []marketstore.Price{{
-		Date:          mustDate(t, "2024-01-02"),
-		Open:          10.25,
-		Close:         11.5,
-		AdjustedClose: 9.75,
-	}}
+	prices := []marketstore.Price{
+		{
+			Date:          mustDate(t, "2024-01-02"),
+			Open:          new(10.25),
+			Close:         11.5,
+			AdjustedClose: 9.75,
+		},
+		{
+			Date:          mustDate(t, "2024-01-03"),
+			Close:         12,
+			AdjustedClose: 10,
+		},
+	}
 	actions := []marketstore.CorporateAction{
 		{
 			SourceID: "dividend:1",
@@ -61,7 +69,7 @@ func TestCSVBatchStoreRoundTrip(t *testing.T) {
 		t.Fatalf("read CSV batch: %v", err)
 	}
 
-	if len(gotPrices) != 1 || gotPrices[0] != prices[0] {
+	if !reflect.DeepEqual(gotPrices, prices) {
 		t.Fatalf("round-trip prices = %+v", gotPrices)
 	}
 
@@ -88,7 +96,7 @@ func TestCSVBatchStoreRejectsWrongIdentity(t *testing.T) {
 
 	path, err := store.Write(t.Context(), item, []marketstore.Price{{
 		Date:          item.From,
-		Open:          10,
+		Open:          new(10.0),
 		Close:         11,
 		AdjustedClose: 9,
 	}}, nil)
@@ -129,7 +137,7 @@ func TestCSVBatchStoreRecoversContiguousPrefix(t *testing.T) {
 
 	if _, err := store.Write(t.Context(), bootstrap, []marketstore.Price{{
 		Date:          bootstrap.Through,
-		Open:          10,
+		Open:          new(10.0),
 		Close:         11,
 		AdjustedClose: 9,
 	}}, nil); err != nil {
@@ -138,7 +146,7 @@ func TestCSVBatchStoreRecoversContiguousPrefix(t *testing.T) {
 
 	if _, err := store.Write(t.Context(), incremental, []marketstore.Price{{
 		Date:          incremental.Through,
-		Open:          12,
+		Open:          new(12.0),
 		Close:         13,
 		AdjustedClose: 11,
 	}}, nil); err != nil {

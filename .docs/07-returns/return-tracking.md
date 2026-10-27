@@ -62,6 +62,12 @@ Each file covers one work item and contains both price and corporate-action
 records. The downloader writes the file atomically, reads and validates it
 through the CSV contract, and then imports the complete batch in one database
 transaction. These are normalized landing files, not raw provider responses.
+An absent Yahoo open is retained as an empty CSV field and SQL `NULL`; it is
+never inferred from another value. Close and adjusted close remain required
+because they are necessary for price and return calculations.
+Yahoo timestamps whose open, close, and adjusted close are all absent are
+empty placeholders rather than observations and are skipped. Partially missing
+close or adjusted-close values remain validation failures.
 
 The Yahoo downloader uses four independently retryable work types:
 
@@ -75,6 +81,11 @@ allowing a broad universe to converge over many small runs. `status` lists every
 selected symbol that still requires work. `repair` records work for a future
 fetch. A failed task retains its error and retry time, while successful price
 and corporate-action upserts advance the watermark in the same transaction.
+Lower and upper requested-coverage watermarks are stored separately from the
+first and last observations returned by the provider. Asking for an earlier
+`--from` date therefore schedules a historical bootstrap even when current
+prices already exist. This distinction also prevents a recently listed
+security from appearing incomplete merely because it has no older prices.
 
 `sync` repeats bounded runs until the selected universe reaches the requested
 date or its cycle deadline expires. `serve` performs an immediate catch-up and

@@ -176,6 +176,8 @@ WITH metrics AS (
       WHERE provider = 'yahoo') AS priced,
     (SELECT COUNT(*) FROM market_prices
       WHERE provider = 'yahoo') AS prices,
+    (SELECT COUNT(*) FROM market_prices
+      WHERE provider = 'yahoo' AND open IS NULL) AS missing_opens,
     (SELECT COUNT(*) FROM market_corporate_actions
       WHERE provider = 'yahoo') AS actions,
     (SELECT COUNT(*) FROM market_sync_state
@@ -248,6 +250,9 @@ SELECT 'Observed price span',
 FROM metrics
 UNION ALL
 SELECT 'Prices / actions', printf('%d / %d', prices, actions)
+FROM metrics
+UNION ALL
+SELECT 'Missing opens', printf('%d', missing_opens)
 FROM metrics
 UNION ALL
 SELECT 'Retry / reconcile', printf('%d / %d', retries, reconciles)

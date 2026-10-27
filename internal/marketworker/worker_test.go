@@ -61,7 +61,7 @@ func TestSyncCompletesRequestedUniverse(t *testing.T) {
 	store, security, cfg, now := testRepository(t)
 	price := marketstore.Price{
 		Date:          cfg.Through,
-		Open:          10,
+		Open:          new(10.0),
 		Close:         11,
 		AdjustedClose: 9,
 	}
@@ -105,7 +105,7 @@ func TestSyncRecoversCSVBeforeFetching(t *testing.T) {
 		Through: cfg.Through,
 		Prices: []marketstore.Price{{
 			Date:          cfg.Through,
-			Open:          10,
+			Open:          new(10.0),
 			Close:         11,
 			AdjustedClose: 9,
 		}},
