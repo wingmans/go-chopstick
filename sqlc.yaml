@@ -1,0 +1,18 @@
+version: "2"
+
+sql:
+  - name: polling
+    engine: sqlite
+    schema: internal/pollingworker/sql/schema.sql
+    queries: internal/pollingworker/sql/queries.sql
+    gen:
+      go:
+        package: dbgen
+        out: internal/pollingworker/dbgen
+        sql_package: database/sql
+        emit_empty_slices: true
+        emit_prepared_queries: true
+        omit_unused_structs: true
+        rename:
+          cik: CIK
+          feed_url: FeedURL

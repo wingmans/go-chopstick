@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
-
 	"wingman.com/fetch-ecb/internal/eventbus"
+	"wingman.com/fetch-ecb/internal/pollingworker/dbgen"
 )
 
 // FilingEvent represents the unified schema for both master.zip and RSS feeds.
@@ -60,8 +60,9 @@ type DeadLetter struct {
 }
 
 type DedupeService struct {
-	db *sql.DB
-	mu sync.Mutex
+	db      *sql.DB
+	queries *dbgen.Queries
+	mu      sync.Mutex
 }
 
 // NewDedupeService initializes SQLite with WAL mode for performance.
@@ -70,80 +71,28 @@ func NewDedupeService(dbPath string) (*DedupeService, error) {
 }
 
 func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService, error) {
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open(
+		"sqlite3",
+		dbPath+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite db: %w", err)
 	}
 
-	// Create table with AccessionNumber as the PRIMARY KEY for O(1) lookups
-	query := `
-	CREATE TABLE IF NOT EXISTS processed_accessions (
-		accession_number TEXT PRIMARY KEY,
-		cik TEXT NOT NULL,
-		form_type TEXT NOT NULL,
-		source_feed TEXT NOT NULL,
-		processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);`
-	deadLetterQuery := `
-	CREATE TABLE IF NOT EXISTS polling_dead_letters (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		feed_url TEXT NOT NULL,
-		title TEXT NOT NULL,
-		link TEXT NOT NULL,
-		raw_entry TEXT NOT NULL,
-		reason TEXT NOT NULL
-	);`
-	outboxQuery := `
-	CREATE TABLE IF NOT EXISTS polling_outbox (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		event_id TEXT NOT NULL UNIQUE,
-		subject TEXT NOT NULL,
-		payload BLOB NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		published_at DATETIME,
-		attempts INTEGER NOT NULL DEFAULT 0,
-		last_error TEXT NOT NULL DEFAULT ''
-	);`
-	failuresQuery := `
-	CREATE TABLE IF NOT EXISTS work_failures (
-		stage TEXT NOT NULL,
-		accession_number TEXT NOT NULL,
-		subject TEXT NOT NULL,
-		payload BLOB NOT NULL,
-		attempts INTEGER NOT NULL DEFAULT 0,
-		first_failed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		last_failed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		last_error TEXT NOT NULL,
-		resolved_at DATETIME,
-		PRIMARY KEY (stage, accession_number)
-	);`
-
-	if _, err := db.ExecContext(ctx, query); err != nil {
+	if err := createSchema(ctx, db); err != nil {
 		_ = db.Close()
 
-		return nil, fmt.Errorf("failed to create schema: %w", err)
+		return nil, err
 	}
 
-	if _, err := db.ExecContext(ctx, deadLetterQuery); err != nil {
+	queries, err := dbgen.Prepare(ctx, db)
+	if err != nil {
 		_ = db.Close()
 
-		return nil, fmt.Errorf("failed to create dead-letter schema: %w", err)
+		return nil, fmt.Errorf("prepare polling queries: %w", err)
 	}
 
-	if _, err := db.ExecContext(ctx, outboxQuery); err != nil {
-		_ = db.Close()
-
-		return nil, fmt.Errorf("failed to create outbox schema: %w", err)
-	}
-
-	if _, err := db.ExecContext(ctx, failuresQuery); err != nil {
-		_ = db.Close()
-
-		return nil, fmt.Errorf("failed to create work-failure schema: %w", err)
-	}
-
-	return &DedupeService{db: db}, nil
+	return &DedupeService{db: db, queries: queries}, nil
 }
 
 // NewSQLiteStore is the name used by the polling command.
@@ -153,12 +102,13 @@ func NewSQLiteStore(dbPath string) (*DedupeService, error) {
 
 // SaveDeadLetter persists a dead letter entry into the database.
 func (s *DedupeService) SaveDeadLetter(ctx context.Context, letter DeadLetter) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO polling_dead_letters (feed_url, title, link, raw_entry, reason)
-		VALUES (?, ?, ?, ?, ?);`, letter.FeedURL, letter.Title, letter.Link,
-		letter.RawEntry, letter.Reason)
-
-	return err
+	return s.queries.SaveDeadLetter(ctx, dbgen.SaveDeadLetterParams{
+		FeedURL:  letter.FeedURL,
+		Title:    letter.Title,
+		Link:     letter.Link,
+		RawEntry: letter.RawEntry,
+		Reason:   letter.Reason,
+	})
 }
 
 // IsDuplicate performs a fast check against the index.
@@ -168,16 +118,7 @@ func (s *DedupeService) IsDuplicate(accessionNumber string) (bool, error) {
 
 // IsDuplicate checks if the given accession number has already been processed.
 func (s *DedupeService) IsDuplicateContext(ctx context.Context, accessionNumber string) (bool, error) {
-	var exists bool
-
-	query := `SELECT EXISTS(SELECT 1 FROM processed_accessions WHERE accession_number = ?);`
-
-	err := s.db.QueryRowContext(ctx, query, accessionNumber).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-
-	return exists, nil
+	return s.queries.IsDuplicate(ctx, accessionNumber)
 }
 
 // SaveAccession records a newly emitted accession number atomically.
@@ -218,37 +159,27 @@ func (s *DedupeService) saveBatchContext(ctx context.Context,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO processed_accessions (accession_number, cik, form_type, source_feed)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(accession_number) DO NOTHING;
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = stmt.Close() }()
-
-	outbox, err := tx.PrepareContext(ctx, `
-		INSERT INTO polling_outbox (event_id, subject, payload)
-		VALUES (?, ?, ?)
-		ON CONFLICT(event_id) DO NOTHING;
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = outbox.Close() }()
+	queries := s.queries.WithTx(tx)
 
 	var newEvents []FilingEvent
 
 	for _, event := range events {
 		event = normalizeEvent(event)
 
-		res, err := stmt.ExecContext(ctx, event.AccessionNumber, event.CIK, event.FormType, event.SourceFeed)
+		result, err := queries.SaveProcessedAccession(
+			ctx,
+			dbgen.SaveProcessedAccessionParams{
+				AccessionNumber: event.AccessionNumber,
+				CIK:             event.CIK,
+				FormType:        event.FormType,
+				SourceFeed:      event.SourceFeed,
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
 
-		rowsAffected, err := res.RowsAffected()
+		rowsAffected, err := result.RowsAffected()
 		if err != nil {
 			return nil, err
 		}
@@ -262,8 +193,14 @@ func (s *DedupeService) saveBatchContext(ctx context.Context,
 
 			subject := eventbus.SubjectFor(eventbus.DiscoverySubject,
 				event.FormType)
-			if _, err := outbox.ExecContext(ctx, event.EventID, subject,
-				payload); err != nil {
+			if err := queries.SaveOutboxMessage(
+				ctx,
+				dbgen.SaveOutboxMessageParams{
+					EventID: event.EventID,
+					Subject: subject,
+					Payload: payload,
+				},
+			); err != nil {
 				return nil, fmt.Errorf("enqueue discovery event: %w", err)
 			}
 
@@ -278,13 +215,6 @@ func (s *DedupeService) saveBatchContext(ctx context.Context,
 	return newEvents, nil
 }
 
-type outboxMessage struct {
-	ID      int64
-	EventID string
-	Subject string
-	Payload []byte
-}
-
 // PublishPending publishes every pending row and marks it only after PubAck.
 func (s *DedupeService) PublishPending(ctx context.Context,
 	publisher eventbus.Publisher,
@@ -293,55 +223,26 @@ func (s *DedupeService) PublishPending(ctx context.Context,
 		return nil
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, event_id, subject, payload
-		FROM polling_outbox
-		WHERE published_at IS NULL
-		ORDER BY id;
-	`)
+	messages, err := s.queries.PendingOutboxMessages(ctx)
 	if err != nil {
 		return fmt.Errorf("read polling outbox: %w", err)
-	}
-
-	messages := make([]outboxMessage, 0)
-
-	for rows.Next() {
-		var message outboxMessage
-		if err := rows.Scan(&message.ID, &message.EventID, &message.Subject,
-			&message.Payload); err != nil {
-			_ = rows.Close() //nolint:sqlclosecheck // Error path before normal close.
-
-			return fmt.Errorf("scan polling outbox: %w", err)
-		}
-
-		messages = append(messages, message)
-	}
-
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close polling outbox: %w", err)
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate polling outbox: %w", err)
 	}
 
 	for _, message := range messages {
 		if err := publisher.Publish(ctx, message.Subject, message.EventID,
 			message.Payload); err != nil {
-			_, _ = s.db.ExecContext(ctx, `
-				UPDATE polling_outbox
-				SET attempts = attempts + 1, last_error = ?
-				WHERE id = ?`, err.Error(), message.ID)
+			_ = s.queries.RecordOutboxPublishFailure(
+				ctx,
+				dbgen.RecordOutboxPublishFailureParams{
+					LastError: err.Error(),
+					ID:        message.ID,
+				},
+			)
 
 			return err
 		}
 
-		if _, err := s.db.ExecContext(ctx, `
-			UPDATE polling_outbox
-			SET published_at = CURRENT_TIMESTAMP,
-				attempts = attempts + 1,
-				last_error = ''
-			WHERE id = ?`, message.ID); err != nil {
+		if err := s.queries.MarkOutboxPublished(ctx, message.ID); err != nil {
 			return fmt.Errorf("mark polling outbox published: %w", err)
 		}
 	}
@@ -351,14 +252,12 @@ func (s *DedupeService) PublishPending(ctx context.Context,
 
 // PendingOutbox returns the number of discovery events awaiting publication.
 func (s *DedupeService) PendingOutbox(ctx context.Context) (int, error) {
-	var count int
-	if err := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM polling_outbox WHERE published_at IS NULL
-	`).Scan(&count); err != nil {
+	count, err := s.queries.PendingOutboxCount(ctx)
+	if err != nil {
 		return 0, err
 	}
 
-	return count, nil
+	return int(count), nil
 }
 
 // FilterNew persists the batch and returns only events inserted this time.
@@ -368,5 +267,5 @@ func (s *DedupeService) FilterNew(ctx context.Context, events []FilingEvent) ([]
 
 // Close terminates the database connection associated with the deduplication service.
 func (s *DedupeService) Close() error {
-	return s.db.Close()
+	return errors.Join(s.queries.Close(), s.db.Close())
 }

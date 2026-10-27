@@ -1,4 +1,4 @@
-.PHONY: help setup build test lint docs-pdf clean
+.PHONY: help setup generate check-generated build test lint docs-pdf clean
 
 .DEFAULT_GOAL := help
 
@@ -37,6 +37,8 @@ help:
 		'' \
 		'  help                    Display this command list' \
 		'  setup                   Prepare the development environment' \
+		'  generate                Generate checked-in database code' \
+		'  check-generated          Verify generated database code' \
 		'  dev                     Start NATS and run the EDGAR service' \
 		'  market-dev              Run the daily Yahoo market-data service' \
 		'  watch                   Open the tiled Ghostty development console' \
@@ -89,6 +91,15 @@ setup:
 		cp .env.example .env && echo "created .env"; \
 	}'
 	bash scripts/install-tools.sh
+
+generate:
+	@test -x .tools/bin/sqlc || { \
+		echo 'sqlc is unavailable; run make setup' >&2; exit 1; \
+	}
+	.tools/bin/sqlc generate
+
+check-generated: generate
+	git diff --exit-code -- internal/pollingworker/dbgen
 
 build:
 	mkdir -p $(BIN_DIR)
