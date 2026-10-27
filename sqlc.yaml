@@ -16,3 +16,15 @@ sql:
         rename:
           cik: CIK
           feed_url: FeedURL
+  - name: market
+    engine: sqlite
+    schema: internal/marketstore/sql/schema.sql
+    queries: internal/marketstore/sql/queries.sql
+    gen:
+      go:
+        package: dbgen
+        out: internal/marketstore/dbgen
+        sql_package: database/sql
+        emit_empty_slices: true
+        emit_prepared_queries: true
+        omit_unused_structs: true
