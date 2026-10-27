@@ -59,8 +59,20 @@ data. `CHOPSTICK_DATA_DIR` defaults to `./data` and is the root for all runtime
 data, caches, databases, logs, and temporary files.
 
 The pinned NATS server is installed into the git-ignored `.tools/bin`
-directory. This does not install a system-wide binary or service. Update the
-SEC contact address in `.env` before running the service.
+directory. Setup also installs the pinned `sqlc` generator there. Neither tool
+is installed as a system-wide binary or service. Update the SEC contact
+address in `.env` before running the service.
+
+The polling schema and named queries live under
+`internal/pollingworker/sql`. The generated `dbgen` package is an internal
+implementation detail; `DedupeService` continues to own transactions and
+domain behavior. Regenerate and verify checked-in database code after editing
+SQL:
+
+```sh
+make generate
+make check-generated
+```
 
 Check configuration and infrastructure without changing them:
 

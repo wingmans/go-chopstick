@@ -4,6 +4,7 @@
 
 BIN_DIR := bin
 CHOPSTICK_DATA_DIR ?= ./data
+SQLC ?= .tools/bin/sqlc
 
 -include .env
 
@@ -95,13 +96,20 @@ setup:
 	bash scripts/install-tools.sh
 
 generate:
-	@test -x .tools/bin/sqlc || { \
+	@command -v "$(SQLC)" >/dev/null 2>&1 || { \
 		echo 'sqlc is unavailable; run make setup' >&2; exit 1; \
 	}
-	.tools/bin/sqlc generate
+	$(SQLC) generate
 
 check-generated: generate
-	git diff --exit-code -- internal/pollingworker/dbgen
+	$(SQLC) vet
+	@test -z "$$(git status --short --untracked-files=all -- \
+		internal/pollingworker/dbgen)" || { \
+		echo 'generated database code is out of date' >&2; \
+		git status --short --untracked-files=all -- \
+			internal/pollingworker/dbgen; \
+		exit 1; \
+	}
 
 build:
 	mkdir -p $(BIN_DIR)
