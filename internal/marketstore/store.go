@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"wingman.com/fetch-ecb/internal/marketstore/dbgen"
 )
 
 const dateLayout = "2006-01-02"
@@ -73,7 +73,8 @@ type WorkItem struct {
 
 // Store is an unpartitioned SQLite market-data store.
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	queries *dbgen.Queries
 }
 
 // syncState represents the synchronization state of a security with a provider.
@@ -101,294 +102,36 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, fmt.Errorf("create market database directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open(
+		"sqlite3",
+		path+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate"+
+			"&_foreign_keys=on",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("open market database: %w", err)
 	}
 
 	db.SetMaxOpenConns(1)
 
-	store := &Store{db: db}
-	if err := createschema(ctx, db); err != nil {
+	if err := createSchema(ctx, db); err != nil {
 		_ = db.Close()
 
 		return nil, err
 	}
 
-	return store, nil
-}
-
-func createschema(ctx context.Context, db *sql.DB) error {
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS market_securities (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (provider, security_id),
-			UNIQUE (provider, symbol)
-		)`,
-		`CREATE TABLE IF NOT EXISTS market_prices (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			observation_date TEXT NOT NULL,
-			currency TEXT NOT NULL,
-			open REAL,
-			close REAL NOT NULL,
-			adjusted_close REAL NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (provider, security_id, observation_date),
-			FOREIGN KEY (provider, security_id)
-				REFERENCES market_securities (provider, security_id)
-		)`,
-		`CREATE INDEX IF NOT EXISTS market_prices_date
-			ON market_prices (provider, observation_date, security_id)`,
-		`CREATE TABLE IF NOT EXISTS market_corporate_actions (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			source_id TEXT NOT NULL,
-			action_date TEXT NOT NULL,
-			action_type TEXT NOT NULL,
-			amount REAL,
-			numerator REAL,
-			denominator REAL,
-			reconciled_at TEXT,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (provider, security_id, source_id),
-			FOREIGN KEY (provider, security_id)
-				REFERENCES market_securities (provider, security_id)
-		)`,
-		`CREATE INDEX IF NOT EXISTS market_actions_date
-			ON market_corporate_actions
-			(provider, security_id, action_date)`,
-		`CREATE TABLE IF NOT EXISTS market_sync_state (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			bootstrap_complete INTEGER NOT NULL DEFAULT 0,
-			covered_from TEXT,
-			covered_through TEXT,
-			observed_from TEXT,
-			observed_through TEXT,
-			reconciliation_required INTEGER NOT NULL DEFAULT 0,
-			next_attempt_at TEXT,
-			failure_count INTEGER NOT NULL DEFAULT 0,
-			last_error TEXT,
-			lease_until TEXT,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (provider, security_id),
-			FOREIGN KEY (provider, security_id)
-				REFERENCES market_securities (provider, security_id)
-		)`,
-		`CREATE TABLE IF NOT EXISTS market_repairs (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			from_date TEXT NOT NULL,
-			through_date TEXT NOT NULL,
-			completed_at TEXT,
-			created_at TEXT NOT NULL,
-			PRIMARY KEY
-				(provider, security_id, from_date, through_date),
-			FOREIGN KEY (provider, security_id)
-				REFERENCES market_securities (provider, security_id)
-		)`,
-	}
-
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-		return fmt.Errorf("enable market database foreign keys: %w", err)
-	}
-
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("apply market database schema: %w", err)
-		}
-	}
-
-	if err := addColumnIfMissing(
-		ctx,
-		db,
-		"market_sync_state",
-		"covered_from",
-		"TEXT",
-	); err != nil {
-		return err
-	}
-
-	if err := makePriceOpenNullable(ctx, db); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func makePriceOpenNullable(ctx context.Context, db *sql.DB) error {
-	required, err := columnIsRequired(ctx, db, "market_prices", "open")
+	queries, err := dbgen.Prepare(ctx, db)
 	if err != nil {
-		return err
+		_ = db.Close()
+
+		return nil, fmt.Errorf("prepare market queries: %w", err)
 	}
 
-	if !required {
-		return nil
-	}
-
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin nullable market open migration: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	statements := []string{
-		`CREATE TABLE market_prices_nullable_migration (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			observation_date TEXT NOT NULL,
-			currency TEXT NOT NULL,
-			open REAL,
-			close REAL NOT NULL,
-			adjusted_close REAL NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (provider, security_id, observation_date),
-			FOREIGN KEY (provider, security_id)
-				REFERENCES market_securities (provider, security_id)
-		)`,
-		`INSERT INTO market_prices_nullable_migration
-			SELECT provider, security_id, observation_date, currency, open,
-				close, adjusted_close, updated_at
-			FROM market_prices`,
-		`DROP TABLE market_prices`,
-		`ALTER TABLE market_prices_nullable_migration RENAME TO market_prices`,
-		`CREATE INDEX market_prices_date
-			ON market_prices (provider, observation_date, security_id)`,
-	}
-
-	for _, statement := range statements {
-		if _, err := tx.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("make market price open nullable: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit nullable market open migration: %w", err)
-	}
-
-	return nil
-}
-
-func columnIsRequired(
-	ctx context.Context,
-	db *sql.DB,
-	table string,
-	column string,
-) (bool, error) {
-	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
-	if err != nil {
-		return false, fmt.Errorf("inspect %s schema: %w", table, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	for rows.Next() {
-		var (
-			columnID            int
-			name, dataType      string
-			notNull, primaryKey int
-			defaultValue        any
-		)
-
-		if err := rows.Scan(
-			&columnID,
-			&name,
-			&dataType,
-			&notNull,
-			&defaultValue,
-			&primaryKey,
-		); err != nil {
-			return false, fmt.Errorf("inspect %s columns: %w", table, err)
-		}
-
-		if name == column {
-			return notNull != 0, nil
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("inspect %s columns: %w", table, err)
-	}
-
-	return false, fmt.Errorf("column %s.%s does not exist", table, column)
-}
-
-func addColumnIfMissing(
-	ctx context.Context,
-	db *sql.DB,
-	table string,
-	column string,
-	definition string,
-) error {
-	found, err := hasColumn(ctx, db, table, column)
-	if err != nil {
-		return err
-	}
-
-	if found {
-		return nil
-	}
-
-	if _, err := db.ExecContext(
-		ctx,
-		"ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition,
-	); err != nil {
-		return fmt.Errorf("add %s.%s: %w", table, column, err)
-	}
-
-	return nil
-}
-
-func hasColumn(
-	ctx context.Context,
-	db *sql.DB,
-	table string,
-	column string,
-) (bool, error) {
-	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
-	if err != nil {
-		return false, fmt.Errorf("inspect %s schema: %w", table, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	for rows.Next() {
-		var (
-			columnID            int
-			name, dataType      string
-			notNull, primaryKey int
-			defaultValue        any
-		)
-
-		if err := rows.Scan(
-			&columnID,
-			&name,
-			&dataType,
-			&notNull,
-			&defaultValue,
-			&primaryKey,
-		); err != nil {
-			return false, fmt.Errorf("inspect %s columns: %w", table, err)
-		}
-
-		if name == column {
-			return true, nil
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("inspect %s columns: %w", table, err)
-	}
-
-	return false, nil
+	return &Store{db: db, queries: queries}, nil
 }
 
 // Close releases the database connection.
 func (store *Store) Close() error {
-	return store.db.Close()
+	return errors.Join(store.queries.Close(), store.db.Close())
 }
 
 // RegisterSecurities upserts the current provider mappings from a manifest.
@@ -403,21 +146,23 @@ func (store *Store) RegisterSecurities(ctx context.Context, provider string, sec
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	queries := store.queries.WithTx(tx)
+
 	for _, security := range securities {
 		if err := validateSecurity(security); err != nil {
 			return err
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO market_securities
-				(provider, security_id, symbol, name, updated_at)
-			VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT(provider, security_id) DO UPDATE SET
-				symbol=excluded.symbol,
-				name=excluded.name,
-				updated_at=excluded.updated_at`,
-			provider, security.ID, security.Symbol, security.Name,
-			formatTime(now)); err != nil {
+		if err := queries.RegisterSecurity(
+			ctx,
+			dbgen.RegisterSecurityParams{
+				Provider:   provider,
+				SecurityID: security.ID,
+				Symbol:     security.Symbol,
+				Name:       security.Name,
+				UpdatedAt:  formatTime(now),
+			},
+		); err != nil {
 			return fmt.Errorf("register security %s: %w", security.Symbol, err)
 		}
 	}
@@ -538,17 +283,12 @@ func pendingSecurity(
 
 // Claim obtains a temporary lease for one work item.
 func (store *Store) Claim(ctx context.Context, item WorkItem, now time.Time, leaseUntil time.Time) (bool, error) {
-	result, err := store.db.ExecContext(ctx, `
-		INSERT INTO market_sync_state
-			(provider, security_id, lease_until, updated_at)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(provider, security_id) DO UPDATE SET
-			lease_until=excluded.lease_until,
-			updated_at=excluded.updated_at
-		WHERE market_sync_state.lease_until IS NULL
-			OR market_sync_state.lease_until <= ?`,
-		item.Provider, item.Security.ID, formatTime(leaseUntil), formatTime(now),
-		formatTime(now))
+	result, err := store.queries.ClaimWork(ctx, dbgen.ClaimWorkParams{
+		Provider:   item.Provider,
+		SecurityID: item.Security.ID,
+		LeaseUntil: validString(formatTime(leaseUntil)),
+		UpdatedAt:  formatTime(now),
+	})
 	if err != nil {
 		return false, fmt.Errorf("claim %s work for %s: %w", item.Kind,
 			item.Security.Symbol, err)
@@ -574,26 +314,24 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	queries := store.queries.WithTx(tx)
+
 	for _, price := range prices {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO market_prices
-				(provider, security_id, observation_date, currency, open,
-				 close, adjusted_close, updated_at)
-			VALUES (?, ?, ?, 'USD', ?, ?, ?, ?)
-			ON CONFLICT(provider, security_id, observation_date) DO UPDATE SET
-				currency=excluded.currency,
-				open=excluded.open,
-				close=excluded.close,
-				adjusted_close=excluded.adjusted_close,
-				updated_at=excluded.updated_at`,
-			item.Provider, item.Security.ID, formatDate(price.Date), price.Open,
-			price.Close, price.AdjustedClose, formatTime(now)); err != nil {
+		if err := queries.UpsertPrice(ctx, dbgen.UpsertPriceParams{
+			Provider:        item.Provider,
+			SecurityID:      item.Security.ID,
+			ObservationDate: formatDate(price.Date),
+			Open:            nullablePrice(price.Open),
+			Close:           price.Close,
+			AdjustedClose:   price.AdjustedClose,
+			UpdatedAt:       formatTime(now),
+		}); err != nil {
 			return false, fmt.Errorf("upsert price for %s: %w",
 				item.Security.Symbol, err)
 		}
 	}
 
-	actionsChanged, err := saveActions(ctx, tx, item, actions, now)
+	actionsChanged, err := saveActions(ctx, queries, item, actions, now)
 	if err != nil {
 		return false, err
 	}
@@ -603,77 +341,56 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 	reconciliationRequired := actionsChanged &&
 		item.Kind != WorkBootstrap && item.Kind != WorkReconcile
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO market_sync_state
-			(provider, security_id, bootstrap_complete, covered_from,
-			 covered_through, observed_from, observed_through,
-			 reconciliation_required, failure_count, updated_at)
-		VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?)
-		ON CONFLICT(provider, security_id) DO UPDATE SET
-			bootstrap_complete=1,
-			covered_from=CASE
-				WHEN excluded.covered_from IS NULL
-				THEN market_sync_state.covered_from
-				WHEN market_sync_state.covered_from IS NULL
-					OR excluded.covered_from < market_sync_state.covered_from
-				THEN excluded.covered_from
-				ELSE market_sync_state.covered_from END,
-			covered_through=CASE
-				WHEN market_sync_state.covered_through IS NULL
-					OR market_sync_state.covered_through < excluded.covered_through
-				THEN excluded.covered_through
-				ELSE market_sync_state.covered_through END,
-			observed_from=CASE
-				WHEN excluded.observed_from IS NULL
-				THEN market_sync_state.observed_from
-				WHEN market_sync_state.observed_from IS NULL
-					OR excluded.observed_from < market_sync_state.observed_from
-				THEN excluded.observed_from
-				ELSE market_sync_state.observed_from END,
-			observed_through=CASE
-				WHEN excluded.observed_through IS NULL
-				THEN market_sync_state.observed_through
-				WHEN market_sync_state.observed_through IS NULL
-					OR excluded.observed_through > market_sync_state.observed_through
-				THEN excluded.observed_through
-				ELSE market_sync_state.observed_through END,
-			reconciliation_required=CASE
-				WHEN ? = 1 THEN 0
-				WHEN market_sync_state.reconciliation_required = 1
-					OR excluded.reconciliation_required = 1 THEN 1
-				ELSE 0 END,
-			next_attempt_at=NULL,
-			failure_count=0,
-			last_error=NULL,
-			lease_until=NULL,
-			updated_at=excluded.updated_at`,
-		item.Provider, item.Security.ID, coveredFrom,
-		formatDate(item.Through),
-		nullDate(observedFrom), nullDate(observedThrough),
-		boolInt(reconciliationRequired), formatTime(now),
-		boolInt(item.Kind == WorkReconcile)); err != nil {
+	if err := queries.AdvanceSyncState(ctx, dbgen.AdvanceSyncStateParams{
+		Provider:               item.Provider,
+		SecurityID:             item.Security.ID,
+		CoveredFrom:            coveredFrom,
+		CoveredThrough:         validString(formatDate(item.Through)),
+		ObservedFrom:           nullDate(observedFrom),
+		ObservedThrough:        nullDate(observedThrough),
+		ReconciliationRequired: int64(boolInt(reconciliationRequired)),
+		UpdatedAt:              formatTime(now),
+	}); err != nil {
 		return false, fmt.Errorf("advance sync state for %s: %w",
 			item.Security.Symbol, err)
 	}
 
+	if item.Kind == WorkReconcile {
+		if err := queries.ClearReconciliation(
+			ctx,
+			dbgen.ClearReconciliationParams{
+				Provider:   item.Provider,
+				SecurityID: item.Security.ID,
+			},
+		); err != nil {
+			return false, fmt.Errorf("complete reconciliation for %s: %w",
+				item.Security.Symbol, err)
+		}
+	}
+
 	switch item.Kind {
 	case WorkRepair:
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE market_repairs SET completed_at = ?
-			WHERE provider = ? AND security_id = ? AND from_date = ?
-				AND through_date = ?`,
-			formatTime(now), item.Provider, item.Security.ID,
-			formatDate(item.From), formatDate(item.Through)); err != nil {
+		if err := queries.CompleteRepair(ctx, dbgen.CompleteRepairParams{
+			CompletedAt: validString(formatTime(now)),
+			Provider:    item.Provider,
+			SecurityID:  item.Security.ID,
+			FromDate:    formatDate(item.From),
+			ThroughDate: formatDate(item.Through),
+		}); err != nil {
 			return false, fmt.Errorf("complete repair for %s: %w",
 				item.Security.Symbol, err)
 		}
 	case WorkBootstrap, WorkReconcile:
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE market_repairs SET completed_at = ?
-			WHERE provider = ? AND security_id = ? AND completed_at IS NULL
-				AND from_date >= ? AND through_date <= ?`,
-			formatTime(now), item.Provider, item.Security.ID,
-			formatDate(item.From), formatDate(item.Through)); err != nil {
+		if err := queries.CompleteCoveredRepairs(
+			ctx,
+			dbgen.CompleteCoveredRepairsParams{
+				CompletedAt: validString(formatTime(now)),
+				Provider:    item.Provider,
+				SecurityID:  item.Security.ID,
+				FromDate:    formatDate(item.From),
+				ThroughDate: formatDate(item.Through),
+			},
+		); err != nil {
 			return false, fmt.Errorf("complete covered repairs for %s: %w",
 				item.Security.Symbol, err)
 		}
@@ -688,11 +405,18 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 	return actionsChanged, nil
 }
 
-func saveActions(ctx context.Context, tx *sql.Tx, item WorkItem, actions []CorporateAction, now time.Time) (bool, error) {
+func saveActions(
+	ctx context.Context,
+	queries *dbgen.Queries,
+	item WorkItem,
+	actions []CorporateAction,
+	now time.Time,
+) (bool, error) {
 	if item.Kind == WorkBootstrap || item.Kind == WorkReconcile {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM market_corporate_actions
-			WHERE provider = ? AND security_id = ?`, item.Provider,
-			item.Security.ID); err != nil {
+		if err := queries.DeleteActions(ctx, dbgen.DeleteActionsParams{
+			Provider:   item.Provider,
+			SecurityID: item.Security.ID,
+		}); err != nil {
 			return false, fmt.Errorf("replace actions for %s: %w",
 				item.Security.Symbol, err)
 		}
@@ -701,49 +425,30 @@ func saveActions(ctx context.Context, tx *sql.Tx, item WorkItem, actions []Corpo
 	changed := false
 
 	for _, action := range actions {
-		actionChanged, err := actionDiffers(ctx, tx, item, action)
+		actionChanged, err := actionDiffers(ctx, queries, item, action)
 		if err != nil {
 			return false, err
 		}
 
 		changed = changed || actionChanged
 
-		reconciledAt := any(nil)
+		var reconciledAt sql.NullString
 		if item.Kind == WorkBootstrap || item.Kind == WorkReconcile {
-			reconciledAt = formatTime(now)
+			reconciledAt = validString(formatTime(now))
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO market_corporate_actions
-				(provider, security_id, source_id, action_date, action_type,
-				 amount, numerator, denominator, reconciled_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(provider, security_id, source_id) DO UPDATE SET
-				action_date=excluded.action_date,
-				action_type=excluded.action_type,
-				amount=excluded.amount,
-				numerator=excluded.numerator,
-				denominator=excluded.denominator,
-				reconciled_at=CASE
-					WHEN excluded.reconciled_at IS NOT NULL
-					THEN excluded.reconciled_at
-					WHEN market_corporate_actions.action_date
-						!= excluded.action_date
-						OR market_corporate_actions.action_type
-						!= excluded.action_type
-						OR market_corporate_actions.amount
-						IS NOT excluded.amount
-						OR market_corporate_actions.numerator
-						IS NOT excluded.numerator
-						OR market_corporate_actions.denominator
-						IS NOT excluded.denominator
-					THEN NULL
-					ELSE market_corporate_actions.reconciled_at END,
-				updated_at=excluded.updated_at`,
-			item.Provider, item.Security.ID, action.SourceID,
-			formatDate(action.Date), action.Type, nullableNumber(action.Amount),
-			nullableNumber(action.Numerator), nullableNumber(action.Denominator),
-			reconciledAt, formatTime(now)); err != nil {
+		if err := queries.UpsertAction(ctx, dbgen.UpsertActionParams{
+			Provider:     item.Provider,
+			SecurityID:   item.Security.ID,
+			SourceID:     action.SourceID,
+			ActionDate:   formatDate(action.Date),
+			ActionType:   action.Type,
+			Amount:       nullableNumber(action.Amount),
+			Numerator:    nullableNumber(action.Numerator),
+			Denominator:  nullableNumber(action.Denominator),
+			ReconciledAt: reconciledAt,
+			UpdatedAt:    formatTime(now),
+		}); err != nil {
 			return false, fmt.Errorf("upsert action for %s: %w",
 				item.Security.Symbol, err)
 		}
@@ -752,19 +457,17 @@ func saveActions(ctx context.Context, tx *sql.Tx, item WorkItem, actions []Corpo
 	return changed, nil
 }
 
-func actionDiffers(ctx context.Context, tx *sql.Tx, item WorkItem, action CorporateAction) (bool, error) {
-	var (
-		date, actionType               string
-		amount, numerator, denominator sql.NullFloat64
-	)
-
-	err := tx.QueryRowContext(ctx, `
-		SELECT action_date, action_type, amount, numerator, denominator
-		FROM market_corporate_actions
-		WHERE provider = ? AND security_id = ? AND source_id = ?`,
-		item.Provider, item.Security.ID, action.SourceID).Scan(
-		&date, &actionType, &amount, &numerator, &denominator,
-	)
+func actionDiffers(
+	ctx context.Context,
+	queries *dbgen.Queries,
+	item WorkItem,
+	action CorporateAction,
+) (bool, error) {
+	stored, err := queries.MarketAction(ctx, dbgen.MarketActionParams{
+		Provider:   item.Provider,
+		SecurityID: item.Security.ID,
+		SourceID:   action.SourceID,
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return true, nil
 	}
@@ -774,10 +477,11 @@ func actionDiffers(ctx context.Context, tx *sql.Tx, item WorkItem, action Corpor
 			item.Security.Symbol, err)
 	}
 
-	return date != formatDate(action.Date) || actionType != action.Type ||
-		!sameNumber(amount, action.Amount) ||
-		!sameNumber(numerator, action.Numerator) ||
-		!sameNumber(denominator, action.Denominator), nil
+	return stored.ActionDate != formatDate(action.Date) ||
+		stored.ActionType != action.Type ||
+		!sameNumber(stored.Amount, action.Amount) ||
+		!sameNumber(stored.Numerator, action.Numerator) ||
+		!sameNumber(stored.Denominator, action.Denominator), nil
 }
 
 // Fail records a retryable work failure and releases its lease.
@@ -795,19 +499,14 @@ func (store *Store) Fail(
 		message = message[:1000]
 	}
 
-	_, err := store.db.ExecContext(ctx, `
-		INSERT INTO market_sync_state
-			(provider, security_id, next_attempt_at, failure_count,
-			 last_error, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(provider, security_id) DO UPDATE SET
-			next_attempt_at=excluded.next_attempt_at,
-			failure_count=excluded.failure_count,
-			last_error=excluded.last_error,
-			lease_until=NULL,
-			updated_at=excluded.updated_at`,
-		item.Provider, item.Security.ID, formatTime(now.Add(delay)),
-		failureCount, message, formatTime(now))
+	err := store.queries.RecordFailure(ctx, dbgen.RecordFailureParams{
+		Provider:      item.Provider,
+		SecurityID:    item.Security.ID,
+		NextAttemptAt: validString(formatTime(now.Add(delay))),
+		FailureCount:  int64(failureCount),
+		LastError:     validString(message),
+		UpdatedAt:     formatTime(now),
+	})
 	if err != nil {
 		return fmt.Errorf("record failure for %s: %w", item.Security.Symbol, err)
 	}
@@ -821,14 +520,13 @@ func (store *Store) QueueRepair(ctx context.Context, provider string, security S
 		return errors.New("repair target precedes repair start")
 	}
 
-	_, err := store.db.ExecContext(ctx, `
-		INSERT INTO market_repairs
-			(provider, security_id, from_date, through_date, created_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(provider, security_id, from_date, through_date)
-		DO UPDATE SET completed_at=NULL`,
-		provider, security.ID, formatDate(from), formatDate(through),
-		formatTime(now))
+	err := store.queries.QueueRepair(ctx, dbgen.QueueRepairParams{
+		Provider:    provider,
+		SecurityID:  security.ID,
+		FromDate:    formatDate(from),
+		ThroughDate: formatDate(through),
+		CreatedAt:   formatTime(now),
+	})
 	if err != nil {
 		return fmt.Errorf("queue repair for %s: %w", security.Symbol, err)
 	}
@@ -838,77 +536,62 @@ func (store *Store) QueueRepair(ctx context.Context, provider string, security S
 
 // loadSyncState loads the current synchronization state for a given provider and security ID.
 func (store *Store) loadSyncState(ctx context.Context, provider string, securityID string) (syncState, error) {
-	var (
-		state                                 syncState
-		bootstrap, reconcile                  int
-		coveredFrom, coveredThrough, observed sql.NullString
-		nextAttempt, lease, lastError         sql.NullString
-	)
-
-	err := store.db.QueryRowContext(ctx, `
-		SELECT s.bootstrap_complete, s.covered_from, s.covered_through,
-			s.observed_through, s.reconciliation_required, s.next_attempt_at,
-			s.failure_count, s.last_error, s.lease_until,
-			(SELECT r.from_date FROM market_repairs r
-			 WHERE r.provider = s.provider
-				AND r.security_id = s.security_id
-				AND r.completed_at IS NULL
-			 ORDER BY r.from_date LIMIT 1),
-			(SELECT r.through_date FROM market_repairs r
-			 WHERE r.provider = s.provider
-				AND r.security_id = s.security_id
-				AND r.completed_at IS NULL
-			 ORDER BY r.from_date LIMIT 1)
-		FROM market_sync_state s
-		WHERE s.provider = ? AND s.security_id = ?`,
-		provider, securityID).Scan(
-		&bootstrap, &coveredFrom, &coveredThrough, &observed,
-		&reconcile, &nextAttempt,
-		&state.failureCount, &lastError, &lease,
-		&state.repairFrom, &state.repairThrough,
+	stored, err := store.queries.LoadSyncState(
+		ctx,
+		dbgen.LoadSyncStateParams{
+			Provider:   provider,
+			SecurityID: securityID,
+		},
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		repairFrom, repairThrough, repairErr := store.pendingRepair(
-			ctx, provider, securityID,
-		)
-		state.repairFrom = repairFrom
-		state.repairThrough = repairThrough
-
-		return state, repairErr
+		return store.syncStateWithRepair(ctx, syncState{}, provider,
+			securityID)
 	}
 
 	if err != nil {
 		return syncState{}, fmt.Errorf("load market sync state: %w", err)
 	}
 
-	state.bootstrapComplete = bootstrap != 0
-	state.coveredFrom = coveredFrom.String
-	state.coveredThrough = coveredThrough.String
-	state.observedThrough = observed.String
-	state.reconciliationRequired = reconcile != 0
-	state.lastError = lastError.String
-	state.nextAttempt = parseOptionalTime(nextAttempt.String)
-	state.leaseUntil = parseOptionalTime(lease.String)
+	state := syncState{
+		bootstrapComplete:      stored.BootstrapComplete != 0,
+		coveredFrom:            stored.CoveredFrom.String,
+		coveredThrough:         stored.CoveredThrough.String,
+		observedThrough:        stored.ObservedThrough.String,
+		reconciliationRequired: stored.ReconciliationRequired != 0,
+		nextAttempt:            parseOptionalTime(stored.NextAttemptAt.String),
+		leaseUntil:             parseOptionalTime(stored.LeaseUntil.String),
+		failureCount:           int(stored.FailureCount),
+		lastError:              stored.LastError.String,
+	}
 
-	return state, nil
+	return store.syncStateWithRepair(ctx, state, provider, securityID)
 }
 
-func (store *Store) pendingRepair(ctx context.Context, provider string, securityID string) (sql.NullString, sql.NullString, error) {
-	var from, through sql.NullString
-
-	err := store.db.QueryRowContext(ctx, `
-		SELECT from_date, through_date FROM market_repairs
-		WHERE provider = ? AND security_id = ? AND completed_at IS NULL
-		ORDER BY from_date LIMIT 1`, provider, securityID).Scan(&from, &through)
+func (store *Store) syncStateWithRepair(
+	ctx context.Context,
+	state syncState,
+	provider string,
+	securityID string,
+) (syncState, error) {
+	repair, err := store.queries.PendingRepair(
+		ctx,
+		dbgen.PendingRepairParams{
+			Provider:   provider,
+			SecurityID: securityID,
+		},
+	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return from, through, nil
+		return state, nil
 	}
 
 	if err != nil {
-		return from, through, fmt.Errorf("load pending market repair: %w", err)
+		return syncState{}, fmt.Errorf("load pending market repair: %w", err)
 	}
 
-	return from, through, nil
+	state.repairFrom = validString(repair.FromDate)
+	state.repairThrough = validString(repair.ThroughDate)
+
+	return state, nil
 }
 
 func (store *Store) hasPrices(
@@ -916,16 +599,15 @@ func (store *Store) hasPrices(
 	provider string,
 	securityID string,
 ) (bool, error) {
-	var exists int
-
-	if err := store.db.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM market_prices
-		WHERE provider = ? AND security_id = ?
-	)`, provider, securityID).Scan(&exists); err != nil {
+	exists, err := store.queries.HasPrices(ctx, dbgen.HasPricesParams{
+		Provider:   provider,
+		SecurityID: securityID,
+	})
+	if err != nil {
 		return false, fmt.Errorf("check stored market prices: %w", err)
 	}
 
-	return exists != 0, nil
+	return exists, nil
 }
 
 func validateSecurity(security Security) error {
@@ -1005,12 +687,12 @@ func priceBounds(prices []Price) (time.Time, time.Time) {
 	return first, last
 }
 
-func coverageStart(item WorkItem) any {
+func coverageStart(item WorkItem) sql.NullString {
 	if item.Kind == WorkBootstrap || item.Kind == WorkReconcile {
-		return formatDate(item.From)
+		return validString(formatDate(item.From))
 	}
 
-	return nil
+	return sql.NullString{}
 }
 
 func workPriority(kind WorkKind) int {
@@ -1034,12 +716,12 @@ func retryDelay(failureCount int) time.Duration {
 	return time.Minute * time.Duration(1<<shift)
 }
 
-func nullableNumber(value float64) any {
+func nullableNumber(value float64) sql.NullFloat64 {
 	if value == 0 {
-		return nil
+		return sql.NullFloat64{}
 	}
 
-	return value
+	return sql.NullFloat64{Float64: value, Valid: true}
 }
 
 func sameNumber(stored sql.NullFloat64, value float64) bool {
@@ -1050,12 +732,24 @@ func sameNumber(stored sql.NullFloat64, value float64) bool {
 	return stored.Valid && stored.Float64 == value
 }
 
-func nullDate(value time.Time) any {
+func nullDate(value time.Time) sql.NullString {
 	if value.IsZero() {
-		return nil
+		return sql.NullString{}
 	}
 
-	return formatDate(value)
+	return validString(formatDate(value))
+}
+
+func nullablePrice(value *float64) sql.NullFloat64 {
+	if value == nil {
+		return sql.NullFloat64{}
+	}
+
+	return sql.NullFloat64{Float64: *value, Valid: true}
+}
+
+func validString(value string) sql.NullString {
+	return sql.NullString{String: value, Valid: true}
 }
 
 func boolInt(value bool) int {

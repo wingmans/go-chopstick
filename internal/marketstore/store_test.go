@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -169,7 +170,9 @@ func TestRepairFailureAndDataLossRemainDetectable(t *testing.T) {
 	}
 }
 
-func TestOpenAddsLowerCoverageWatermark(t *testing.T) {
+func TestOpenRejectsUnversionedDatabase(t *testing.T) {
+	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), "market.db")
 
 	database, err := sql.Open("sqlite3", path)
@@ -177,165 +180,95 @@ func TestOpenAddsLowerCoverageWatermark(t *testing.T) {
 		t.Fatalf("open old database: %v", err)
 	}
 
-	_, err = database.ExecContext(t.Context(), `CREATE TABLE market_sync_state (
-		provider TEXT NOT NULL,
-		security_id TEXT NOT NULL,
-		bootstrap_complete INTEGER NOT NULL DEFAULT 0,
-		covered_through TEXT,
-		observed_from TEXT,
-		observed_through TEXT,
-		reconciliation_required INTEGER NOT NULL DEFAULT 0,
-		next_attempt_at TEXT,
-		failure_count INTEGER NOT NULL DEFAULT 0,
-		last_error TEXT,
-		lease_until TEXT,
-		updated_at TEXT NOT NULL,
-		PRIMARY KEY (provider, security_id)
-	)`)
-	if err != nil {
-		t.Fatalf("create old sync state: %v", err)
+	if _, err := database.ExecContext(t.Context(), `CREATE TABLE
+		market_sync_state (provider TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create old database: %v", err)
 	}
 
 	if err := database.Close(); err != nil {
 		t.Fatalf("close old database: %v", err)
 	}
 
-	store, err := Open(t.Context(), path)
-	if err != nil {
-		t.Fatalf("migrate store: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	rows, err := store.db.QueryContext(
-		t.Context(),
-		"PRAGMA table_info(market_sync_state)",
-	)
-	if err != nil {
-		t.Fatalf("inspect migrated schema: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	found := false
-
-	for rows.Next() {
-		var (
-			columnID            int
-			name, dataType      string
-			notNull, primaryKey int
-			defaultValue        any
-		)
-
-		if err := rows.Scan(
-			&columnID,
-			&name,
-			&dataType,
-			&notNull,
-			&defaultValue,
-			&primaryKey,
-		); err != nil {
-			t.Fatalf("scan migrated schema: %v", err)
-		}
-
-		found = found || name == "covered_from"
+	_, err = Open(t.Context(), path)
+	if err == nil {
+		t.Fatal("Open() succeeded for an unversioned market database")
 	}
 
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate migrated schema: %v", err)
-	}
-
-	if !found {
-		t.Fatal("covered_from column was not added")
+	if !strings.Contains(err.Error(), "make rebuild-market") {
+		t.Fatalf("error %q does not explain how to rebuild", err)
 	}
 }
 
-func TestOpenMakesPriceOpenNullable(t *testing.T) {
+func TestMarketSchemaRecordsCurrentVersion(t *testing.T) {
+	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), "market.db")
-
-	database, err := sql.Open("sqlite3", path)
-	if err != nil {
-		t.Fatalf("open old database: %v", err)
-	}
-
-	_, err = database.ExecContext(t.Context(), `
-		CREATE TABLE market_securities (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (provider, security_id),
-			UNIQUE (provider, symbol)
-		);
-		CREATE TABLE market_prices (
-			provider TEXT NOT NULL,
-			security_id TEXT NOT NULL,
-			observation_date TEXT NOT NULL,
-			currency TEXT NOT NULL,
-			open REAL NOT NULL,
-			close REAL NOT NULL,
-			adjusted_close REAL NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (provider, security_id, observation_date),
-			FOREIGN KEY (provider, security_id)
-				REFERENCES market_securities (provider, security_id)
-		);
-		INSERT INTO market_securities
-			(provider, security_id, symbol, name, updated_at)
-		VALUES ('yahoo', 'msft', 'MSFT', 'Microsoft', '2026-10-27T00:00:00Z');
-		INSERT INTO market_prices
-			(provider, security_id, observation_date, currency, open, close,
-			 adjusted_close, updated_at)
-		VALUES
-			('yahoo', 'msft', '2026-10-23', 'USD', 10, 11, 9,
-			 '2026-10-27T00:00:00Z');
-	`)
-	if err != nil {
-		t.Fatalf("create old market prices: %v", err)
-	}
-
-	if err := database.Close(); err != nil {
-		t.Fatalf("close old database: %v", err)
-	}
 
 	store, err := Open(t.Context(), path)
 	if err != nil {
-		t.Fatalf("migrate store: %v", err)
+		t.Fatal(err)
 	}
-	defer func() { _ = store.Close() }()
+
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	database, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = database.Close() })
+
+	var version int
+	if err := database.QueryRowContext(
+		t.Context(),
+		"PRAGMA user_version",
+	).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+
+	if version != marketSchemaVersion {
+		t.Fatalf("schema version = %d, want %d", version,
+			marketSchemaVersion)
+	}
+}
+
+func TestSaveAllowsMissingPriceOpen(t *testing.T) {
+	store := testStore(t)
+	now := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
+	security := Security{ID: "msft", Symbol: "MSFT", Name: "Microsoft"}
+
+	if err := store.RegisterSecurities(
+		t.Context(), "yahoo", []Security{security}, now,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	item := WorkItem{
 		Provider: "yahoo",
-		Security: Security{
-			ID: "msft", Symbol: "MSFT", Name: "Microsoft",
-		},
-		Kind:    WorkIncremental,
-		From:    testDate(t, "2026-10-23"),
-		Through: testDate(t, "2026-10-26"),
+		Security: security,
+		Kind:     WorkBootstrap,
+		From:     testDate(t, "2026-10-23"),
+		Through:  testDate(t, "2026-10-26"),
 	}
 
 	if _, err := store.Save(t.Context(), item, []Price{{
 		Date:          item.Through,
 		Close:         12,
 		AdjustedClose: 10,
-	}}, nil, time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)); err != nil {
+	}}, nil, now); err != nil {
 		t.Fatalf("save nullable open: %v", err)
 	}
 
-	var (
-		rows      int
-		nullOpens int
-	)
-
-	if err := store.db.QueryRowContext(t.Context(), `
-		SELECT COUNT(*), SUM(CASE WHEN open IS NULL THEN 1 ELSE 0 END)
-		FROM market_prices
-		WHERE provider = 'yahoo' AND security_id = 'msft'`,
-	).Scan(&rows, &nullOpens); err != nil {
-		t.Fatalf("inspect migrated prices: %v", err)
+	var nullOpens int
+	if err := store.db.QueryRowContext(t.Context(), `SELECT COUNT(*)
+		FROM market_prices WHERE open IS NULL`).Scan(&nullOpens); err != nil {
+		t.Fatal(err)
 	}
 
-	if rows != 2 || nullOpens != 1 {
-		t.Fatalf("migrated rows=%d null opens=%d", rows, nullOpens)
+	if nullOpens != 1 {
+		t.Fatalf("null opens = %d, want 1", nullOpens)
 	}
 }
 
