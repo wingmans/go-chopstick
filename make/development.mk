@@ -1,16 +1,39 @@
-.PHONY: dev watch overview index-refresh prepare-dev-data clean-dev \
-	reset-dev nats-start nats-stop \
+.PHONY: dev market-dev rebuild-edgar rebuild-market watch overview \
+	index-refresh prepare-dev-data clean-dev reset-dev nats-start nats-stop \
 	nats-status nats-reset \
 	doctor doctor-verbose status errors retry-download retry-process logs \
 	logs-atom logs-select logs-discovery logs-download logs-process logs-news \
 	logs-filings logs-errors \
 	filings-web
 
+MARKET_MANIFEST ?= $(CHOPSTICK_DATA_DIR)/sets/sp500.json
+MARKET_FROM ?= 2020-01-01
+
 dev: nats-start prepare-dev-data
 	mkdir -p "$(CHOPSTICK_DATA_DIR)/logs"
 	EDGAR_LOG="$(CHOPSTICK_DATA_DIR)/logs/edgar.log" \
 		bash -o pipefail -c \
 		'go run ./cmd/edgar run 2>&1 | tee -a "$${EDGAR_LOG}"'
+
+market-dev:
+	go run ./cmd/yf serve \
+		--manifest "$(MARKET_MANIFEST)" \
+		--from "$(MARKET_FROM)"
+
+rebuild-edgar:
+	$(MAKE) clean-dev
+	$(MAKE) prepare-dev-data
+	$(MAKE) nats-start
+	go run ./cmd/edgar backfill
+	@printf '%s\n' \
+		'EDGAR state rebuilt; make dev will replay the news projection'
+
+rebuild-market:
+	bash scripts/clean-market-db.sh
+	go run ./cmd/yf sync \
+		--manifest "$(MARKET_MANIFEST)" \
+		--from "$(MARKET_FROM)" \
+		--max-symbols 0
 
 watch: index-refresh
 	/usr/bin/osascript scripts/watch.applescript "$(CURDIR)"

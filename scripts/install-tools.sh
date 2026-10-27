@@ -4,6 +4,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bin_dir="${root_dir}/.tools/bin"
 nats_server_version="v2.15.1"
+sqlc_version="v1.31.1"
 
 mkdir -p "${bin_dir}"
 
@@ -12,3 +13,9 @@ GOBIN="${bin_dir}" go install \
   "github.com/nats-io/nats-server/v2@${nats_server_version}"
 
 "${bin_dir}/nats-server" --version
+
+echo "Installing sqlc ${sqlc_version} into ${bin_dir}"
+GOBIN="${bin_dir}" go install \
+  "github.com/sqlc-dev/sqlc/cmd/sqlc@${sqlc_version}"
+
+"${bin_dir}/sqlc" version

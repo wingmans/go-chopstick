@@ -1,0 +1,58 @@
+version: "2"
+
+sql:
+  - name: polling
+    engine: sqlite
+    schema: internal/pollingworker/sql/schema.sql
+    queries: internal/pollingworker/sql/queries.sql
+    gen:
+      go:
+        package: dbgen
+        out: internal/pollingworker/dbgen
+        sql_package: database/sql
+        emit_empty_slices: true
+        emit_prepared_queries: true
+        omit_unused_structs: true
+        rename:
+          cik: CIK
+          feed_url: FeedURL
+  - name: market
+    engine: sqlite
+    schema: internal/marketstore/sql/schema.sql
+    queries: internal/marketstore/sql/queries.sql
+    gen:
+      go:
+        package: dbgen
+        out: internal/marketstore/dbgen
+        sql_package: database/sql
+        emit_empty_slices: true
+        emit_prepared_queries: true
+        omit_unused_structs: true
+  - name: analysis
+    engine: sqlite
+    schema: internal/analysisstore/sql/schema.sql
+    queries: internal/analysisstore/sql/queries.sql
+    gen:
+      go:
+        package: dbgen
+        out: internal/analysisstore/dbgen
+        sql_package: database/sql
+        emit_empty_slices: true
+        emit_prepared_queries: true
+        omit_unused_structs: true
+        rename:
+          cik: CIK
+  - name: news
+    engine: sqlite
+    schema: internal/news/sql/schema.sql
+    queries: internal/news/sql/queries.sql
+    gen:
+      go:
+        package: dbgen
+        out: internal/news/dbgen
+        sql_package: database/sql
+        emit_empty_slices: true
+        emit_prepared_queries: true
+        omit_unused_structs: true
+        rename:
+          cik: CIK

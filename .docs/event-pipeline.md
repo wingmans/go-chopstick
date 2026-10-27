@@ -59,8 +59,25 @@ data. `CHOPSTICK_DATA_DIR` defaults to `./data` and is the root for all runtime
 data, caches, databases, logs, and temporary files.
 
 The pinned NATS server is installed into the git-ignored `.tools/bin`
-directory. This does not install a system-wide binary or service. Update the
-SEC contact address in `.env` before running the service.
+directory. Setup also installs the pinned `sqlc` generator there. Neither tool
+is installed as a system-wide binary or service. Update the SEC contact
+address in `.env` before running the service.
+
+SQL definitions live with each owning package:
+
+- `internal/pollingworker/sql`;
+- `internal/marketstore/sql`;
+- `internal/analysisstore/sql`;
+- `internal/news/sql`.
+
+Their generated `dbgen` packages are internal implementation details. Stores
+continue to own transactions and domain behavior. Regenerate and verify
+checked-in database code after editing SQL:
+
+```sh
+make generate
+make check-generated
+```
 
 Check configuration and infrastructure without changing them:
 
@@ -271,3 +288,20 @@ Use `make clean-dev` to remove processing state while preserving downloaded
 filings, index source material, and constituent sets. Use `make reset-dev` to
 remove all application data and start again without any cached downloads. Both
 commands stop the project-local NATS server before removing its state.
+
+SQLite databases are disposable development projections. The polling,
+analysis, and news stores reject older schemas instead of migrating them.
+Rebuild the EDGAR databases from retained indexes and filings with:
+
+```sh
+make rebuild-edgar
+```
+
+The target removes derived EDGAR state, resets the project-local JetStream,
+and runs `edgar backfill` with `EDGAR_SET` and `EDGAR_FROM_YEAR` from `.env`.
+It preserves downloaded filings, index archives, and constituent sets. Start
+`make dev` afterward; creation of the missing `feed.db` causes the news
+consumer to replay the retained selection stream.
+
+Use `make clean-dev` when only the deletion step is wanted. Use
+`make reset-dev` only when the raw caches should also be removed.

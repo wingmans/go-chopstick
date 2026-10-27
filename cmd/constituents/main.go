@@ -1,4 +1,4 @@
-// Package main builds current constituent-set snapshots.
+// Package main builds current constituent-set of sp500 companies defined in wikipedia page
 package main
 
 import (
@@ -46,7 +46,7 @@ func main() {
 func run(args []string) error {
 	var output, wikipediaURL, tickerURL string
 
-	defaultOutput := appdata.Path("sets", "sp500.json")
+	defaultOutput := defaultConstituentOutput()
 
 	flags := flag.NewFlagSet("constituents", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
@@ -57,6 +57,7 @@ func run(args []string) error {
 		fmt.Fprintln(os.Stdout)
 		fmt.Fprintln(os.Stdout, "Options:")
 		fmt.Fprintln(os.Stdout, "  -o, --output <path>       Output JSON path.")
+		fmt.Fprintf(os.Stdout, "                             Default: %s.\n", defaultOutput)
 		fmt.Fprintln(os.Stdout, "  -w, --wikipedia-url <url> Current Wikipedia constituent page.")
 		fmt.Fprintln(os.Stdout, "  -t, --ticker-url <url>    SEC ticker/CIK JSON URL.")
 	}
@@ -133,6 +134,10 @@ func run(args []string) error {
 	fmt.Printf("wrote %d current constituents to %s\n", len(set.Members), output)
 
 	return nil
+}
+
+func defaultConstituentOutput() string {
+	return appdata.Path("sets", "sp500.json")
 }
 
 func fetchSECCompanies(ctx context.Context, client *http.Client, url string) (map[string]secCompany, error) {

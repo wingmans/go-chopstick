@@ -206,6 +206,7 @@ func TestParseDoctorVerbose(t *testing.T) {
 }
 
 func TestNewsAddressUsesEnvironmentDefault(t *testing.T) {
+	t.Setenv(edgarSetEnv, "")
 	t.Setenv(edgarNewsAddressEnv, "127.0.0.1:8082")
 
 	for _, command := range []string{"run", "news", "status"} {
@@ -257,6 +258,7 @@ func TestRunUsesEnvironmentReconciliationScope(t *testing.T) {
 }
 
 func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
+	t.Setenv(edgarSetEnv, "")
 	t.Setenv(edgarWebAddressEnv, "127.0.0.1:8084")
 
 	cfg, err := parseConfig([]string{"run"})

@@ -1,9 +1,10 @@
-.PHONY: help setup build test lint docs-pdf clean
+.PHONY: help setup generate check-generated build test lint docs-pdf clean
 
 .DEFAULT_GOAL := help
 
 BIN_DIR := bin
 CHOPSTICK_DATA_DIR ?= ./data
+SQLC ?= .tools/bin/sqlc
 
 -include .env
 
@@ -37,7 +38,12 @@ help:
 		'' \
 		'  help                    Display this command list' \
 		'  setup                   Prepare the development environment' \
-		'  dev                     Start NATS and run all services' \
+		'  generate                Generate checked-in database code' \
+		'  check-generated          Verify generated database code' \
+		'  dev                     Start NATS and run the EDGAR service' \
+		'  market-dev              Run the daily Yahoo market-data service' \
+		'  rebuild-edgar           Rebuild EDGAR data from retained inputs' \
+		'  rebuild-market          Rebuild market.db from retained CSV' \
 		'  watch                   Open the tiled Ghostty development console' \
 		'  overview                Refresh polling and news metrics each minute' \
 		'  index-refresh           Refresh latest SEC index and master.tsv' \
@@ -89,6 +95,28 @@ setup:
 	}'
 	bash scripts/install-tools.sh
 
+generate:
+	@command -v "$(SQLC)" >/dev/null 2>&1 || { \
+		echo 'sqlc is unavailable; run make setup' >&2; exit 1; \
+	}
+	$(SQLC) generate
+
+check-generated: generate
+	$(SQLC) vet
+	@test -z "$$(git status --short --untracked-files=all -- \
+		internal/pollingworker/dbgen \
+		internal/marketstore/dbgen \
+		internal/analysisstore/dbgen \
+		internal/news/dbgen)" || { \
+		echo 'generated database code is out of date' >&2; \
+		git status --short --untracked-files=all -- \
+			internal/pollingworker/dbgen \
+			internal/marketstore/dbgen \
+			internal/analysisstore/dbgen \
+			internal/news/dbgen; \
+		exit 1; \
+	}
+
 build:
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/ecb-fx ./cmd/ecb
@@ -96,6 +124,7 @@ build:
 	go build -o $(BIN_DIR)/constituents ./cmd/constituents
 	go build -o $(BIN_DIR)/polling ./cmd/polling
 	go build -o $(BIN_DIR)/polling-reader ./cmd/polling-reader
+	go build -o $(BIN_DIR)/yahoo-prices ./cmd/yf
 
 lint:
 	golangci-lint run --fix ./cmd/... ./internal/...
