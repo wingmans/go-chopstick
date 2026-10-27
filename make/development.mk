@@ -7,7 +7,7 @@
 	filings-web
 
 MARKET_MANIFEST ?= $(CHOPSTICK_DATA_DIR)/sets/sp500.json
-MARKET_FROM ?= 2026-01-01
+MARKET_FROM ?= 2020-01-01
 
 dev: nats-start prepare-dev-data
 	mkdir -p "$(CHOPSTICK_DATA_DIR)/logs"

@@ -63,9 +63,14 @@ directory. Setup also installs the pinned `sqlc` generator there. Neither tool
 is installed as a system-wide binary or service. Update the SEC contact
 address in `.env` before running the service.
 
-The polling and market schemas and named queries live under their respective
-`internal/pollingworker/sql` and `internal/marketstore/sql` directories. The
-generated `dbgen` packages are internal implementation details; the stores
+SQL definitions live with each owning package:
+
+- `internal/pollingworker/sql`;
+- `internal/marketstore/sql`;
+- `internal/analysisstore/sql`;
+- `internal/news/sql`.
+
+Their generated `dbgen` packages are internal implementation details. Stores
 continue to own transactions and domain behavior. Regenerate and verify
 checked-in database code after editing SQL:
 
@@ -284,9 +289,9 @@ filings, index source material, and constituent sets. Use `make reset-dev` to
 remove all application data and start again without any cached downloads. Both
 commands stop the project-local NATS server before removing its state.
 
-SQLite databases are disposable development projections. The polling store
-rejects an older schema instead of migrating it. Rebuild the EDGAR databases
-from retained indexes and filings with:
+SQLite databases are disposable development projections. The polling,
+analysis, and news stores reject older schemas instead of migrating them.
+Rebuild the EDGAR databases from retained indexes and filings with:
 
 ```sh
 make rebuild-edgar

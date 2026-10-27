@@ -14,17 +14,15 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
-
+	"wingman.com/fetch-ecb/internal/analysisstore/dbgen"
 	dividendview "wingman.com/fetch-ecb/internal/dividend"
 	filingview "wingman.com/fetch-ecb/internal/filing"
 )
 
-const schemaVersion = 3
-
 // Store is the SQLite-backed read model for normalized filing data.
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	queries *dbgen.Queries
 }
 
 // Open opens or creates the analysis database and applies its schema.
@@ -37,235 +35,36 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, fmt.Errorf("create analysis database directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open(
+		"sqlite3",
+		path+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("open analysis database: %w", err)
 	}
 
-	store := &Store{db: db}
-	if err := store.migrate(ctx); err != nil {
+	db.SetMaxOpenConns(1)
+
+	if err := createSchema(ctx, db); err != nil {
 		_ = db.Close()
 
 		return nil, err
 	}
 
-	return store, nil
-}
-
-//nolint:funcorder // Migration is defined near database construction.
-func (s *Store) migrate(ctx context.Context) error {
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INTEGER PRIMARY KEY,
-			applied_at DATETIME NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS filing_views (
-			cik TEXT NOT NULL,
-			accession TEXT NOT NULL,
-			form_type TEXT NOT NULL,
-			filing_date TEXT NOT NULL,
-			report_date TEXT NOT NULL,
-			company TEXT NOT NULL,
-			status TEXT NOT NULL,
-			facts INTEGER NOT NULL,
-			schema_version INTEGER NOT NULL,
-			payload BLOB NOT NULL,
-			updated_at DATETIME NOT NULL,
-			PRIMARY KEY (cik, accession)
-		)`,
-		`CREATE INDEX IF NOT EXISTS filing_views_filing_date
-			ON filing_views (filing_date DESC, accession DESC)`,
-		`CREATE INDEX IF NOT EXISTS filing_views_cik_date
-			ON filing_views (cik, filing_date, accession)`,
-		`CREATE TABLE IF NOT EXISTS dividend_views (
-			cik TEXT PRIMARY KEY,
-			company TEXT NOT NULL,
-			schema_version INTEGER NOT NULL,
-			payload BLOB NOT NULL,
-			updated_at DATETIME NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS dividend_events (
-			cik TEXT NOT NULL,
-			event_id TEXT NOT NULL,
-			declaration_date TEXT,
-			ex_dividend_date TEXT,
-			record_date TEXT,
-			payable_date TEXT,
-			amount_per_share TEXT,
-			currency TEXT,
-			type TEXT NOT NULL,
-			status TEXT NOT NULL,
-			confidence TEXT NOT NULL,
-			payload BLOB NOT NULL,
-			PRIMARY KEY (cik, event_id)
-		)`,
-		`CREATE INDEX IF NOT EXISTS dividend_events_dates
-			ON dividend_events (cik, payable_date, ex_dividend_date)`,
-		`CREATE TABLE IF NOT EXISTS dividend_observations (
-			observation_id TEXT PRIMARY KEY,
-			cik TEXT NOT NULL,
-			kind TEXT NOT NULL,
-			period TEXT NOT NULL,
-			context_id TEXT,
-			context_start TEXT,
-			context_end TEXT,
-			accession TEXT NOT NULL,
-			value TEXT NOT NULL,
-			unit TEXT,
-			form_type TEXT NOT NULL,
-			filing_date TEXT NOT NULL,
-			payload BLOB NOT NULL
-		)`,
-	}
-
-	for _, statement := range statements {
-		if _, err := s.db.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("apply analysis database schema: %w", err)
-		}
-	}
-
-	if err := migrateDividendObservations(ctx, s.db); err != nil {
-		return err
-	}
-
-	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS
-		dividend_observations_period
-		ON dividend_observations (cik, period, filing_date)`); err != nil {
-		return fmt.Errorf("apply analysis database indexes: %w", err)
-	}
-
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO schema_migrations (version, applied_at)
-		 VALUES (?, ?)`, schemaVersion, time.Now().UTC()); err != nil {
-		return fmt.Errorf("record analysis database schema: %w", err)
-	}
-
-	return nil
-}
-
-func migrateDividendObservations(ctx context.Context, db *sql.DB) error {
-	rows, err := db.QueryContext(ctx, `PRAGMA table_info(dividend_observations)`)
+	queries, err := dbgen.Prepare(ctx, db)
 	if err != nil {
-		return fmt.Errorf("inspect dividend observations schema: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
+		_ = db.Close()
 
-	var hasObservationID bool
-
-	for rows.Next() {
-		var (
-			cid, notNull, primaryKey       int
-			name, columnType, defaultValue sql.NullString
-		)
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue,
-			&primaryKey); err != nil {
-			return fmt.Errorf("read dividend observations schema: %w", err)
-		}
-
-		if name.Valid && name.String == "observation_id" {
-			hasObservationID = true
-		}
+		return nil, fmt.Errorf("prepare analysis queries: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate dividend observations schema: %w", err)
-	}
-
-	if hasObservationID {
-		return nil
-	}
-
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin dividend observation migration: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS
-		dividend_observations_period`); err != nil {
-		return fmt.Errorf("drop dividend observation index: %w", err)
-	}
-
-	if _, err := tx.ExecContext(ctx, `ALTER TABLE dividend_observations
-		RENAME TO dividend_observations_v1`); err != nil {
-		return fmt.Errorf("rename dividend observations: %w", err)
-	}
-
-	if _, err := tx.ExecContext(ctx, `CREATE TABLE dividend_observations (
-		observation_id TEXT PRIMARY KEY,
-		cik TEXT NOT NULL,
-		kind TEXT NOT NULL,
-		period TEXT NOT NULL,
-		context_id TEXT,
-		context_start TEXT,
-		context_end TEXT,
-		accession TEXT NOT NULL,
-		value TEXT NOT NULL,
-		unit TEXT,
-		form_type TEXT NOT NULL,
-		filing_date TEXT NOT NULL,
-		payload BLOB NOT NULL
-	)`); err != nil {
-		return fmt.Errorf("create dividend observations v2: %w", err)
-	}
-
-	legacyRows, err := tx.QueryContext(ctx, `SELECT cik, kind, period,
-		accession, value, unit, form_type, filing_date, payload
-		FROM dividend_observations_v1`)
-	if err != nil {
-		return fmt.Errorf("read legacy dividend observations: %w", err)
-	}
-	defer func() { _ = legacyRows.Close() }()
-
-	for legacyRows.Next() {
-		var (
-			cik         string
-			observation dividendview.Observation
-			payload     []byte
-		)
-		if err := legacyRows.Scan(&cik, &observation.Kind,
-			&observation.Period, &observation.Accession, &observation.Value,
-			&observation.Unit, &observation.FormType, &observation.FilingDate,
-			&payload); err != nil {
-			_ = legacyRows.Close()
-
-			return fmt.Errorf("scan legacy dividend observation: %w", err)
-		}
-
-		if _, err := tx.ExecContext(ctx, `INSERT INTO dividend_observations
-			(observation_id, cik, kind, period, accession, value, unit,
-			 form_type, filing_date, payload)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, observationID(observation),
-			cik, observation.Kind, observation.Period,
-			observation.Accession, observation.Value, nullString(observation.Unit),
-			observation.FormType, observation.FilingDate, payload); err != nil {
-			_ = legacyRows.Close()
-
-			return fmt.Errorf("copy legacy dividend observation: %w", err)
-		}
-	}
-
-	if err := legacyRows.Err(); err != nil {
-		_ = legacyRows.Close()
-
-		return fmt.Errorf("iterate legacy dividend observations: %w", err)
-	}
-
-	_ = legacyRows.Close()
-
-	if _, err := tx.ExecContext(ctx, `DROP TABLE dividend_observations_v1`); err != nil {
-		return fmt.Errorf("drop legacy dividend observations: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit dividend observation migration: %w", err)
-	}
-
-	return nil
+	return &Store{db: db, queries: queries}, nil
 }
 
 // Close releases the database connection.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	return errors.Join(s.queries.Close(), s.db.Close())
+}
 
 // SaveFilingView atomically replaces one filing view.
 func (s *Store) SaveFilingView(ctx context.Context, view filingview.View) error {
@@ -283,43 +82,44 @@ func (s *Store) SaveFilingView(ctx context.Context, view filingview.View) error 
 	defer func() { _ = tx.Rollback() }()
 
 	metadata := view.Metadata
+	queries := s.queries.WithTx(tx)
 
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO filing_views
-			(cik, accession, form_type, filing_date, report_date, company,
-			 status, facts, schema_version, payload, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(cik, accession) DO UPDATE SET
-			form_type=excluded.form_type, filing_date=excluded.filing_date,
-			report_date=excluded.report_date, company=excluded.company,
-			status=excluded.status, facts=excluded.facts,
-			schema_version=excluded.schema_version, payload=excluded.payload,
-			updated_at=excluded.updated_at`,
-		metadata.CIK, metadata.Accession, metadata.FormType, metadata.FilingDate,
-		metadata.ReportDate, metadata.Company, view.Counts.Status,
-		view.Counts.Facts, view.SchemaVersion, payload, time.Now().UTC())
-	if err != nil {
+	if err := queries.UpsertFilingView(ctx, dbgen.UpsertFilingViewParams{
+		CIK:           metadata.CIK,
+		Accession:     metadata.Accession,
+		FormType:      metadata.FormType,
+		FilingDate:    metadata.FilingDate,
+		ReportDate:    metadata.ReportDate,
+		Company:       metadata.Company,
+		Status:        view.Counts.Status,
+		Facts:         int64(view.Counts.Facts),
+		SchemaVersion: int64(view.SchemaVersion),
+		Payload:       payload,
+		UpdatedAt:     time.Now().UTC(),
+	}); err != nil {
 		return fmt.Errorf("save filing view: %w", err)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit filing view: %w", err)
+	}
+
+	return nil
 }
 
 // HasFilingView reports whether one filing has been fully materialized.
 func (s *Store) HasFilingView(ctx context.Context, cik, accession string) (bool, error) {
 	cik = canonicalCIK(cik)
 
-	var exists int
-
-	err := s.db.QueryRowContext(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM filing_views WHERE cik = ? AND accession = ?
-		)`, cik, accession).Scan(&exists)
+	exists, err := s.queries.HasFilingView(ctx, dbgen.HasFilingViewParams{
+		CIK:       cik,
+		Accession: accession,
+	})
 	if err != nil {
 		return false, fmt.Errorf("check filing view: %w", err)
 	}
 
-	return exists != 0, nil
+	return exists, nil
 }
 
 // HasSuccessfulFilingView reports whether a filing completed without parser
@@ -327,11 +127,10 @@ func (s *Store) HasFilingView(ctx context.Context, cik, accession string) (bool,
 func (s *Store) HasSuccessfulFilingView(ctx context.Context, cik, accession string) (bool, error) {
 	cik = canonicalCIK(cik)
 
-	var status string
-
-	err := s.db.QueryRowContext(ctx, `
-		SELECT status FROM filing_views WHERE cik = ? AND accession = ?`,
-		cik, accession).Scan(&status)
+	status, err := s.queries.FilingViewStatus(
+		ctx,
+		dbgen.FilingViewStatusParams{CIK: cik, Accession: accession},
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -360,19 +159,22 @@ func (s *Store) SaveDividendView(ctx context.Context, view dividendview.View) er
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now().UTC()
+	queries := s.queries.WithTx(tx)
 
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO dividend_views (cik, company, schema_version, payload, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(cik) DO UPDATE SET company=excluded.company,
-			schema_version=excluded.schema_version, payload=excluded.payload,
-			updated_at=excluded.updated_at`,
-		view.CIK, view.Company, view.SchemaVersion, payload, now)
-	if err != nil {
+	if err := queries.UpsertDividendView(
+		ctx,
+		dbgen.UpsertDividendViewParams{
+			CIK:           view.CIK,
+			Company:       view.Company,
+			SchemaVersion: int64(view.SchemaVersion),
+			Payload:       payload,
+			UpdatedAt:     now,
+		},
+	); err != nil {
 		return fmt.Errorf("save dividend view: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM dividend_events WHERE cik = ?`, view.CIK); err != nil {
+	if err := queries.DeleteDividendEvents(ctx, view.CIK); err != nil {
 		return fmt.Errorf("replace dividend events: %w", err)
 	}
 
@@ -382,21 +184,28 @@ func (s *Store) SaveDividendView(ctx context.Context, view dividendview.View) er
 			return fmt.Errorf("encode dividend event: %w", err)
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO dividend_events
-				(cik, event_id, declaration_date, ex_dividend_date, record_date,
-				 payable_date, amount_per_share, currency, type, status, confidence,
-				 payload)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, view.CIK, event.ID,
-			nullString(event.DeclarationDate), nullString(event.ExDate),
-			nullString(event.RecordDate), nullString(event.PayableDate),
-			nullString(event.AmountPerShare), nullString(event.Currency),
-			event.Type, event.Status, event.Confidence, eventPayload); err != nil {
+		if err := queries.InsertDividendEvent(
+			ctx,
+			dbgen.InsertDividendEventParams{
+				CIK:             view.CIK,
+				EventID:         event.ID,
+				DeclarationDate: nullString(event.DeclarationDate),
+				ExDividendDate:  nullString(event.ExDate),
+				RecordDate:      nullString(event.RecordDate),
+				PayableDate:     nullString(event.PayableDate),
+				AmountPerShare:  nullString(event.AmountPerShare),
+				Currency:        nullString(event.Currency),
+				Type:            event.Type,
+				Status:          event.Status,
+				Confidence:      event.Confidence,
+				Payload:         eventPayload,
+			},
+		); err != nil {
 			return fmt.Errorf("save dividend event: %w", err)
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM dividend_observations WHERE cik = ?`, view.CIK); err != nil {
+	if err := queries.DeleteDividendObservations(ctx, view.CIK); err != nil {
 		return fmt.Errorf("replace dividend observations: %w", err)
 	}
 
@@ -406,18 +215,24 @@ func (s *Store) SaveDividendView(ctx context.Context, view dividendview.View) er
 			return fmt.Errorf("encode dividend observation: %w", err)
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO dividend_observations
-				(observation_id, cik, kind, period, context_id, context_start,
-				 context_end, accession, value, unit, form_type, filing_date,
-				 payload)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			observationID(observation), view.CIK, observation.Kind,
-			observation.Period, nullString(observation.ContextID),
-			nullString(observation.ContextStart), nullString(observation.ContextEnd),
-			observation.Accession, observation.Value,
-			nullString(observation.Unit), observation.FormType,
-			observation.FilingDate, observationPayload); err != nil {
+		if err := queries.InsertDividendObservation(
+			ctx,
+			dbgen.InsertDividendObservationParams{
+				ObservationID: observationID(observation),
+				CIK:           view.CIK,
+				Kind:          observation.Kind,
+				Period:        observation.Period,
+				ContextID:     nullString(observation.ContextID),
+				ContextStart:  nullString(observation.ContextStart),
+				ContextEnd:    nullString(observation.ContextEnd),
+				Accession:     observation.Accession,
+				Value:         observation.Value,
+				Unit:          nullString(observation.Unit),
+				FormType:      observation.FormType,
+				FilingDate:    observation.FilingDate,
+				Payload:       observationPayload,
+			},
+		); err != nil {
 			return fmt.Errorf("save dividend observation: %w", err)
 		}
 	}
@@ -440,12 +255,12 @@ func observationID(observation dividendview.Observation) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func nullString(value string) any {
+func nullString(value string) sql.NullString {
 	if value == "" {
-		return nil
+		return sql.NullString{}
 	}
 
-	return value
+	return sql.NullString{String: value, Valid: true}
 }
 
 func canonicalCIK(value string) string {
@@ -472,11 +287,10 @@ func canonicalCIK(value string) string {
 func (s *Store) LoadFilingView(ctx context.Context, cik, accession string) (filingview.View, error) {
 	cik = canonicalCIK(cik)
 
-	var payload []byte
-
-	err := s.db.QueryRowContext(ctx,
-		`SELECT payload FROM filing_views WHERE cik = ? AND accession = ?`, cik, accession).
-		Scan(&payload)
+	payload, err := s.queries.FilingViewPayload(
+		ctx,
+		dbgen.FilingViewPayloadParams{CIK: cik, Accession: accession},
+	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return filingview.View{}, os.ErrNotExist
@@ -495,31 +309,20 @@ func (s *Store) LoadFilingView(ctx context.Context, cik, accession string) (fili
 
 // ListFilingViews returns normalized views ordered newest first.
 func (s *Store) ListFilingViews(ctx context.Context) ([]filingview.View, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT payload FROM filing_views
-		ORDER BY filing_date DESC, accession DESC`)
+	payloads, err := s.queries.ListFilingViewPayloads(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list filing views: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
 
-	var views []filingview.View
+	views := make([]filingview.View, 0, len(payloads))
 
-	for rows.Next() {
-		var payload []byte
-		if err := rows.Scan(&payload); err != nil {
-			return nil, fmt.Errorf("read filing view: %w", err)
-		}
-
+	for _, payload := range payloads {
 		var view filingview.View
 		if err := json.Unmarshal(payload, &view); err != nil {
 			return nil, fmt.Errorf("decode filing view: %w", err)
 		}
 
 		views = append(views, view)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate filing views: %w", err)
 	}
 
 	return views, nil
@@ -529,10 +332,7 @@ func (s *Store) ListFilingViews(ctx context.Context) ([]filingview.View, error) 
 func (s *Store) LoadDividendView(ctx context.Context, cik string) (dividendview.View, error) {
 	cik = canonicalCIK(cik)
 
-	var payload []byte
-
-	err := s.db.QueryRowContext(ctx,
-		`SELECT payload FROM dividend_views WHERE cik = ?`, cik).Scan(&payload)
+	payload, err := s.queries.DividendViewPayload(ctx, cik)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return dividendview.View{}, os.ErrNotExist
