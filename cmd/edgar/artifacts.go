@@ -54,7 +54,6 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 				{"--document <name>", "Extract one filename; repeatable."},
 				{"--all", "Extract every document."},
 				{"--address <host:port>", "Viewer address; loopback only."},
-				{"--address <host:port>", "Viewer address; loopback only."},
 				{"--artifacts-dir <path>", "Disposable artifact root."},
 				{"--parsed-dir <path>", "Parsed filing directory."},
 				{"--filings-dir <path>", "Raw filing cache directory."},
@@ -122,21 +121,11 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 		}
 	}
 
-	if cfg.artifacts.operation == "serve" {
-		if err := validateViewerAddress(cfg.artifacts.address); err != nil {
-			return subcommandError(flags, err)
-		}
-	}
-
 	return cfg, nil
 }
 
 func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	destination := filepath.Join(cfg.artifactsDir, cfg.cik, cfg.accession)
-	if cfg.operation == "serve" {
-		return serveArtifacts(ctx, cfg, destination)
-	}
-
 	if cfg.operation == "serve" {
 		return serveArtifacts(ctx, cfg, destination)
 	}
