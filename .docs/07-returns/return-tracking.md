@@ -114,6 +114,11 @@ before rebuilding it, then run:
 make rebuild-market
 ```
 
+Its complete DDL lives in `internal/marketstore/sql/schema.sql`; named queries
+live beside it in `queries.sql` and are compiled by `sqlc`. There are no market
+database migrations. Opening an older or unversioned schema fails with a
+rebuild instruction instead of changing it in place.
+
 The target removes only `market.db` and its SQLite sidecars. It preserves the
 CSV batches and runs `yahoo-prices sync`, which restores their longest
 contiguous prefixes before requesting missing ranges. Override the development

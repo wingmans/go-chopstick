@@ -104,10 +104,12 @@ generate:
 check-generated: generate
 	$(SQLC) vet
 	@test -z "$$(git status --short --untracked-files=all -- \
-		internal/pollingworker/dbgen)" || { \
+		internal/pollingworker/dbgen \
+		internal/marketstore/dbgen)" || { \
 		echo 'generated database code is out of date' >&2; \
 		git status --short --untracked-files=all -- \
-			internal/pollingworker/dbgen; \
+			internal/pollingworker/dbgen \
+			internal/marketstore/dbgen; \
 		exit 1; \
 	}
 

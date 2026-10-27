@@ -63,11 +63,11 @@ directory. Setup also installs the pinned `sqlc` generator there. Neither tool
 is installed as a system-wide binary or service. Update the SEC contact
 address in `.env` before running the service.
 
-The polling schema and named queries live under
-`internal/pollingworker/sql`. The generated `dbgen` package is an internal
-implementation detail; `DedupeService` continues to own transactions and
-domain behavior. Regenerate and verify checked-in database code after editing
-SQL:
+The polling and market schemas and named queries live under their respective
+`internal/pollingworker/sql` and `internal/marketstore/sql` directories. The
+generated `dbgen` packages are internal implementation details; the stores
+continue to own transactions and domain behavior. Regenerate and verify
+checked-in database code after editing SQL:
 
 ```sh
 make generate
