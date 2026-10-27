@@ -271,3 +271,20 @@ Use `make clean-dev` to remove processing state while preserving downloaded
 filings, index source material, and constituent sets. Use `make reset-dev` to
 remove all application data and start again without any cached downloads. Both
 commands stop the project-local NATS server before removing its state.
+
+SQLite databases are disposable development projections. The polling store
+rejects an older schema instead of migrating it. Rebuild the EDGAR databases
+from retained indexes and filings with:
+
+```sh
+make rebuild-edgar
+```
+
+The target removes derived EDGAR state, resets the project-local JetStream,
+and runs `edgar backfill` with `EDGAR_SET` and `EDGAR_FROM_YEAR` from `.env`.
+It preserves downloaded filings, index archives, and constituent sets. Start
+`make dev` afterward; creation of the missing `feed.db` causes the news
+consumer to replay the retained selection stream.
+
+Use `make clean-dev` when only the deletion step is wanted. Use
+`make reset-dev` only when the raw caches should also be removed.

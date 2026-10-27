@@ -41,6 +41,8 @@ help:
 		'  check-generated          Verify generated database code' \
 		'  dev                     Start NATS and run the EDGAR service' \
 		'  market-dev              Run the daily Yahoo market-data service' \
+		'  rebuild-edgar           Rebuild EDGAR data from retained inputs' \
+		'  rebuild-market          Rebuild market.db from retained CSV' \
 		'  watch                   Open the tiled Ghostty development console' \
 		'  overview                Refresh polling and news metrics each minute' \
 		'  index-refresh           Refresh latest SEC index and master.tsv' \

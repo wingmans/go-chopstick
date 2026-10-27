@@ -107,6 +107,24 @@ longest contiguous retained prefix is bulk-upserted, after which Yahoo is only
 asked for the remaining interval. Explicit repair and reconciliation work is
 never suppressed merely because a CSV file exists.
 
+`market.db` is a disposable development projection. Stop `make market-dev`
+before rebuilding it, then run:
+
+```sh
+make rebuild-market
+```
+
+The target removes only `market.db` and its SQLite sidecars. It preserves the
+CSV batches and runs `yahoo-prices sync`, which restores their longest
+contiguous prefixes before requesting missing ranges. Override the development
+defaults with `MARKET_MANIFEST` and `MARKET_FROM` when required:
+
+```sh
+make rebuild-market \
+  MARKET_MANIFEST=data/sets/sp500.json \
+  MARKET_FROM=2020-01-01
+```
+
 The provider price table in `market.db` is not partitioned. Its primary key is
 provider, security ID, and observation date. Repeating work is safe because
 database writes use upsert semantics.
