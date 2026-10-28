@@ -47,6 +47,7 @@ type appConfig struct {
 	command    string
 	events     eventCommandConfig
 	backfill   backfillConfig
+	ownership  ownershipCommandConfig
 	operations operationsConfig
 	artifacts  artifactCommandConfig
 	index      edgar.Config
@@ -205,6 +206,8 @@ func run(ctx context.Context, args []string) error {
 		commandErr = runEventCommand(ctx, cfg.command, cfg.events, logger)
 	case "backfill":
 		commandErr = runBackfill(ctx, client, cfg.backfill, logger)
+	case "ownership":
+		commandErr = runOwnership(ctx, client, cfg.ownership)
 	case "doctor":
 		commandErr = runDoctor(ctx, cfg.operations)
 	case "status":
@@ -334,6 +337,8 @@ func parseConfig(args []string) (appConfig, error) {
 		return parseEventCommandConfig(args[0], args[1:])
 	case "backfill":
 		return parseBackfillConfig(args[1:])
+	case "ownership":
+		return parseOwnershipConfig(args[1:])
 	case "doctor", "status", "errors", "retry":
 		return parseOperationsConfig(args[0], args[1:])
 	case "artifacts":
@@ -1003,6 +1008,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  select            observed filings for processing")
 	fmt.Fprintln(os.Stdout, "  discover          select filings from a local master index")
 	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
+	fmt.Fprintln(os.Stdout, "  ownership         import and inspect ownership filings")
 	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")
 	fmt.Fprintln(os.Stdout, "  status            summarize pipeline state and backlogs")
 	fmt.Fprintln(os.Stdout, "  errors            list unresolved pipeline failures")

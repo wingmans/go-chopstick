@@ -30,6 +30,7 @@ type eventCommandConfig struct {
 	filingsDirectory string
 	parsedDirectory  string
 	analysisDB       string
+	ownershipDB      string
 	masterPath       string
 	userAgent        string
 	baseURL          string
@@ -69,6 +70,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			filingsDirectory: appdata.Path("cache", "filings"),
 			parsedDirectory:  appdata.Path("parsed"),
 			analysisDB:       appdata.Path("analysis.db"),
+			ownershipDB:      appdata.Path("ownership.db"),
 			masterPath:       appdata.Path("cache", "indexes", "master.tsv"),
 			userAgent:        environmentValue(edgarUserAgentEnv, defaultUserAgent),
 			baseURL:          environmentValue(edgarBaseURLEnv, ""),
@@ -230,6 +232,8 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			cfg.events.parsedDirectory, "parsed filing directory")
 		flags.StringVar(&cfg.events.analysisDB, "analysis-db",
 			cfg.events.analysisDB, "analysis database")
+		flags.StringVar(&cfg.events.ownershipDB, "ownership-db",
+			cfg.events.ownershipDB, "ownership database")
 		flags.StringVar(&cfg.events.userAgent, "user-agent",
 			cfg.events.userAgent, "SEC user agent")
 		flags.StringVar(&cfg.events.baseURL, "base-url", cfg.events.baseURL,
@@ -255,6 +259,7 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--filings-dir <path>", "Downloaded filing directory."},
 			helpOption{"--parsed-dir <path>", "Parsed filing directory."},
 			helpOption{"--analysis-db <path>", "Analysis database."},
+			helpOption{"--ownership-db <path>", "Ownership database."},
 			helpOption{"--user-agent <value>", "SEC user agent."},
 			helpOption{"--base-url <url>", "SEC base URL override."},
 			helpOption{"--address <host:port>", "News HTTP address."},
@@ -446,7 +451,8 @@ func runEventCommand(ctx context.Context, command string,
 	errorsCh := make(chan error, 1)
 
 	for _, role := range []string{
-		"atom", "select", "download", "process", "news", "filings-web",
+		"atom", "select", "download", "process", "ownership", "news",
+		"filings-web",
 	} {
 		if role != "filings-web" {
 			go superviseRole(ctx, role, logger, func() error {
@@ -652,6 +658,27 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 			FilingsDirectory: cfg.filingsDirectory,
 			ParsedDirectory:  cfg.parsedDirectory,
 			AnalysisDBPath:   cfg.analysisDB,
+			Drain:            cfg.drain,
+			MaxAttempts:      cfg.maxAttempts,
+			Failures:         failures,
+		}, logger)
+	case "ownership":
+		logger.Info("starting ownership worker", "consumer",
+			eventworker.OwnershipDurable, "selection", "all ownership forms",
+			"database", cfg.ownershipDB, "max_attempts", cfg.maxAttempts)
+
+		failures, err := pollingworker.NewDedupeServiceContext(ctx,
+			cfg.pollingDB)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = failures.Close() }()
+
+		return eventworker.Ownership(ctx, bus, eventworker.OwnershipConfig{
+			FilingsDirectory: cfg.filingsDirectory,
+			DatabasePath:     cfg.ownershipDB,
+			UserAgent:        cfg.userAgent,
+			BaseURL:          cfg.baseURL,
 			Drain:            cfg.drain,
 			MaxAttempts:      cfg.maxAttempts,
 			Failures:         failures,
@@ -870,7 +897,9 @@ func waitForNewsConsumer(consumerErr <-chan error, bus *eventbus.NATS,
 }
 
 func ensureParentDirectories(cfg eventCommandConfig) error {
-	for _, path := range []string{cfg.pollingDB, cfg.newsDB, cfg.analysisDB} {
+	for _, path := range []string{
+		cfg.pollingDB, cfg.newsDB, cfg.analysisDB, cfg.ownershipDB,
+	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			return fmt.Errorf("create directory for %s: %w", path, err)
 		}
