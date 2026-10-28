@@ -76,10 +76,11 @@ type appConfig struct {
 		reprocess  bool
 	}
 	serve struct {
-		address    string
-		parsedDir  string
-		analysisDB string
-		setName    string
+		address     string
+		parsedDir   string
+		analysisDB  string
+		ownershipDB string
+		setName     string
 	}
 	taxonomy struct {
 		operation string
@@ -259,7 +260,7 @@ func run(ctx context.Context, args []string) error {
 			"parsed_directory", cfg.serve.parsedDir, "set", cfg.serve.setName)
 
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir,
-			cfg.serve.setName, cfg.serve.analysisDB)
+			cfg.serve.setName, cfg.serve.analysisDB, cfg.serve.ownershipDB)
 	case "taxonomy":
 		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
 			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter,

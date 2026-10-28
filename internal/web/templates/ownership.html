@@ -1,0 +1,201 @@
+{{define "ownership-directory-page.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head.html" .}}</head>
+<body class="{{.Page.BodyClass}}">
+  <header>
+    <a class="back" href="/">Filings</a>
+    <strong>Company ownership</strong>
+    {{if .SetName}}
+    <form method="get" action="/ownership">
+      <input name="q" value="{{.Query}}"
+        placeholder="Search ticker, company, or CIK">
+      <button type="submit">Search</button>
+    </form>
+    {{end}}
+  </header>
+  <main>
+    <section class="heading">
+      <h1>Company ownership</h1>
+      {{if .SetName}}
+      <div class="subtitle">
+        {{.SetName}} company directory · set as of {{.SetAsOf}}
+      </div>
+      {{else}}
+      <div class="subtitle">Choose the companies shown in this directory.</div>
+      {{end}}
+    </section>
+    {{if not .SetName}}
+    <section class="notice">
+      Start <code>edgar serve</code> with
+      <code>--set sp500</code> or <code>--set us-gaap</code>.
+    </section>
+    {{else}}
+      {{if not .Available}}
+      <section class="notice warning">
+        The ownership database is not available. Run the ownership importer or
+        pass <code>--ownership-db</code> to use another database.
+      </section>
+      {{end}}
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Companies</h2>
+        <span class="muted">{{len .Members}} shown</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ticker</th><th>Company</th><th>CIK</th></tr></thead>
+          <tbody>
+          {{range .Members}}
+            <tr>
+              <td><a href="/ownership/companies/{{.CIK}}">{{.Ticker}}</a></td>
+              <td>{{.Name}}</td>
+              <td>{{.CIK}}</td>
+            </tr>
+          {{else}}
+            <tr><td class="empty" colspan="3">No companies match.</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {{end}}
+  </main>
+</body>
+</html>
+{{end}}
+
+{{define "ownership-company-page.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head.html" .}}</head>
+<body class="{{.Page.BodyClass}}">
+  <header>
+    <a class="back" href="/ownership">&larr; Company ownership</a>
+    <a href="/companies/{{.Member.CIK}}">Financial history</a>
+  </header>
+  <main>
+    <section class="heading">
+      <h1>{{.Member.Ticker}} - {{.Member.Name}}</h1>
+      <div class="subtitle">CIK {{.Member.CIK}}</div>
+    </section>
+    <section class="notice">
+      Reported ownership is not real-time. Form 13F positions appear only when
+      a security has an explicit issuer mapping from ownership filings.
+    </section>
+    {{if not .Available}}
+    <section class="notice warning">
+      The ownership database is not available. Run the ownership importer or
+      pass <code>--ownership-db</code> to use another database.
+    </section>
+    {{else}}
+    <section class="ownership-section">
+      <div class="panel-heading">
+        <h2>Schedule 13D/G beneficial ownership</h2>
+        <span class="muted">latest reported state</span>
+      </div>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr><th>Owner</th><th>Event date</th><th>Security</th>
+            <th>CUSIP</th><th>Shares</th><th>Percent</th>
+            <th>Filing</th></tr></thead>
+          <tbody>{{range .Data.Beneficial}}
+            <tr><td>{{.OwnerName}}</td><td>{{.EventDate}}</td>
+              <td>{{.Security}}</td><td>{{.CUSIP}}</td>
+              <td class="num">{{.Shares}}</td>
+              <td class="num">{{.Percentage}}</td>
+              <td>{{template "ownership-filing-link" .}}</td></tr>
+          {{else}}<tr><td class="empty" colspan="7">
+            No mapped Schedule 13D/G reports.</td></tr>{{end}}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="ownership-section">
+      <div class="panel-heading"><h2>Insider holdings</h2>
+        <span class="muted">latest reported state</span></div>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr><th>Owner</th><th>As of</th><th>Security</th>
+            <th>Amount</th><th>Ownership</th><th>Filing</th></tr></thead>
+          <tbody>{{range .Data.InsiderHoldings}}
+            <tr><td>{{.OwnerName}}</td><td>{{.AsOfDate}}</td>
+              <td>{{.Security}}{{if .Derivative}} (derivative){{end}}</td>
+              <td class="num">{{.Amount}}</td>
+              <td>{{.DirectOrIndirect}}</td>
+              <td>{{template "ownership-filing-link" .}}</td></tr>
+          {{else}}<tr><td class="empty" colspan="6">
+            No insider holdings.</td></tr>{{end}}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="ownership-section">
+      <div class="panel-heading"><h2>Recent insider transactions</h2>
+        <span class="muted">up to 100 rows</span></div>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr><th>Owner</th><th>Date</th><th>Security</th>
+            <th>Code</th><th>A/D</th><th>Amount</th><th>Price</th>
+            <th>After</th><th>Filing</th></tr></thead>
+          <tbody>{{range .Data.InsiderTransactions}}
+            <tr><td>{{.OwnerName}}</td><td>{{.TransactionDate}}</td>
+              <td>{{.Security}}</td><td>{{.Code}}</td>
+              <td>{{.AcquiredDisposed}}</td><td class="num">{{.Amount}}</td>
+              <td class="num">{{.Price}}</td>
+              <td class="num">{{.SharesAfter}}</td>
+              <td>{{template "ownership-filing-link" .}}</td></tr>
+          {{else}}<tr><td class="empty" colspan="9">
+            No insider transactions.</td></tr>{{end}}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="ownership-section">
+      <div class="panel-heading"><h2>Mapped Form 13F positions</h2>
+        <span class="muted">effective positions, up to 250 rows</span></div>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr><th>Manager</th><th>Period</th><th>Security</th>
+            <th>CUSIP</th><th>Value</th><th>Amount</th>
+            <th>Type</th><th>Put/call</th><th>Filing</th></tr></thead>
+          <tbody>{{range .Data.Institutional}}
+            <tr><td>{{.ManagerName}}</td><td>{{.Period}}</td>
+              <td>{{.Security}}</td><td>{{.CUSIP}}</td>
+              <td class="num">{{.Value}}</td>
+              <td class="num">{{.Amount}}</td><td>{{.AmountType}}</td>
+              <td>{{.PutCall}}</td>
+              <td>{{template "ownership-filing-link" .}}</td></tr>
+          {{else}}<tr><td class="empty" colspan="9">
+            No explicitly mapped Form 13F positions.</td></tr>{{end}}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="ownership-section">
+      <div class="panel-heading"><h2>Import coverage</h2>
+        <span class="muted">latest interval by family</span></div>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr><th>Family</th><th>From</th><th>Through</th>
+            <th>Status</th><th>Processed</th><th>Failed</th>
+            <th>Unsupported</th></tr></thead>
+          <tbody>{{range .Coverage}}
+            <tr><td>{{.Family}}</td><td>{{.FromDate}}</td>
+              <td>{{.ThroughDate}}</td><td>{{.Status}}</td>
+              <td class="num">{{.Processed}} / {{.Expected}}</td>
+              <td class="num">{{.Failed}}</td>
+              <td class="num">{{.Unsupported}}</td></tr>
+          {{else}}<tr><td class="empty" colspan="7">
+            No completion run has recorded coverage yet.</td></tr>{{end}}</tbody>
+        </table>
+      </div>
+    </section>
+    {{end}}
+  </main>
+</body>
+</html>
+{{end}}
+
+{{define "ownership-filing-link"}}
+{{if .SourceURL}}<a href="{{.SourceURL}}">{{.FormType}}
+{{shortAccession .Accession}}</a>{{else}}{{.FormType}}
+{{shortAccession .Accession}}{{end}}
+<span class="source">filed {{.FilingDate}}</span>
+{{end}}

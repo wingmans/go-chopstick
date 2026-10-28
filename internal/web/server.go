@@ -21,6 +21,7 @@ import (
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/ownershipstore"
 	filingstore "wingman.com/chopstick/internal/web/store"
 	"wingman.com/chopstick/internal/xerr"
 )
@@ -32,9 +33,11 @@ type Server struct {
 	template    *template.Template
 	store       filingstore.Store
 	rawStore    filingstore.RawStore
+	ownership   *ownershipstore.Store
 	logger      *slog.Logger
 	setName     string
 	setAsOf     string
+	members     []constituents.Member
 	memberByCIK map[string]constituents.Member
 	memberByKey map[string][]string
 }
@@ -62,15 +65,40 @@ func NewConfiguredServer(parsedDir, setDir, setName string, logger *slog.Logger)
 func NewConfiguredServerWithDB(ctx context.Context, parsedDir, databasePath,
 	setDir, setName string, logger *slog.Logger,
 ) (*Server, error) {
+	return NewConfiguredServerWithDatabases(ctx, parsedDir, databasePath,
+		filepath.Join(filepath.Dir(databasePath), "ownership.db"), setDir,
+		setName, logger)
+}
+
+// NewConfiguredServerWithDatabases creates a dashboard backed by explicit
+// filing-analysis and ownership databases.
+func NewConfiguredServerWithDatabases(ctx context.Context, parsedDir,
+	databasePath, ownershipPath, setDir, setName string, logger *slog.Logger,
+) (*Server, error) {
 	store, err := filingstore.NewSQLiteStore(ctx, parsedDir, databasePath)
 	if err != nil {
 		return nil, err
 	}
 
+	var ownershipStore *ownershipstore.Store
+	if _, err := os.Stat(ownershipPath); err == nil {
+		ownershipStore, err = ownershipstore.Open(ctx, ownershipPath)
+		if err != nil {
+			_ = store.Close()
+
+			return nil, err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		_ = store.Close()
+
+		return nil, err
+	}
+
 	server := &Server{
-		store:    store,
-		rawStore: store,
-		logger:   logger,
+		store:     store,
+		rawStore:  store,
+		ownership: ownershipStore,
+		logger:    logger,
 		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
 			"formatFact":     formatFactValue,
 			"shortAccession": shortAccession,
@@ -90,11 +118,16 @@ func NewConfiguredServerWithDB(ctx context.Context, parsedDir, databasePath,
 	set, err := constituents.LoadJSON(filepath.Join(setDir, setName+".json"))
 	if err != nil {
 		_ = store.Close()
+		if ownershipStore != nil {
+			_ = ownershipStore.Close()
+		}
 
 		return nil, err
 	}
 
 	server.setAsOf = set.AsOf
+
+	server.members = append(server.members, set.Members...)
 	for _, member := range set.Members {
 		cik := canonicalCIK(member.CIK)
 		server.memberByCIK[cik] = member
@@ -109,11 +142,16 @@ func NewConfiguredServerWithDB(ctx context.Context, parsedDir, databasePath,
 
 // Close releases the database used by the server.
 func (s *Server) Close() error {
-	if closer, ok := s.store.(interface{ Close() error }); ok {
-		return closer.Close()
+	var closeErrors []error
+	if s.ownership != nil {
+		closeErrors = append(closeErrors, s.ownership.Close())
 	}
 
-	return nil
+	if closer, ok := s.store.(interface{ Close() error }); ok {
+		closeErrors = append(closeErrors, closer.Close())
+	}
+
+	return errors.Join(closeErrors...)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +162,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/":
 		s.index(w, r)
+	case r.URL.Path == "/ownership":
+		s.ownershipDirectory(w, r)
+	case strings.HasPrefix(r.URL.Path, "/ownership/companies/"):
+		s.ownershipCompany(w, r)
 	case r.URL.Path == "/assets/chopstick.svg":
 		s.asset(w, r, "assets/chopstick.svg", "image/svg+xml")
 	case r.URL.Path == "/assets/filingweb.css":

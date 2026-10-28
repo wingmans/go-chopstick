@@ -693,7 +693,7 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 			"parsed_directory", cfg.parsedDirectory)
 
 		return runServe(ctx, logger, cfg.filingsAddress, cfg.parsedDirectory,
-			"", cfg.analysisDB)
+			"", cfg.analysisDB, cfg.ownershipDB)
 	default:
 		return fmt.Errorf("unknown event role %q", role)
 	}

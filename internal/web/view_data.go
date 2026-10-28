@@ -9,6 +9,7 @@ import (
 	dividendview "wingman.com/chopstick/internal/dividend"
 	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/ownershipstore"
 	filingstore "wingman.com/chopstick/internal/web/store"
 )
 
@@ -52,6 +53,29 @@ type companyPageData struct {
 	Dividends     dividendview.View
 	DividendTable companyDividendTable
 	HasDividends  bool
+}
+
+type ownershipDirectoryData struct {
+	Page      pageChrome
+	SetName   string
+	SetAsOf   string
+	Query     string
+	Members   []ownershipDirectoryMember
+	Available bool
+}
+
+type ownershipDirectoryMember struct {
+	CIK    string
+	Ticker string
+	Name   string
+}
+
+type ownershipCompanyData struct {
+	Page      pageChrome
+	Member    ownershipDirectoryMember
+	Data      ownershipstore.CompanyOwnership
+	Coverage  []ownershipstore.Coverage
+	Available bool
 }
 
 type companyDividendTable struct {

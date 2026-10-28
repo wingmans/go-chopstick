@@ -405,13 +405,23 @@ func TestParseServeConfigDefaults(t *testing.T) {
 		t.Fatalf("unexpected parsed directory %q", cfg.serve.parsedDir)
 	}
 
-	cfg, err = parseConfig([]string{"serve", "--set", "golden"})
+	if cfg.serve.ownershipDB != "data/ownership.db" {
+		t.Fatalf("unexpected ownership database %q", cfg.serve.ownershipDB)
+	}
+
+	cfg, err = parseConfig([]string{
+		"serve", "--set", "golden", "--ownership-db", "other.db",
+	})
 	if err != nil {
 		t.Fatalf("parseConfig with set returned error: %v", err)
 	}
 
 	if cfg.serve.setName != "golden" {
 		t.Fatalf("unexpected serve set %q", cfg.serve.setName)
+	}
+
+	if cfg.serve.ownershipDB != "other.db" {
+		t.Fatalf("unexpected ownership database %q", cfg.serve.ownershipDB)
 	}
 }
 

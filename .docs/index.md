@@ -56,6 +56,8 @@ of the current golden-19 quality gate.
   indexes, and SEC XBRL documentation.
 - [Remaining work](01-overview/todo.md): deferred product and infrastructure
   work.
+- [Operations and runtime manageability](operations.md): schema lifecycle,
+  startup modes, status, logging, and Makefile boundaries.
 
 ## The Pipeline
 

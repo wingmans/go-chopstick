@@ -513,6 +513,40 @@ body.company-page tbody tr:hover td:first-child {
   background: #fafbfc;
 }
 
+body.ownership-page header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+body.ownership-page .ownership-section {
+  margin-top: 20px;
+}
+
+body.ownership-page .ownership-section > .panel-heading {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body.ownership-page td {
+  font-size: 12px;
+}
+
+.notice {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1e3a8a;
+  background: #eff6ff;
+}
+
+.notice.warning {
+  border-color: #fde68a;
+  color: #92400e;
+  background: #fffbeb;
+}
+
 .source {
   display: block;
   margin-top: 1px;
