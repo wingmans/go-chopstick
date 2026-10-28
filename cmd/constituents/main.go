@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/constituents"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/constituents"
 )
 
 const (

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/ownershipstore"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ownershipstore"
 )
 
 type rejectingTransport struct {

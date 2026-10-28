@@ -3,7 +3,7 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func TestBuildCompanyHistorySelectsNewestAnnualFact(t *testing.T) {

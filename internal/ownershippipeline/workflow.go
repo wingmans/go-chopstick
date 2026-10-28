@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/ownership"
-	"wingman.com/fetch-ecb/internal/ownershipstore"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ownership"
+	"wingman.com/chopstick/internal/ownershipstore"
 )
 
 // Config controls one streaming ownership import and completion pass.

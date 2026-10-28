@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {

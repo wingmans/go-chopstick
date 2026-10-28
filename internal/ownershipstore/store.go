@@ -15,7 +15,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"wingman.com/fetch-ecb/internal/ownership"
+	"wingman.com/chopstick/internal/ownership"
 )
 
 // Store is the SQLite ownership database.

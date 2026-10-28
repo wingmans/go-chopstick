@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/ctxlog"
+	filingworkflow "wingman.com/chopstick/internal/pipeline"
 )
 
 func parseSubmissionConfig(args []string) (appConfig, error) {

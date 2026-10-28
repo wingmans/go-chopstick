@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/ownership"
+	"wingman.com/chopstick/internal/ownership"
 )
 
 func TestStoreSavesFilingIdempotently(t *testing.T) {

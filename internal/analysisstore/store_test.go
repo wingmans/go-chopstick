@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	dividendview "wingman.com/chopstick/internal/dividend"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 func testStore(t *testing.T) *Store {

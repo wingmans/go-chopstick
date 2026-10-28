@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 var ErrUnsupported = errors.New("ownership form parser is not implemented")

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/marketstore"
-	"wingman.com/fetch-ecb/internal/marketworker"
+	"wingman.com/chopstick/internal/marketstore"
+	"wingman.com/chopstick/internal/marketworker"
 )
 
 const (

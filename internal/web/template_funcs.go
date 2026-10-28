@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"strings"
 
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 func add(left, right int) int {

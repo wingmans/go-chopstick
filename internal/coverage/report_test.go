@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/analysisstore"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	"wingman.com/chopstick/internal/analysisstore"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {

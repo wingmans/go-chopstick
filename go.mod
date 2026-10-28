@@ -1,4 +1,4 @@
-module wingman.com/fetch-ecb
+module wingman.com/chopstick
 
 go 1.27.3
 

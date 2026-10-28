@@ -9,10 +9,10 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/fetch-ecb/internal/constituents"
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/pollingworker"
 )
 
 const SelectionDurable = "edgar-selection-v1"

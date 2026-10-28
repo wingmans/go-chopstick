@@ -3,7 +3,7 @@ package news
 import (
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/pollingworker"
 )
 
 func TestStoreOrdersByStreamSequenceAndFilters(t *testing.T) {

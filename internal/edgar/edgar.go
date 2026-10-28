@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/ctxlog"
+	"wingman.com/chopstick/internal/ctxlog"
 )
 
 const (

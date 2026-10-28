@@ -3,7 +3,7 @@ package edgar
 import (
 	"context"
 
-	"wingman.com/fetch-ecb/internal/parser"
+	"wingman.com/chopstick/internal/parser"
 )
 
 // Parser types and entry points remain available from edgar while callers

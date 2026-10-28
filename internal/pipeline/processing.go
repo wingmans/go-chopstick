@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/analysisstore"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	"wingman.com/chopstick/internal/analysisstore"
+	"wingman.com/chopstick/internal/ctxlog"
+	dividendview "wingman.com/chopstick/internal/dividend"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 const (

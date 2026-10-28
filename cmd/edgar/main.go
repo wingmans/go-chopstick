@@ -19,13 +19,13 @@ import (
 	"syscall"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/constituents"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
-	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
-	"wingman.com/fetch-ecb/internal/xerr"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
+	filingworkflow "wingman.com/chopstick/internal/pipeline"
+	"wingman.com/chopstick/internal/xerr"
 )
 
 const defaultUserAgent = "wingman paul@wingmen.io"

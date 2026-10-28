@@ -13,14 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/eventworker"
-	"wingman.com/fetch-ecb/internal/news"
-	"wingman.com/fetch-ecb/internal/pollingworker"
-	"wingman.com/fetch-ecb/internal/web"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/eventworker"
+	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/pollingworker"
+	"wingman.com/chopstick/internal/web"
 )
 
 type eventCommandConfig struct {

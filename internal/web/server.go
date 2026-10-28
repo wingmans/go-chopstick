@@ -18,11 +18,11 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/constituents"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
-	filingstore "wingman.com/fetch-ecb/internal/web/store"
-	"wingman.com/fetch-ecb/internal/xerr"
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
+	filingstore "wingman.com/chopstick/internal/web/store"
+	"wingman.com/chopstick/internal/xerr"
 )
 
 //go:embed templates/*.html assets/chopstick.svg assets/filingweb.css assets/news.css assets/htmx-4.0.0.min.js

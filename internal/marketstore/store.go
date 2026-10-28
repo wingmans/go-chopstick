@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/marketstore/dbgen"
+	"wingman.com/chopstick/internal/marketstore/dbgen"
 )
 
 const dateLayout = "2006-01-02"

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func parseSection16(ctx context.Context, path string,

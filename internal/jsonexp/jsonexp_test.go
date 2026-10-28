@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/parser"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const (

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func parseSchedule13(ctx context.Context, path string,

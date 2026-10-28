@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/pollingworker/dbgen"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/pollingworker/dbgen"
 )
 
 // WorkFailure is the current failure state for one pipeline item.

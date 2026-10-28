@@ -8,7 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/fetch-ecb/internal/appdata"
+	"wingman.com/chopstick/internal/appdata"
 )
 
 func TestPathSizeAndFormatBytes(t *testing.T) {

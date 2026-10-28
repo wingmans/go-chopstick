@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
-	filingstore "wingman.com/fetch-ecb/internal/web/store"
+	dividendview "wingman.com/chopstick/internal/dividend"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
+	filingstore "wingman.com/chopstick/internal/web/store"
 )
 
 type filingSummary struct {

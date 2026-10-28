@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	pw "wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/eventbus"
+	pw "wingman.com/chopstick/internal/pollingworker"
 )
 
 func main() {

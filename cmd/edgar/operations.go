@@ -15,13 +15,13 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/constituents"
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/eventworker"
-	"wingman.com/fetch-ecb/internal/news"
-	"wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/eventworker"
+	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/pollingworker"
 )
 
 // operationsConfig holds the configuration for the operations subcommands.

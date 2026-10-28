@@ -12,13 +12,13 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/ownership"
-	"wingman.com/fetch-ecb/internal/ownershippipeline"
-	"wingman.com/fetch-ecb/internal/ownershipstore"
-	"wingman.com/fetch-ecb/internal/pipeline"
-	"wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/ownership"
+	"wingman.com/chopstick/internal/ownershippipeline"
+	"wingman.com/chopstick/internal/ownershipstore"
+	"wingman.com/chopstick/internal/pipeline"
+	"wingman.com/chopstick/internal/pollingworker"
 )
 
 const (

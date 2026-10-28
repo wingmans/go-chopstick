@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	filingweb "wingman.com/fetch-ecb/internal/web"
+	"wingman.com/chopstick/internal/appdata"
+	filingweb "wingman.com/chopstick/internal/web"
 )
 
 func parseServeConfig(args []string) (appConfig, error) {

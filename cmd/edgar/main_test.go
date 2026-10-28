@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
-	"wingman.com/fetch-ecb/internal/xerr"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/xerr"
 )
 
 func TestParseDownloadIndexConfigDefaults(t *testing.T) {
