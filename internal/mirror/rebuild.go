@@ -32,6 +32,18 @@ func RebuildCatalog(ctx context.Context, path, temporaryDirectory string,
 		return result, err
 	}
 
+	batch := make([]Submission, 0, catalogBatchSize)
+	flush := func() error {
+		if err := catalog.UpsertBatch(ctx, batch); err != nil {
+			return err
+		}
+
+		result.Indexed += int64(len(batch))
+		batch = batch[:0]
+
+		return nil
+	}
+
 	walkErr := store.Walk(ctx, func(object ObjectInfo) error {
 		value, inspectErr := inspectObject(ctx, store, object,
 			temporaryDirectory)
@@ -42,14 +54,17 @@ func RebuildCatalog(ctx context.Context, path, temporaryDirectory string,
 			return nil
 		}
 
-		if upsertErr := catalog.Upsert(ctx, value); upsertErr != nil {
-			return upsertErr
+		batch = append(batch, value)
+		if len(batch) == catalogBatchSize {
+			return flush()
 		}
-
-		result.Indexed++
 
 		return nil
 	})
+	if walkErr == nil {
+		walkErr = flush()
+	}
+
 	if walkErr == nil {
 		walkErr = catalog.IntegrityCheck(ctx)
 	}

@@ -120,6 +120,15 @@ func TestMirrorImportRequiresSource(t *testing.T) {
 	}
 }
 
+func TestMirrorServeRejectsPublicAddress(t *testing.T) {
+	_, err := parseConfig([]string{
+		"mirror", "serve", "--address", "0.0.0.0:8084",
+	})
+	if !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("public mirror address error = %v, want flag.ErrHelp", err)
+	}
+}
+
 func TestParseDiscoverConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
 	t.Chdir(filepath.Join("..", ".."))
 

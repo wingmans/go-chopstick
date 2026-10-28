@@ -66,17 +66,19 @@ func inspectObject(ctx context.Context, store SubmissionStore,
 
 	year, _ := filingYear(date)
 
+	ref := SubmissionRef{
+		Accession: strings.TrimSpace(metadata.Accession), CIK: cik,
+		FormType: strings.TrimSpace(metadata.FormType), FilingDate: date,
+		FilingPath: object.Key,
+	}
+
 	value := Submission{
-		//nolint:modernize // Naming the embedded field keeps this clear.
-		SubmissionRef: SubmissionRef{
-			Accession: strings.TrimSpace(metadata.Accession), CIK: cik,
-			FormType: strings.TrimSpace(metadata.FormType), FilingDate: date,
-			FilingPath: object.Key,
-		},
-		FilingYear: year, LogicalBytes: written,
+		SubmissionRef: ref,
+		FilingYear:    year, LogicalBytes: written,
 		StoredBytes: physical.StoredBytes,
 		SHA256:      hex.EncodeToString(hash.Sum(nil)),
 	}
+
 	if err := validateObjectIdentity(value); err != nil {
 		return Submission{}, err
 	}

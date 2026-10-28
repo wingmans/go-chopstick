@@ -13,6 +13,7 @@ var (
 	ErrInvalidReference = errors.New("invalid mirror submission reference")
 	ErrUnavailable      = errors.New("mirror unavailable")
 	ErrCorruptObject    = errors.New("corrupt mirror object")
+	ErrCatalogSchema    = errors.New("incompatible mirror catalog schema")
 )
 
 // SubmissionRef identifies one SEC submission and its origin path.

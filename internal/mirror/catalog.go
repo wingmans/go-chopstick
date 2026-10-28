@@ -11,12 +11,17 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/fetch-ecb/internal/mirror/dbgen"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const catalogBatchSize = 250
+
 // Catalog is the disposable query index for mirrored submissions.
 type Catalog struct {
-	db *sql.DB
+	db      *sql.DB
+	queries *dbgen.Queries
 }
 
 // OpenCatalog opens a catalog and reports whether its file was absent.
@@ -32,71 +37,69 @@ func OpenCatalog(ctx context.Context, path string) (*Catalog, bool, error) {
 		return nil, false, fmt.Errorf("create mirror catalog directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open(
+		"sqlite3",
+		path+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate",
+	)
 	if err != nil {
 		return nil, false, fmt.Errorf("open mirror catalog: %w", err)
 	}
 
-	catalog := &Catalog{db: db}
-	if err := catalog.createSchema(ctx); err != nil {
+	db.SetMaxOpenConns(1)
+
+	if err := createCatalogSchema(ctx, db); err != nil {
 		_ = db.Close()
 
 		return nil, false, err
 	}
 
-	return catalog, created, nil
+	queries, err := dbgen.Prepare(ctx, db)
+	if err != nil {
+		_ = db.Close()
+
+		return nil, false, fmt.Errorf("prepare mirror catalog queries: %w", err)
+	}
+
+	return &Catalog{db: db, queries: queries}, created, nil
 }
 
-func (c *Catalog) createSchema(ctx context.Context) error { //nolint:funcorder
-	_, err := c.db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS submissions (
-			object_key TEXT PRIMARY KEY,
-			accession TEXT NOT NULL UNIQUE,
-			cik TEXT NOT NULL,
-			form_type TEXT NOT NULL,
-			filing_date TEXT NOT NULL,
-			filing_year INTEGER NOT NULL,
-			logical_bytes INTEGER NOT NULL,
-			stored_bytes INTEGER NOT NULL,
-			sha256 TEXT NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS submissions_cik_date
-			ON submissions(cik, filing_date);
-		CREATE INDEX IF NOT EXISTS submissions_form_date
-			ON submissions(form_type, filing_date);
-		CREATE INDEX IF NOT EXISTS submissions_year_form
-			ON submissions(filing_year, form_type);
-	`)
-	if err != nil {
-		return fmt.Errorf("create mirror catalog schema: %w", err)
+// Close closes the catalog.
+func (c *Catalog) Close() error {
+	return errors.Join(c.queries.Close(), c.db.Close())
+}
+
+// Upsert records metadata derived from an authoritative raw object.
+func (c *Catalog) Upsert(ctx context.Context, value Submission) error {
+	if err := upsertSubmission(ctx, c.queries, value); err != nil {
+		return fmt.Errorf("upsert mirror catalog: %w", err)
 	}
 
 	return nil
 }
 
-// Close closes the catalog.
-func (c *Catalog) Close() error { return c.db.Close() }
+// UpsertBatch records a bounded group in one transaction.
+func (c *Catalog) UpsertBatch(ctx context.Context,
+	values []Submission,
+) error {
+	if len(values) == 0 {
+		return nil
+	}
 
-// Upsert records metadata derived from an authoritative raw object.
-func (c *Catalog) Upsert(ctx context.Context, value Submission) error {
-	_, err := c.db.ExecContext(ctx, `
-		INSERT INTO submissions (
-			object_key, accession, cik, form_type, filing_date, filing_year,
-			logical_bytes, stored_bytes, sha256
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(object_key) DO UPDATE SET
-			accession = excluded.accession,
-			cik = excluded.cik,
-			form_type = excluded.form_type,
-			filing_date = excluded.filing_date,
-			filing_year = excluded.filing_year,
-			logical_bytes = excluded.logical_bytes,
-			stored_bytes = excluded.stored_bytes,
-			sha256 = excluded.sha256`, value.FilingPath, value.Accession,
-		value.CIK, value.FormType, value.FilingDate, value.FilingYear,
-		value.LogicalBytes, value.StoredBytes, value.SHA256)
+	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("upsert mirror catalog: %w", err)
+		return fmt.Errorf("begin mirror catalog batch: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	queries := c.queries.WithTx(tx)
+	for _, value := range values {
+		if err := upsertSubmission(ctx, queries, value); err != nil {
+			return fmt.Errorf("upsert mirror catalog batch: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit mirror catalog batch: %w", err)
 	}
 
 	return nil
@@ -106,12 +109,8 @@ func (c *Catalog) Upsert(ctx context.Context, value Submission) error {
 func (c *Catalog) Get(ctx context.Context, accession string) (
 	Submission, error,
 ) {
-	row := c.db.QueryRowContext(ctx, `
-		SELECT object_key, accession, cik, form_type, filing_date,
-			filing_year, logical_bytes, stored_bytes, sha256
-		FROM submissions WHERE accession = ?`, strings.TrimSpace(accession))
-
-	value, err := scanSubmission(row)
+	row, err := c.queries.SubmissionByAccession(ctx,
+		strings.TrimSpace(accession))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Submission{}, ErrNotFound
 	}
@@ -120,69 +119,33 @@ func (c *Catalog) Get(ctx context.Context, accession string) (
 		return Submission{}, fmt.Errorf("read mirror catalog: %w", err)
 	}
 
-	return value, nil
+	return submissionFromRow(row), nil
 }
 
 // Search returns one stable accession-ordered page.
 func (c *Catalog) Search(ctx context.Context, filter SearchFilter) (
 	SubmissionPage, error,
 ) {
-	clauses := []string{"1 = 1"}
-	args := make([]any, 0, 6)
-
-	if strings.TrimSpace(filter.CIK) != "" {
-		clauses = append(clauses, "cik = ?")
-		args = append(args, strings.TrimSpace(filter.CIK))
-	}
-
-	if strings.TrimSpace(filter.FormType) != "" {
-		clauses = append(clauses, "form_type = ?")
-		args = append(args, strings.ToUpper(strings.TrimSpace(filter.FormType)))
-	}
-
-	if filter.FilingYear != 0 {
-		clauses = append(clauses, "filing_year = ?")
-		args = append(args, filter.FilingYear)
-	}
-
-	if strings.TrimSpace(filter.Cursor) != "" {
-		clauses = append(clauses, "accession > ?")
-		args = append(args, strings.TrimSpace(filter.Cursor))
-	}
-
 	limit := filter.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 
-	args = append(args, limit+1)
-
-	// #nosec G202 -- Every clause is a fixed string selected above.
-	query := `SELECT object_key, accession, cik, form_type, filing_date,
-		filing_year, logical_bytes, stored_bytes, sha256
-		FROM submissions WHERE ` + strings.Join(clauses, " AND ") +
-		" ORDER BY accession LIMIT ?"
-
-	rows, err := c.db.QueryContext(ctx, query, args...)
+	rows, err := c.queries.SearchSubmissions(ctx,
+		dbgen.SearchSubmissionsParams{
+			CIK:        strings.TrimSpace(filter.CIK),
+			FormType:   strings.ToUpper(strings.TrimSpace(filter.FormType)),
+			FilingYear: int64(filter.FilingYear),
+			Cursor:     strings.TrimSpace(filter.Cursor),
+			RowLimit:   int64(limit + 1),
+		})
 	if err != nil {
 		return SubmissionPage{}, fmt.Errorf("search mirror catalog: %w", err)
 	}
 
-	defer func() { _ = rows.Close() }()
-
-	items := make([]Submission, 0, limit+1)
-
-	for rows.Next() {
-		value, scanErr := scanSubmission(rows)
-		if scanErr != nil {
-			return SubmissionPage{}, fmt.Errorf("scan mirror search: %w", scanErr)
-		}
-
-		items = append(items, value)
-	}
-
-	if err := rows.Err(); err != nil {
-		return SubmissionPage{}, err
+	items := make([]Submission, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, submissionFromRow(row))
 	}
 
 	page := SubmissionPage{Items: items}
@@ -196,15 +159,14 @@ func (c *Catalog) Search(ctx context.Context, filter SearchFilter) (
 
 // Stats returns aggregate compression statistics from the catalog.
 func (c *Catalog) Stats(ctx context.Context) (Stats, error) {
-	var result Stats
-
-	err := c.db.QueryRowContext(ctx, `
-		SELECT COUNT(*), COALESCE(SUM(logical_bytes), 0),
-			COALESCE(SUM(stored_bytes), 0)
-		FROM submissions`).Scan(&result.Objects, &result.LogicalBytes,
-		&result.StoredBytes)
+	row, err := c.queries.CatalogStats(ctx)
 	if err != nil {
 		return Stats{}, fmt.Errorf("read mirror statistics: %w", err)
+	}
+
+	result := Stats{
+		Objects: row.ObjectCount, LogicalBytes: row.LogicalBytes,
+		StoredBytes: row.StoredBytes,
 	}
 
 	result.SavedBytes = result.LogicalBytes - result.StoredBytes
@@ -218,9 +180,7 @@ func (c *Catalog) Stats(ctx context.Context) (Stats, error) {
 
 // Delete removes one stale catalog row.
 func (c *Catalog) Delete(ctx context.Context, key string) error {
-	_, err := c.db.ExecContext(ctx,
-		`DELETE FROM submissions WHERE object_key = ?`, key)
-	if err != nil {
+	if err := c.queries.DeleteSubmission(ctx, key); err != nil {
 		return fmt.Errorf("delete mirror catalog row: %w", err)
 	}
 
@@ -230,7 +190,9 @@ func (c *Catalog) Delete(ctx context.Context, key string) error {
 // IntegrityCheck checks SQLite's own structural integrity.
 func (c *Catalog) IntegrityCheck(ctx context.Context) error {
 	var result string
-	if err := c.db.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&result); err != nil {
+	if err := c.db.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(
+		&result,
+	); err != nil {
 		return fmt.Errorf("check mirror catalog integrity: %w", err)
 	}
 
@@ -243,25 +205,35 @@ func (c *Catalog) IntegrityCheck(ctx context.Context) error {
 
 // Checkpoint flushes the derived WAL before an atomic catalog replacement.
 func (c *Catalog) Checkpoint(ctx context.Context) error {
-	if _, err := c.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+	if _, err := c.db.ExecContext(ctx,
+		`PRAGMA wal_checkpoint(TRUNCATE)`,
+	); err != nil {
 		return fmt.Errorf("checkpoint mirror catalog: %w", err)
 	}
 
 	return nil
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
+func upsertSubmission(ctx context.Context, queries *dbgen.Queries,
+	value Submission,
+) error {
+	return queries.UpsertSubmission(ctx, dbgen.UpsertSubmissionParams{
+		ObjectKey: value.FilingPath, Accession: value.Accession,
+		CIK: value.CIK, FormType: value.FormType,
+		FilingDate: value.FilingDate, FilingYear: int64(value.FilingYear),
+		LogicalBytes: value.LogicalBytes, StoredBytes: value.StoredBytes,
+		Sha256: value.SHA256,
+	})
 }
 
-func scanSubmission(row rowScanner) (Submission, error) {
-	var value Submission
-
-	err := row.Scan(&value.FilingPath, &value.Accession, &value.CIK,
-		&value.FormType, &value.FilingDate, &value.FilingYear,
-		&value.LogicalBytes, &value.StoredBytes, &value.SHA256)
-
-	return value, err
+func submissionFromRow(row dbgen.Submission) Submission {
+	return Submission{
+		Accession: row.Accession, CIK: row.CIK,
+		FormType: row.FormType, FilingDate: row.FilingDate,
+		FilingPath: row.ObjectKey,
+		FilingYear: int(row.FilingYear), LogicalBytes: row.LogicalBytes,
+		StoredBytes: row.StoredBytes, SHA256: row.Sha256,
+	}
 }
 
 func filingYear(date string) (int, error) {

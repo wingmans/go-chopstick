@@ -116,7 +116,7 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 	}
 
 	if cfg.artifacts.operation == "serve" {
-		if err := validateViewerAddress(cfg.artifacts.address); err != nil {
+		if err := validateLoopbackAddress(cfg.artifacts.address); err != nil {
 			return subcommandError(flags, err)
 		}
 	}
@@ -188,7 +188,7 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	return nil
 }
 
-func validateViewerAddress(address string) error {
+func validateLoopbackAddress(address string) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return fmt.Errorf("--address must be host:port: %w", err)

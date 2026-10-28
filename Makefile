@@ -107,13 +107,15 @@ check-generated: generate
 		internal/pollingworker/dbgen \
 		internal/marketstore/dbgen \
 		internal/analysisstore/dbgen \
-		internal/news/dbgen)" || { \
+		internal/news/dbgen \
+		internal/mirror/dbgen)" || { \
 		echo 'generated database code is out of date' >&2; \
 		git status --short --untracked-files=all -- \
 			internal/pollingworker/dbgen \
 			internal/marketstore/dbgen \
 			internal/analysisstore/dbgen \
-			internal/news/dbgen; \
+			internal/news/dbgen \
+			internal/mirror/dbgen; \
 		exit 1; \
 	}
 

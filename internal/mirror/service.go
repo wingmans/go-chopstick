@@ -182,7 +182,23 @@ func (s *Service) Stats(ctx context.Context) (Stats, error) {
 
 // Import reads uncompressed SEC submissions without changing their source.
 func (s *Service) Import(ctx context.Context, root string) (int64, error) {
-	var imported int64
+	var (
+		imported        int64
+		pendingImported int64
+	)
+
+	batch := make([]Submission, 0, catalogBatchSize)
+	flush := func() error {
+		if err := s.catalog.UpsertBatch(ctx, batch); err != nil {
+			return err
+		}
+
+		imported += pendingImported
+		pendingImported = 0
+		batch = batch[:0]
+
+		return nil
+	}
 
 	err := walkRawSubmissions(ctx, root, func(path, key string) error {
 		_, statErr := s.store.Stat(ctx, key)
@@ -209,16 +225,20 @@ func (s *Service) Import(ctx context.Context, root string) (int64, error) {
 			return inspectErr
 		}
 
-		if err := s.catalog.Upsert(ctx, value); err != nil {
-			return err
+		if !exists {
+			pendingImported++
 		}
 
-		if !exists {
-			imported++
+		batch = append(batch, value)
+		if len(batch) == catalogBatchSize {
+			return flush()
 		}
 
 		return nil
 	})
+	if err == nil {
+		err = flush()
+	}
 
 	return imported, err
 }

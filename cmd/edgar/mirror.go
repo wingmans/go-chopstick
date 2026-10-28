@@ -44,7 +44,7 @@ func parseMirrorConfig(args []string) (appConfig, error) {
 	flags.Usage = func() {
 		printSubcommandHelp("mirror <serve|import|stats|verify|repair|catalog rebuild>",
 			"Manage the isolated compressed EDGAR mirror.", []helpOption{
-				{"--address <host:port>", "REST listen address."},
+				{"--address <host:port>", "REST address; loopback only."},
 				{"--objects-dir <path>", "Compressed object directory."},
 				{"--catalog <path>", "Disposable SQLite catalog."},
 				{"--temp-dir <path>", "Bounded materialization directory."},
@@ -106,6 +106,12 @@ func parseMirrorConfig(args []string) (appConfig, error) {
 			errors.New("mirror paths and address cannot be empty"))
 	}
 
+	if cfg.mirror.operation == "serve" {
+		if err := validateLoopbackAddress(cfg.mirror.address); err != nil {
+			return subcommandError(flags, err)
+		}
+	}
+
 	return cfg, nil
 }
 
@@ -151,6 +157,27 @@ func runMirrorCommand(ctx context.Context, client *http.Client,
 	}
 
 	catalog, _, err := mirror.OpenCatalog(ctx, cfg.catalogDB)
+	if errors.Is(err, mirror.ErrCatalogSchema) {
+		logger.Info("mirror catalog schema incompatible; rebuilding",
+			"path", cfg.catalogDB)
+
+		result, rebuildErr := mirror.RebuildCatalog(ctx, cfg.catalogDB,
+			cfg.tempDir, store)
+		if rebuildErr != nil {
+			return rebuildErr
+		}
+
+		logger.Info("mirror catalog rebuilt", "submissions", result.Indexed,
+			"problems", len(result.Problems))
+
+		for _, problem := range result.Problems {
+			logger.Warn("mirror object omitted from rebuilt catalog",
+				"error", problem)
+		}
+
+		catalog, _, err = mirror.OpenCatalog(ctx, cfg.catalogDB)
+	}
+
 	if err != nil {
 		return err
 	}

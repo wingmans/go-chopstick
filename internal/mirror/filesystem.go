@@ -37,28 +37,6 @@ func NewFileStore(root string) (*FileStore, error) {
 	return &FileStore{root: root}, nil
 }
 
-func (s *FileStore) objectPath(key string) (string, error) { //nolint:funcorder
-	key = strings.TrimSpace(strings.TrimPrefix(key, "/"))
-	if key == "" {
-		return "", fmt.Errorf("%w: object key is empty", ErrInvalidReference)
-	}
-
-	clean := filepath.Clean(filepath.FromSlash(key))
-	if clean == "." || clean == ".." ||
-		strings.HasPrefix(clean, ".."+string(filepath.Separator)) ||
-		filepath.IsAbs(clean) {
-		return "", fmt.Errorf("%w: invalid object key %q",
-			ErrInvalidReference, key)
-	}
-
-	if filepath.Ext(clean) != ".txt" {
-		return "", fmt.Errorf("%w: object key must end in .txt",
-			ErrInvalidReference)
-	}
-
-	return filepath.Join(s.root, clean) + compressedSuffix, nil
-}
-
 // Stat returns physical information without decompressing the object.
 func (s *FileStore) Stat(_ context.Context, key string) (ObjectInfo, error) {
 	path, err := s.objectPath(key)
@@ -97,7 +75,104 @@ func (s *FileStore) Replace(ctx context.Context, key string,
 	return s.put(ctx, key, source, true)
 }
 
-func (s *FileStore) put(ctx context.Context, key string, source io.Reader, //nolint:funcorder
+// Open returns the original uncompressed SEC byte stream.
+func (s *FileStore) Open(ctx context.Context, key string) (
+	io.ReadCloser, ObjectInfo, error,
+) {
+	path, err := s.objectPath(key)
+	if err != nil {
+		return nil, ObjectInfo{}, err
+	}
+
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ObjectInfo{}, ErrNotFound
+	}
+
+	if err != nil {
+		return nil, ObjectInfo{}, fmt.Errorf("open mirror object: %w", err)
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+
+		return nil, ObjectInfo{}, fmt.Errorf("stat mirror object: %w", err)
+	}
+
+	decoder, err := zstd.NewReader(file)
+	if err != nil {
+		_ = file.Close()
+
+		return nil, ObjectInfo{}, fmt.Errorf("%w: open zstd stream: %w",
+			ErrCorruptObject, err)
+	}
+
+	reader := &decodedReader{
+		done: ctx.Done(), contextErr: ctx.Err, decoder: decoder, file: file,
+	}
+
+	return reader, ObjectInfo{Key: key, StoredBytes: info.Size()}, nil
+}
+
+// Walk visits every completed compressed object without loading all keys.
+func (s *FileStore) Walk(ctx context.Context,
+	visit func(ObjectInfo) error,
+) error {
+	return filepath.WalkDir(s.root, func(path string, entry os.DirEntry,
+		walkErr error,
+	) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt"+compressedSuffix) {
+			return nil
+		}
+
+		relative, err := filepath.Rel(s.root, path)
+		if err != nil {
+			return err
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+
+		key := filepath.ToSlash(strings.TrimSuffix(relative, compressedSuffix))
+
+		return visit(ObjectInfo{Key: key, StoredBytes: info.Size()})
+	})
+}
+
+func (s *FileStore) objectPath(key string) (string, error) {
+	key = strings.TrimSpace(strings.TrimPrefix(key, "/"))
+	if key == "" {
+		return "", fmt.Errorf("%w: object key is empty", ErrInvalidReference)
+	}
+
+	clean := filepath.Clean(filepath.FromSlash(key))
+	if clean == "." || clean == ".." ||
+		strings.HasPrefix(clean, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(clean) {
+		return "", fmt.Errorf("%w: invalid object key %q",
+			ErrInvalidReference, key)
+	}
+
+	if filepath.Ext(clean) != ".txt" {
+		return "", fmt.Errorf("%w: object key must end in .txt",
+			ErrInvalidReference)
+	}
+
+	return filepath.Join(s.root, clean) + compressedSuffix, nil
+}
+
+func (s *FileStore) put(ctx context.Context, key string, source io.Reader,
 	replace bool,
 ) (ObjectInfo, error) {
 	path, err := s.objectPath(key)
@@ -183,81 +258,6 @@ func (s *FileStore) put(ctx context.Context, key string, source io.Reader, //nol
 		Key: key, LogicalBytes: counter.count, StoredBytes: stored.Size(),
 		SHA256: hex.EncodeToString(hash.Sum(nil)),
 	}, nil
-}
-
-// Open returns the original uncompressed SEC byte stream.
-func (s *FileStore) Open(ctx context.Context, key string) (
-	io.ReadCloser, ObjectInfo, error,
-) {
-	path, err := s.objectPath(key)
-	if err != nil {
-		return nil, ObjectInfo{}, err
-	}
-
-	file, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, ObjectInfo{}, ErrNotFound
-	}
-
-	if err != nil {
-		return nil, ObjectInfo{}, fmt.Errorf("open mirror object: %w", err)
-	}
-
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-
-		return nil, ObjectInfo{}, fmt.Errorf("stat mirror object: %w", err)
-	}
-
-	decoder, err := zstd.NewReader(file)
-	if err != nil {
-		_ = file.Close()
-
-		return nil, ObjectInfo{}, fmt.Errorf("%w: open zstd stream: %w",
-			ErrCorruptObject, err)
-	}
-
-	reader := &decodedReader{
-		done: ctx.Done(), contextErr: ctx.Err, decoder: decoder, file: file,
-	}
-
-	return reader, ObjectInfo{Key: key, StoredBytes: info.Size()}, nil
-}
-
-// Walk visits every completed compressed object without loading all keys.
-func (s *FileStore) Walk(ctx context.Context,
-	visit func(ObjectInfo) error,
-) error {
-	return filepath.WalkDir(s.root, func(path string, entry os.DirEntry,
-		walkErr error,
-	) error {
-		if walkErr != nil {
-			return walkErr
-		}
-
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".txt"+compressedSuffix) {
-			return nil
-		}
-
-		relative, err := filepath.Rel(s.root, path)
-		if err != nil {
-			return err
-		}
-
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-
-		key := filepath.ToSlash(strings.TrimSuffix(relative, compressedSuffix))
-
-		return visit(ObjectInfo{Key: key, StoredBytes: info.Size()})
-	})
 }
 
 type countingReader struct {

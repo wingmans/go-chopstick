@@ -3,6 +3,7 @@ package mirror
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"os"
@@ -155,6 +156,166 @@ func TestCatalogRebuildAfterDeletion(t *testing.T) {
 		if err := os.Remove(catalogPath); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestCatalogRecordsAndGuardsSchemaVersion(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "catalog.db")
+
+	catalog, created, err := OpenCatalog(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var version int
+	if err := catalog.db.QueryRowContext(t.Context(),
+		"PRAGMA user_version",
+	).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := catalog.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !created || version != mirrorSchemaVersion {
+		t.Fatalf("created=%t version=%d", created, version)
+	}
+
+	legacyPath := filepath.Join(root, "legacy.db")
+
+	db, err := sql.Open("sqlite3", legacyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.ExecContext(t.Context(),
+		"CREATE TABLE legacy (id INTEGER PRIMARY KEY)",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := OpenCatalog(t.Context(), legacyPath); !errors.Is(
+		err, ErrCatalogSchema,
+	) {
+		t.Fatalf("legacy catalog error = %v", err)
+	}
+}
+
+func TestCatalogConcurrentInitialization(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "catalog.db")
+	errorsCh := make(chan error, 8)
+
+	var group sync.WaitGroup
+
+	for range 8 {
+		group.Go(func() {
+			catalog, _, err := OpenCatalog(context.Background(), path)
+			if err == nil {
+				err = catalog.Close()
+			}
+
+			errorsCh <- err
+		})
+	}
+
+	group.Wait()
+	close(errorsCh)
+
+	for err := range errorsCh {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestCatalogSearchPaginationAndBatchAtomicity(t *testing.T) {
+	catalog, _, err := OpenCatalog(t.Context(),
+		filepath.Join(t.TempDir(), "catalog.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = catalog.Close() }()
+
+	values := []Submission{
+		{
+			Accession: "0000000123-24-000001", CIK: "0000000123",
+			FormType: "10-Q", FilingDate: "2024-01-01",
+			FilingPath: "edgar/data/123/0000000123-24-000001.txt",
+			FilingYear: 2024, LogicalBytes: 100, StoredBytes: 60,
+			SHA256: "first",
+		},
+		{
+			Accession: "0000000123-24-000002", CIK: "0000000123",
+			FormType: "10-Q", FilingDate: "2024-04-01",
+			FilingPath: "edgar/data/123/0000000123-24-000002.txt",
+			FilingYear: 2024, LogicalBytes: 200, StoredBytes: 120,
+			SHA256: "second",
+		},
+		{
+			Accession: "0000000456-24-000001", CIK: "0000000456",
+			FormType: "10-K", FilingDate: "2024-02-01",
+			FilingPath: "edgar/data/456/0000000456-24-000001.txt",
+			FilingYear: 2024, LogicalBytes: 300, StoredBytes: 180,
+			SHA256: "third",
+		},
+	}
+	if err := catalog.UpsertBatch(t.Context(), values); err != nil {
+		t.Fatal(err)
+	}
+
+	filter := SearchFilter{
+		CIK: "0000000123", FormType: "10-q", FilingYear: 2024, Limit: 1,
+	}
+
+	first, err := catalog.Search(t.Context(), filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(first.Items) != 1 || first.Items[0].SHA256 != "first" ||
+		first.NextCursor != first.Items[0].Accession {
+		t.Fatalf("first page = %+v", first)
+	}
+
+	filter.Cursor = first.NextCursor
+
+	second, err := catalog.Search(t.Context(), filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(second.Items) != 1 || second.Items[0].SHA256 != "second" ||
+		second.NextCursor != "" {
+		t.Fatalf("second page = %+v", second)
+	}
+
+	duplicate := []Submission{
+		{
+			Accession: "duplicate", CIK: "0000000789", FormType: "8-K",
+			FilingDate: "2024-03-01", FilingYear: 2024,
+			FilingPath: "edgar/data/789/first.txt",
+		},
+		{
+			Accession: "duplicate", CIK: "0000000789", FormType: "8-K",
+			FilingDate: "2024-03-01", FilingYear: 2024,
+			FilingPath: "edgar/data/789/second.txt",
+		},
+	}
+	if err := catalog.UpsertBatch(t.Context(), duplicate); err == nil {
+		t.Fatal("duplicate accession batch succeeded")
+	}
+
+	if _, err := catalog.Get(t.Context(), "duplicate"); !errors.Is(
+		err, ErrNotFound,
+	) {
+		t.Fatalf("rolled-back batch lookup = %v", err)
 	}
 }
 
