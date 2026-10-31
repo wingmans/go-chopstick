@@ -33,13 +33,13 @@ empty, and a missing 8-K does not mean that a dividend was not declared.
 First prepare the SEC index if it is not already available:
 
 ```bash
-go run ./cmd/edgar index --stitch
+go run ./cmd/chop index --stitch
 ```
 
 Download and process all three filing types for one CIK:
 
 ```bash
-go run ./cmd/edgar filings \
+go run ./cmd/chop filings \
   --cik 789019 \
   --from-year 2015 \
   --to-year 2026 \
@@ -54,7 +54,7 @@ has no usable 2015 filing or when a shorter history is sufficient.
 Restrict the run to a different filing period when needed:
 
 ```bash
-go run ./cmd/edgar filings \
+go run ./cmd/chop filings \
   --cik 789019 \
   --from-year 2024 \
   --to-year 2026 \
@@ -72,7 +72,7 @@ If the submissions already exist in `data/cache/filings/`, process them without
 downloading again:
 
 ```bash
-go run ./cmd/edgar parse \
+go run ./cmd/chop parse \
   --cik 789019 \
   --form-type 8-K \
   --form-type 10-Q \
@@ -82,7 +82,7 @@ go run ./cmd/edgar parse \
 Use `--reprocess` after parser or dividend-extraction changes:
 
 ```bash
-go run ./cmd/edgar parse \
+go run ./cmd/chop parse \
   --cik 789019 \
   --form-type 8-K \
   --form-type 10-Q \
@@ -93,7 +93,7 @@ go run ./cmd/edgar parse \
 To process one local SEC submission, use `--file`:
 
 ```bash
-go run ./cmd/edgar parse \
+go run ./cmd/chop parse \
   --file data/cache/filings/edgar/data/789019/example.txt
 ```
 
@@ -106,7 +106,7 @@ all parsed filings already present for that CIK. It cannot be combined with
 Start the local web application after processing:
 
 ```bash
-go run ./cmd/edgar serve
+go run ./cmd/chopd
 ```
 
 Open a filing detail page. The Dividends panel appears when the company has a

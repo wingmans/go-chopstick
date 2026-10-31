@@ -56,7 +56,7 @@ lands would mix parser changes with data churn.
 - Add structured JSON output to the taxonomy linter and coverage reports.
 - Build the external taxonomy-tuner scan and review workflow.
 - Use annual-report HTML as supporting evidence for candidate mappings.
-- Emit deterministic, reviewable taxonomy patches without editing `edgar`.
+- Emit deterministic, reviewable taxonomy patches without editing `chop`.
 - Review high-level concepts across the `us-gaap-coverage` set.
 - Keep human approval mandatory for taxonomy changes.
 

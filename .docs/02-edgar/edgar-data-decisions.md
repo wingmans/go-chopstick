@@ -151,8 +151,8 @@ simulating command-line arguments.
 The intended commands are:
 
 ```text
-edgar index [options]
-edgar filings [options]
+chop index [options]
+chop filings [options]
 ```
 
 The planned defaults are:

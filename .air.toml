@@ -2,8 +2,8 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-cmd = "go build -o ./tmp/edgar-air ./cmd/edgar"
-full_bin = "LOGLEVEL=debug ./tmp/edgar-air serve --set us-gaap"
+cmd = "go build -o ./tmp/chopd-air ./cmd/chopd"
+full_bin = "LOGLEVEL=debug ./tmp/chopd-air"
 delay = 1000
 stop_on_error = true
 send_interrupt = true

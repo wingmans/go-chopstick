@@ -67,7 +67,7 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 
 	if len(args) == 0 {
 		return subcommandError(flags,
-			errors.New("use 'edgar artifacts <list|extract|serve|clean>'"))
+			errors.New("use 'chop artifacts <list|extract|serve|clean>'"))
 	}
 
 	cfg.artifacts.operation = args[0]
@@ -75,7 +75,7 @@ func parseArtifactCommand(args []string) (appConfig, error) {
 		cfg.artifacts.operation != "extract" &&
 		cfg.artifacts.operation != "serve" &&
 		cfg.artifacts.operation != "clean" {
-		return subcommandError(flags, errors.New("use 'edgar artifacts <list|extract|serve|clean>'"))
+		return subcommandError(flags, errors.New("use 'chop artifacts <list|extract|serve|clean>'"))
 	}
 
 	flags.StringVar(&cfg.artifacts.cik, "cik", "", "filing CIK")

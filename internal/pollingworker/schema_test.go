@@ -66,7 +66,7 @@ func TestPollingSchemaRejectsUnversionedDatabase(t *testing.T) {
 		t.Fatal("NewDedupeServiceContext() succeeded for old schema")
 	}
 
-	if !strings.Contains(err.Error(), "edgar rebuild edgar --confirm") {
+	if !strings.Contains(err.Error(), "chop rebuild edgar --confirm") {
 		t.Fatalf("error %q does not explain how to rebuild", err)
 	}
 }

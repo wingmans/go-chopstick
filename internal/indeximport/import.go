@@ -98,9 +98,9 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 		return nil
 	}
 
-	lock, err := applock.Acquire(appdata.Path("edgard.lock"))
+	lock, err := applock.Acquire(appdata.Path("chopd.lock"))
 	if err != nil {
-		return fmt.Errorf("index import requires edgard to be stopped: %w", err)
+		return fmt.Errorf("index import requires chopd to be stopped: %w", err)
 	}
 	defer func() { _ = lock.Close() }()
 

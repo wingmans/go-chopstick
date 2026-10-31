@@ -8,13 +8,13 @@ Financial interpretation and taxonomy mapping remain future work.
 ## Usage
 
 ```sh
-go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025
-go run ./cmd/edgar filings -c 0000789019 -f 10-Q -y 2025 --reprocess
-go run ./cmd/edgar filings -c 0000789019 -n
-go run ./cmd/edgar parse -c 0000789019 -f 10-Q -y 2025
-go run ./cmd/edgar parse --file golden/formtypes/sample_10-K.txt
-go run ./cmd/edgar parse --file golden/formtypes/sample_10-K.txt --reprocess
-go run ./cmd/edgar serve
+go run ./cmd/chop filings -c 0000789019 -f 10-Q -y 2025
+go run ./cmd/chop filings -c 0000789019 -f 10-Q -y 2025 --reprocess
+go run ./cmd/chop filings -c 0000789019 -n
+go run ./cmd/chop parse -c 0000789019 -f 10-Q -y 2025
+go run ./cmd/chop parse --file golden/formtypes/sample_10-K.txt
+go run ./cmd/chop parse --file golden/formtypes/sample_10-K.txt --reprocess
+go run ./cmd/chopd
 ```
 
 `filings` is the normal download-and-process command. Existing CIK, form-type,
@@ -56,7 +56,7 @@ To reset processing while keeping downloaded source material, run
 `make clean-dev`. It preserves filings, index ZIPs, extracted quarterly
 indexes, and constituent sets. It removes parsed output, databases, validation
 reports, logs, NATS state, temporary files, and the stitched `master.tsv`.
-This lets `edgar index --stitch` rebuild the master index without downloading
+This lets `chop index --stitch` rebuild the master index without downloading
 the quarterly indexes again.
 
 Use `make reset-dev` for a completely empty application data directory. That

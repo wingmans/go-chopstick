@@ -21,9 +21,9 @@ import (
 // Backfill downloads the historical index, publishes discoveries, and drains
 // the finite selection, download, and processing workload.
 func Backfill(ctx context.Context, config Config, logger *slog.Logger) error {
-	lock, err := applock.Acquire(appdata.Path("edgard.lock"))
+	lock, err := applock.Acquire(appdata.Path("chopd.lock"))
 	if err != nil {
-		return fmt.Errorf("backfill requires edgard to be stopped: %w", err)
+		return fmt.Errorf("backfill requires chopd to be stopped: %w", err)
 	}
 	defer func() { _ = lock.Close() }()
 
@@ -109,7 +109,7 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 
 	if len(unresolved) > 0 {
 		return fmt.Errorf("backfill completed with %d unresolved failure(s); "+
-			"run 'edgar failures list'", len(unresolved))
+			"run 'chop failures list'", len(unresolved))
 	}
 
 	logger.Info("backfill complete", "set", config.SetName,
@@ -129,9 +129,9 @@ func Rebuild(ctx context.Context, config Config, logger *slog.Logger) error {
 		return errors.New("a constituent set is required")
 	}
 
-	lock, err := applock.Acquire(appdata.Path("edgard.lock"))
+	lock, err := applock.Acquire(appdata.Path("chopd.lock"))
 	if err != nil {
-		return fmt.Errorf("rebuild requires edgard to be stopped: %w", err)
+		return fmt.Errorf("rebuild requires chopd to be stopped: %w", err)
 	}
 	defer func() { _ = lock.Close() }()
 

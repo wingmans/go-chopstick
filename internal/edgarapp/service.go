@@ -178,7 +178,7 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 		return err
 	}
 
-	lock, err := applock.Acquire(appdata.Path("edgard.lock"))
+	lock, err := applock.Acquire(appdata.Path("chopd.lock"))
 	if err != nil {
 		return err
 	}

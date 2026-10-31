@@ -86,8 +86,8 @@ The command-line layer is intentionally separate from the EDGAR logic so the
 same operations can later be called by a service or an orchestrator.
 
 ```text
-edgar index [options]
-edgar filings [options]
+chop index [options]
+chop filings [options]
 ```
 
 `index` downloads quarterly indexes and stitches `master.tsv` by

@@ -33,7 +33,7 @@ Experimental or manually trimmed registries can be stored elsewhere and
 selected explicitly with `--taxonomy`:
 
 ```text
-edgar taxonomy lint --taxonomy ./my-taxonomy.json --file ./filing-view.json
+chop taxonomy lint --taxonomy ./my-taxonomy.json --file ./filing-view.json
 ```
 
 If multiple maintained variants become necessary later, they can be added
@@ -68,15 +68,15 @@ fail a filing, alter raw data, or automatically add terms to the registry.
 Compact views can be inspected with:
 
 ```text
-edgar taxonomy lint --file data/parsed/.../filing-view.json
+chop taxonomy lint --file data/parsed/.../filing-view.json
 ```
 
 Without `--file`, the linter scans the local parsed directory and supports the
 same selection filters as filing processing:
 
 ```text
-edgar taxonomy lint --cik 789019 --form-type 10-K --year 2024
-edgar taxonomy lint --set golden --form-type 10-K
+chop taxonomy lint --cik 789019 --form-type 10-K --year 2024
+chop taxonomy lint --set golden --form-type 10-K
 ```
 
 The batch linter uses view metadata and does not require `master.tsv`. Results
@@ -90,8 +90,8 @@ discarded during compaction.
 Source-level coverage is available for verbose parsed filings:
 
 ```text
-edgar taxonomy coverage --cik 789019 --form-type 10-K
-edgar taxonomy coverage --file data/parsed/.../filing.json
+chop taxonomy coverage --cik 789019 --form-type 10-K
+chop taxonomy coverage --file data/parsed/.../filing.json
 ```
 
 Coverage reports every source fact before compaction. It includes unmapped

@@ -16,7 +16,7 @@ help:
 		'  generate                Generate checked-in database code' \
 		'  check-generated          Verify generated database code' \
 		'  build                   Build all command binaries' \
-		'  run                     Run edgard in the foreground' \
+		'  run                     Run chopd in the foreground' \
 		'  test                    Run the Go test suite' \
 		'  lint                    Run golangci-lint with auto-fixes' \
 		'  docs-pdf                Build the documentation PDF' \
@@ -67,13 +67,13 @@ check-generated: generate
 build:
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/ecb-fx ./cmd/ecb
-	go build -o $(BIN_DIR)/edgar ./cmd/edgar
-	go build -o $(BIN_DIR)/edgard ./cmd/edgard
+	go build -o $(BIN_DIR)/chop ./cmd/chop
+	go build -o $(BIN_DIR)/chopd ./cmd/chopd
 	go build -o $(BIN_DIR)/constituents ./cmd/constituents
 	go build -o $(BIN_DIR)/yahoo-prices ./cmd/yf
 
 run:
-	go run ./cmd/edgard
+	go run ./cmd/chopd
 
 lint:
 	golangci-lint run --fix ./cmd/... ./internal/...

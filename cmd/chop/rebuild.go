@@ -21,7 +21,7 @@ type rebuildConfig struct {
 func parseRebuildConfig(args []string) (appConfig, error) {
 	if len(args) == 0 || args[0] != "edgar" {
 		fmt.Fprintln(os.Stdout,
-			"Usage: edgar rebuild edgar [options]")
+			"Usage: chop rebuild edgar [options]")
 
 		return appConfig{}, flag.ErrHelp
 	}

@@ -10,10 +10,10 @@ flowchart LR
 | Step | Input | Output | CLI command |
 | --- | --- | --- | --- |
 | **SEC EDGAR** | Internet service | Quarterly index ZIPs and filing documents | |
-| **Download indexes** | SEC quarterly indexes | `data/cache/index-zips/` and `data/cache/indexes/quarterly/` | `edgar index` |
-| **Build master index** | Quarterly TSV files | `data/cache/indexes/master.tsv` | `edgar index --stitch` |
-| **Download filings** | `master.tsv` and SEC filing paths | `data/cache/filings/` | `edgar filings` |
-| **Parse filings** | Local `data/cache/filings/` and `master.tsv` | `data/parsed/` | `edgar parse` |
+| **Download indexes** | SEC quarterly indexes | `data/cache/index-zips/` and `data/cache/indexes/quarterly/` | `chop index` |
+| **Build master index** | Quarterly TSV files | `data/cache/indexes/master.tsv` | `chop index --stitch` |
+| **Download filings** | `master.tsv` and SEC filing paths | `data/cache/filings/` | `chop filings` |
+| **Parse filings** | Local `data/cache/filings/` and `master.tsv` | `data/parsed/` | `chop parse` |
 | **Parsed data** | Parsed submissions and XBRL facts | Persisted `filing.json` files | |
 
 ## Normal Flow

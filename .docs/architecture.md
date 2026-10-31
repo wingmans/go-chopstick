@@ -61,7 +61,7 @@ from cached raw ZIP files, downloads only missing filings, and recreates
 
 ## CLI control plane
 
-The `edgar` executable owns the operational boundaries:
+The `chop` executable owns the operational boundaries:
 
 - `index` extracts and stitches index data;
 - `discover` selects index records and publishes durable work;

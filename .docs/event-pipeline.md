@@ -82,14 +82,14 @@ make check-generated
 Check configuration and infrastructure without changing them:
 
 ```sh
-go run ./cmd/edgar doctor
-go run ./cmd/edgar doctor --verbose
+go run ./cmd/chop doctor
+go run ./cmd/chop doctor --verbose
 ```
 
 Run a finite historical pipeline with an explicit scope:
 
 ```sh
-go run ./cmd/edgar backfill --set us-gaap --from-year 2024
+go run ./cmd/chop backfill --set us-gaap --from-year 2024
 ```
 
 The command retrieves and stitches indexes, discovers the selected filings,
@@ -157,8 +157,8 @@ decisions, form counts, and the latest news items.
 Inspect current state and unresolved failures from another terminal:
 
 ```sh
-go run ./cmd/edgar status
-go run ./cmd/edgar errors
+go run ./cmd/chop status
+go run ./cmd/chop errors
 ```
 
 `status` is the catch-up view. Each durable consumer reports its remaining
@@ -173,8 +173,8 @@ Workers retry failed work five times before terminating that delivery and
 leaving a durable failure record in `polling.db`. Requeue failures explicitly:
 
 ```sh
-go run ./cmd/edgar retry --stage download
-go run ./cmd/edgar retry --stage process
+go run ./cmd/chop retry --stage download
+go run ./cmd/chop retry --stage process
 ```
 
 Normal logs include a progress summary every five seconds. `LOGLEVEL=debug`
@@ -212,20 +212,20 @@ Inspect documents from a parsed filing without retaining another permanent
 copy:
 
 ```sh
-go run ./cmd/edgar artifacts list \
+go run ./cmd/chop artifacts list \
   --cik 0001898496 \
   --accession 0001213900-26-111193
 
-go run ./cmd/edgar artifacts extract \
+go run ./cmd/chop artifacts extract \
   --cik 0001898496 \
   --accession 0001213900-26-111193 \
   --type EX-99.1 --type GRAPHIC
 
-go run ./cmd/edgar artifacts serve \
+go run ./cmd/chop artifacts serve \
   --cik 0001898496 \
   --accession 0001213900-26-111193
 
-go run ./cmd/edgar artifacts clean \
+go run ./cmd/chop artifacts clean \
   --cik 0001898496 \
   --accession 0001213900-26-111193
 ```
@@ -254,11 +254,11 @@ bytes before it is added to the test suite.
 The explicit stages remain available for debugging.
 
 ```sh
-go run ./cmd/edgar index --from-year 2024
-go run ./cmd/edgar discover --set us-gaap --from-year 2024
-go run ./cmd/edgar select --set us-gaap --drain
-go run ./cmd/edgar download --drain
-go run ./cmd/edgar process --drain
+go run ./cmd/chop index --from-year 2024
+go run ./cmd/chop discover --set us-gaap --from-year 2024
+go run ./cmd/chop select --set us-gaap --drain
+go run ./cmd/chop download --drain
+go run ./cmd/chop process --drain
 ```
 
 The news page listens on `http://127.0.0.1:8081` by default. Set
@@ -298,7 +298,7 @@ make rebuild-edgar
 ```
 
 The target removes derived EDGAR state, resets the project-local JetStream,
-and runs `edgar backfill` with `EDGAR_SET` and `EDGAR_FROM_YEAR` from `.env`.
+and runs `chop backfill` with `EDGAR_SET` and `EDGAR_FROM_YEAR` from `.env`.
 It preserves downloaded filings, index archives, and constituent sets. Start
 `make dev` afterward; creation of the missing `feed.db` causes the news
 consumer to replay the retained selection stream.

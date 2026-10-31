@@ -1,4 +1,4 @@
-// Package control defines the NATS control plane shared by edgar and edgard.
+// Package control defines the NATS control plane shared by chop and chopd.
 package control
 
 import (
@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	StatusSubject        = "edgar.control.status"
-	FailuresSubject      = "edgar.control.failures.list"
-	RetryFailuresSubject = "edgar.control.failures.retry"
+	StatusSubject        = "chop.control.status"
+	FailuresSubject      = "chop.control.failures.list"
+	RetryFailuresSubject = "chop.control.failures.retry"
 	requestTimeout       = 5 * time.Second
 )
 
@@ -35,7 +35,7 @@ type ConsumerStatus struct {
 	Redelivered int    `json:"redelivered"`
 }
 
-// Status is the live state reported by edgard.
+// Status is the live state reported by chopd.
 type Status struct {
 	StartedAt      time.Time        `json:"started_at"`
 	HTTPAddress    string           `json:"http_address"`
@@ -75,7 +75,7 @@ type response[T any] struct {
 	Error string `json:"error,omitempty"`
 }
 
-// Handler implements live administrative operations inside edgard.
+// Handler implements live administrative operations inside chopd.
 type Handler interface {
 	Status(ctx context.Context) (Status, error)
 	Failures(ctx context.Context, request FailureRequest) ([]Failure, error)
@@ -88,14 +88,14 @@ type Server struct {
 	handler    Handler
 }
 
-// NewServer connects the edgard control plane to NATS.
+// NewServer connects the chopd control plane to NATS.
 func NewServer(url string, handler Handler) (*Server, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, errors.New("NATS URL is required")
 	}
 
 	connection, err := nats.Connect(url,
-		nats.Name("edgard-control"),
+		nats.Name("chopd-control"),
 		nats.Timeout(requestTimeout),
 		nats.MaxReconnects(-1),
 	)
@@ -112,7 +112,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	subscribe := func(subject string, handle nats.MsgHandler) error {
 		subscription, err := s.connection.QueueSubscribe(
-			subject, "edgard-control", handle,
+			subject, "chopd-control", handle,
 		)
 		if err != nil {
 			return fmt.Errorf("subscribe to %s: %w", subject, err)
@@ -212,7 +212,7 @@ func (s *Server) respond(message *nats.Msg, value any, responseErr error) {
 	_ = message.Respond(encoded)
 }
 
-// Client sends operator requests to a running edgard instance.
+// Client sends operator requests to a running chopd instance.
 type Client struct {
 	connection *nats.Conn
 }
@@ -220,7 +220,7 @@ type Client struct {
 // NewClient connects an operator client to NATS.
 func NewClient(url string) (*Client, error) {
 	connection, err := nats.Connect(url,
-		nats.Name("edgar-control-cli"),
+		nats.Name("chop-control-cli"),
 		nats.Timeout(requestTimeout),
 	)
 	if err != nil {
@@ -247,7 +247,7 @@ func (c *Client) Failures(ctx context.Context,
 	return request[[]Failure](ctx, c.connection, FailuresSubject, value)
 }
 
-// RetryFailures asks edgard to requeue unresolved failures.
+// RetryFailures asks chopd to requeue unresolved failures.
 func (c *Client) RetryFailures(ctx context.Context,
 	value RetryRequest,
 ) (RetryResult, error) {
@@ -273,7 +273,7 @@ func request[T any](ctx context.Context, connection *nats.Conn,
 
 	message, err := connection.RequestWithContext(ctx, subject, payload)
 	if errors.Is(err, nats.ErrNoResponders) {
-		return zero, errors.New("edgard is not running or not responding")
+		return zero, errors.New("chopd is not running or not responding")
 	}
 
 	if err != nil {

@@ -171,7 +171,7 @@ func (r *doctorReport) check(level, component, message string) {
 }
 
 func runDoctor(ctx context.Context, cfg operationsConfig) error {
-	fmt.Println("EDGAR doctor")
+	fmt.Println("Chop doctor")
 	fmt.Println()
 
 	report := doctorReport{}
@@ -193,7 +193,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 	if _, err := os.Stat(cfg.masterPath); err == nil {
 		report.check("OK", "master index", cfg.masterPath)
 	} else if errors.Is(err, os.ErrNotExist) {
-		report.check("WARN", "master index", "missing; run 'edgar index'")
+		report.check("WARN", "master index", "missing; run 'chop index'")
 	} else {
 		report.check("FAIL", "master index", err.Error())
 	}
@@ -217,7 +217,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 		if _, err := bus.JetStream().StreamInfo(eventbus.StreamName); err != nil {
 			if errors.Is(err, nats.ErrStreamNotFound) {
 				report.check("WARN", "JetStream",
-					"EDGAR_EVENTS will be created by edgard")
+					"EDGAR_EVENTS will be created by chopd")
 			} else {
 				report.check("FAIL", "JetStream", err.Error())
 			}
@@ -254,7 +254,7 @@ func checkSQLite(ctx context.Context, report *doctorReport,
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			report.check("WARN", component,
-				path+" does not exist; start edgard")
+				path+" does not exist; start chopd")
 		} else {
 			report.check("FAIL", component, err.Error())
 		}
@@ -277,7 +277,7 @@ func checkSQLite(ctx context.Context, report *doctorReport,
 			WHERE type = 'table' AND name = ?`, table).Scan(&found)
 		if err != nil || found == 0 {
 			report.check("FAIL", component,
-				"missing table "+table+"; start edgard")
+				"missing table "+table+"; start chopd")
 
 			return
 		}
@@ -317,7 +317,7 @@ func checkConsumer(report *doctorReport, bus *eventbus.NATS, durable string) {
 	switch {
 	case errors.Is(err, nats.ErrConsumerNotFound):
 		report.check("WARN", "consumer",
-			durable+" has not been created; start edgard")
+			durable+" has not been created; start chopd")
 	case err != nil:
 		report.check("FAIL", "consumer", durable+": "+err.Error())
 	default:
@@ -362,7 +362,7 @@ func printResolvedConfiguration(cfg operationsConfig) {
 	fmt.Printf("  SEC archives      %s\n", baseURL)
 	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv, defaultUserAgent))
 	fmt.Printf("  NATS              %s\n", cfg.natsURL)
-	fmt.Printf("  web URL           %s (served by edgard)\n",
+	fmt.Printf("  web URL           %s (served by chopd)\n",
 		httpURL(cfg.httpAddress))
 	fmt.Printf("  data directory    %s\n", appdata.Root())
 	fmt.Printf("  filings cache     %s\n", appdata.Path("cache", "filings"))
@@ -480,7 +480,7 @@ func runStatus(ctx context.Context, cfg operationsConfig) error {
 		return err
 	}
 
-	fmt.Println("EDGAR status")
+	fmt.Println("Chop status")
 	fmt.Println()
 	fmt.Printf("  started           %s\n", status.StartedAt.Format(time.RFC3339))
 	fmt.Printf("  web URL           %s\n", httpURL(status.HTTPAddress))

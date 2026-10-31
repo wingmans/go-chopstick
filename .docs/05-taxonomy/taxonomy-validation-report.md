@@ -17,15 +17,15 @@ The report should answer four questions:
 - What evidence supports a possible taxonomy change?
 
 The parser remains deterministic. The tuner consumes reports and emits a
-reviewable taxonomy patch outside the `edgar` application.
+reviewable taxonomy patch outside the `chop` application.
 
 ## Expected-Set Coverage
 
-The separate `edgar coverage` command compares selected master-index records
+The separate `chop coverage` command compares selected master-index records
 with local downloaded filings and materialized filing views in `analysis.db`:
 
 ```text
-edgar coverage --set us-gaap-coverage --form-type 10-K \
+chop coverage --set us-gaap-coverage --form-type 10-K \
   --from-year 2010 --to-year 2025
 ```
 

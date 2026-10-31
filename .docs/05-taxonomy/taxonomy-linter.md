@@ -10,14 +10,14 @@ data, parsed filings, or the taxonomy registry.
 application consumes:
 
 ```text
-edgar taxonomy lint --cik 789019 --form-type 10-K --year 2024
-edgar taxonomy lint --set us-gaap-coverage --form-type 10-K \
+chop taxonomy lint --cik 789019 --form-type 10-K --year 2024
+chop taxonomy lint --set us-gaap-coverage --form-type 10-K \
   --from-year 2015 --format json \
   --out data/validation/runs/2026-09-16-taxonomy/lint-report.json
-edgar taxonomy lint --set us-gaap-coverage --form-type 10-K \
+chop taxonomy lint --set us-gaap-coverage --form-type 10-K \
   --from-year 2015 --format text \
   --out data/validation/runs/2026-09-16-taxonomy/lint-report.txt
-edgar taxonomy lint --file data/parsed/.../filing-view.json
+chop taxonomy lint --file data/parsed/.../filing-view.json
 ```
 
 It reports:
@@ -142,14 +142,14 @@ clear consolidated concept, add the alias with a focused before/after run.
 `taxonomy coverage` reads `filing.json` before compact projection:
 
 ```text
-edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K
-edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K \
+chop taxonomy coverage --set us-gaap-coverage --form-type 10-K
+chop taxonomy coverage --set us-gaap-coverage --form-type 10-K \
   --from-year 2015 --format json \
   --out data/validation/runs/2026-09-16-taxonomy/taxonomy-coverage.json
-edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K \
+chop taxonomy coverage --set us-gaap-coverage --form-type 10-K \
   --from-year 2015 --format text \
   --out data/validation/runs/2026-09-16-taxonomy/taxonomy-coverage.txt
-edgar taxonomy coverage --file data/parsed/.../filing.json
+chop taxonomy coverage --file data/parsed/.../filing.json
 ```
 
 It reports the complete source fact population, including concepts discarded

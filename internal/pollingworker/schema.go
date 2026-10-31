@@ -107,7 +107,7 @@ func schemaIsLocked(err error) bool {
 func outdatedSchemaError(version int) error {
 	return fmt.Errorf(
 		"polling database schema version is %d, want %d; "+
-			"run 'edgar rebuild edgar --confirm'",
+			"run 'chop rebuild edgar --confirm'",
 		version,
 		pollingSchemaVersion,
 	)

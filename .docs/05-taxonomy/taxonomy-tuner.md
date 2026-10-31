@@ -2,7 +2,7 @@
 
 This note describes a rough design for an external taxonomy tuning tool. The
 tool is intended to improve the local, high-level US-GAAP taxonomy without
-making taxonomy learning part of the `edgar` application.
+making taxonomy learning part of the `chop` application.
 
 ## Purpose
 
@@ -26,8 +26,8 @@ promote every unmapped concept into the production taxonomy.
 
 ## Boundaries
 
-The `edgar` application remains responsible for deterministic parsing,
-projection, persistence, and linting. The tuner remains outside the `edgar`
+The `chop` application remains responsible for deterministic parsing,
+projection, persistence, and linting. The tuner remains outside the `chop`
 packages and consumes their outputs.
 
 The following rules are important:

@@ -11,7 +11,7 @@ on_exit() {
 trap on_exit EXIT
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI_PATH="$ROOT_DIR/bin/edgar"
+CLI_PATH="$ROOT_DIR/bin/chop"
 DATA_DIR="${CHOPSTICK_DATA_DIR:-$ROOT_DIR/data}"
 [[ "$DATA_DIR" = /* ]] || DATA_DIR="$ROOT_DIR/${DATA_DIR#./}"
 SET_NAME="us-gaap"

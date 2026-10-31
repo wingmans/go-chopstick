@@ -38,7 +38,7 @@ func parseOwnershipConfig(args []string) (appConfig, error) {
 
 	if operation != "import" && operation != "status" {
 		return ownershipCommandError(operation,
-			errors.New("use 'edgar ownership <import|status>'"))
+			errors.New("use 'chop ownership <import|status>'"))
 	}
 
 	var cfg appConfig

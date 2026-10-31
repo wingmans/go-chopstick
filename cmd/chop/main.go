@@ -1,4 +1,4 @@
-// Package main downloads SEC EDGAR data and parses local filing submissions.
+// Command chop manages SEC EDGAR data and the local application.
 package main
 
 import (
@@ -196,7 +196,7 @@ func run(ctx context.Context, args []string) error {
 		cfg.command != "errors" && cfg.command != "retry" {
 		started := time.Now()
 		defer func() {
-			logger.Info("finished EDGAR command", "command", cfg.command,
+			logger.Info("finished Chop command", "command", cfg.command,
 				"duration_ms", time.Since(started).Milliseconds())
 		}()
 	}
@@ -280,7 +280,7 @@ func classifyCLIError(ctx context.Context, err error) error {
 	}
 
 	logger := ctxlog.FromContext(ctx)
-	logger.Debug("EDGAR command error detail", "error", err.Error())
+	logger.Debug("Chop command error detail", "error", err.Error())
 
 	if _, ok := errors.AsType[*xerr.Error](err); ok {
 		return err
@@ -313,7 +313,7 @@ func classifyCLIError(ctx context.Context, err error) error {
 			return xerr.Wrap(xerr.Unavailable, "EDGAR_UNAVAILABLE", "EDGAR service is unavailable", err)
 		}
 
-		return xerr.Wrap(xerr.Internal, "EDGAR_COMMAND_FAILED", "EDGAR command failed", err)
+		return xerr.Wrap(xerr.Internal, "CHOP_COMMAND_FAILED", "Chop command failed", err)
 	}
 }
 
@@ -378,7 +378,7 @@ func parseFailuresConfig(args []string) (appConfig, error) {
 	}
 
 	fmt.Fprintln(os.Stdout,
-		"Usage: edgar failures <list|retry> [options]")
+		"Usage: chop failures <list|retry> [options]")
 
 	return appConfig{}, flag.ErrHelp
 }
@@ -428,7 +428,7 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	flags.StringVar(&cfg.taxonomy.out, "out", "", "output path")
 
 	if len(args) == 0 || (args[0] != "lint" && args[0] != "coverage") {
-		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
+		return subcommandError(flags, errors.New("use 'chop taxonomy <lint|coverage>'"))
 	}
 
 	cfg.taxonomy.operation = args[0]
@@ -437,7 +437,7 @@ func parseTaxonomyConfig(args []string) (appConfig, error) {
 	}
 
 	if flags.NArg() != 0 {
-		return subcommandError(flags, errors.New("use 'edgar taxonomy <lint|coverage>'"))
+		return subcommandError(flags, errors.New("use 'chop taxonomy <lint|coverage>'"))
 	}
 
 	if strings.TrimSpace(cfg.taxonomy.file) != "" &&
@@ -1036,14 +1036,14 @@ func environmentFromYear() (int, error) {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stdout, "Usage: edgar <command> [options]")
+	fmt.Fprintln(os.Stdout, "Usage: chop <command> [options]")
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Commands:")
 	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
 	fmt.Fprintln(os.Stdout, "  rebuild           restore disposable application state")
 	fmt.Fprintln(os.Stdout, "  ownership         import and inspect ownership filings")
 	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")
-	fmt.Fprintln(os.Stdout, "  status            query the running EDGAR application")
+	fmt.Fprintln(os.Stdout, "  status            query the running Chop application")
 	fmt.Fprintln(os.Stdout, "  failures          list or retry pipeline failures")
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
@@ -1052,11 +1052,11 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
 	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")
 	fmt.Fprintln(os.Stdout)
-	fmt.Fprintln(os.Stdout, "Use 'edgar <command> --help' for command-specific options.")
+	fmt.Fprintln(os.Stdout, "Use 'chop <command> --help' for command-specific options.")
 }
 
 func printSubcommandHelp(command, description string, options []helpOption) {
-	fmt.Fprintf(os.Stdout, "Usage: edgar %s [options]\n\n", command)
+	fmt.Fprintf(os.Stdout, "Usage: chop %s [options]\n\n", command)
 	fmt.Fprintln(os.Stdout, description)
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Options:")

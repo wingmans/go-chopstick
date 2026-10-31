@@ -7,7 +7,7 @@ import (
 )
 
 func TestAcquireRejectsSecondOwner(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "edgard.lock")
+	path := filepath.Join(t.TempDir(), "chopd.lock")
 
 	first, err := Acquire(path)
 	if err != nil {

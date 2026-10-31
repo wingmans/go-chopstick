@@ -46,7 +46,7 @@ taxonomy workflow, and data layout, start with the
 [EDGAR project guide](docs/index.md).
 
 ```bash
-go run ./cmd/edgar index --from-year 2025
+go run ./cmd/chop index --from-year 2025
 ```
 
 `index` writes one `YYYY-QTRn.tsv` file per quarter to
@@ -59,7 +59,7 @@ enabled by default and can be disabled with `--stitch=false`.
 After an index has been downloaded, filing files can be downloaded separately:
 
 ```bash
-go run ./cmd/edgar filings --form-type 10-K
+go run ./cmd/chop filings --form-type 10-K
 ```
 
 This reads `./data/cache/indexes/master.tsv` and stores SEC-relative filing and HTML
@@ -196,7 +196,7 @@ make lint     # Run golangci-lint
 make clean    # Remove build artifacts
 ```
 
-Run the EDGAR application in the foreground during development:
+Run the Chop application in the foreground during development:
 
 ```bash
 make nats-start
@@ -206,8 +206,8 @@ make run
 The separate control CLI communicates with the running application over NATS:
 
 ```bash
-go run ./cmd/edgar status
-go run ./cmd/edgar failures list
+go run ./cmd/chop status
+go run ./cmd/chop failures list
 ```
 
 See the [EDGAR project guide](docs/index.md) for the executable and operational

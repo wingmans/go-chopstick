@@ -76,7 +76,7 @@ SEC EDGAR
 
 ### 1. Index
 
-`edgar index` downloads quarterly SEC index archives, extracts their TSV
+`chop index` downloads quarterly SEC index archives, extracts their TSV
 records, and can stitch them into `data/cache/indexes/master.tsv`. The POC
 defaults to 2016 and refuses earlier index years.
 
@@ -87,7 +87,7 @@ data.
 
 ### 2. Filing selection and download
 
-`edgar filings` selects records from `master.tsv`, normally by form type,
+`chop filings` selects records from `master.tsv`, normally by form type,
 company set, and year. It downloads only missing local submissions and keeps
 the SEC-relative path so the local file can be traced back to its source URL.
 
@@ -104,7 +104,7 @@ noise.
 
 ### 3. Parse
 
-`edgar parse` reads local submissions and writes a verbose `filing.json`.
+`chop parse` reads local submissions and writes a verbose `filing.json`.
 The parser reads the submission envelope, document inventory, inline XBRL,
 contexts, units, facts, namespaces, and diagnostics. The raw submission is
 never rewritten.
@@ -260,8 +260,8 @@ there is a deliberate reason to discard them.
 The linter checks saved `filing-view.json` files against the local taxonomy:
 
 ```bash
-edgar taxonomy lint --set us-gaap-coverage --form-type 10-K
-edgar taxonomy lint --file data/parsed/.../filing-view.json
+chop taxonomy lint --set us-gaap-coverage --form-type 10-K
+chop taxonomy lint --file data/parsed/.../filing-view.json
 ```
 
 It reports unmapped compact terms and quality findings. It does not edit the
@@ -272,7 +272,7 @@ taxonomy or fail merely because the source filing contains extra concepts.
 Coverage inspects `filing.json` before compaction:
 
 ```bash
-edgar taxonomy coverage --set us-gaap-coverage --form-type 10-K
+chop taxonomy coverage --set us-gaap-coverage --form-type 10-K
 ```
 
 This is intentionally noisier. It answers "what did the filing contain?"
@@ -297,7 +297,7 @@ coverage finding
   -> tests and golden validation
 ```
 
-The tuner should never edit `edgar`, rewrite raw facts, or promote a mapping
+The tuner should never edit `chop`, rewrite raw facts, or promote a mapping
 only because it is frequent. See
 [taxonomy-tuner.md](05-taxonomy/taxonomy-tuner.md) for the detailed workflow
 and boundaries.
