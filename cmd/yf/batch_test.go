@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/marketstore"
+	"wingman.com/chopstick/internal/marketstore"
 )
 
 func TestCSVBatchStoreRoundTrip(t *testing.T) {

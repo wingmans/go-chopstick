@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 const (

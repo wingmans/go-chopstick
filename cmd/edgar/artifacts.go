@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/artifacts"
-	"wingman.com/fetch-ecb/internal/constituents"
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/artifacts"
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 type artifactCommandConfig struct {

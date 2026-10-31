@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func TestGolden10Q2026ParsedCorpus(t *testing.T) {

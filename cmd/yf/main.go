@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/marketstore"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/marketstore"
 )
 
 const (

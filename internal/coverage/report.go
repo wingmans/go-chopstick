@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/analysisstore"
-	"wingman.com/fetch-ecb/internal/constituents"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	"wingman.com/chopstick/internal/analysisstore"
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 const SchemaVersion = 1

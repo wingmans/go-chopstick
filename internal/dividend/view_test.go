@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func TestRebuildExtractsAnnouncementAndEvidence(t *testing.T) {

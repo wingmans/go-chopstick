@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 
-	"wingman.com/fetch-ecb/internal/analysisstore"
-	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	"wingman.com/chopstick/internal/analysisstore"
+	dividendview "wingman.com/chopstick/internal/dividend"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 // SQLiteStore reads normalized views from SQLite and keeps raw inspection
@@ -23,9 +23,7 @@ var (
 )
 
 // NewSQLiteStore opens the analysis database used by the web application.
-func NewSQLiteStore(ctx context.Context, parsedDir,
-	databasePath string,
-) (*SQLiteStore, error) {
+func NewSQLiteStore(ctx context.Context, parsedDir, databasePath string) (*SQLiteStore, error) {
 	views, err := analysisstore.Open(ctx, databasePath)
 	if err != nil {
 		return nil, err

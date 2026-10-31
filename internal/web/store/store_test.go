@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 func TestJSONDirectoryListsViewSummaries(t *testing.T) {

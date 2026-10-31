@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/eventbus"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/eventbus"
 )
 
 type ServiceConfig struct {

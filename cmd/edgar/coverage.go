@@ -7,11 +7,11 @@ import (
 	"os"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/coverage"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/coverage"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 func parseCoverageConfig(args []string) (appConfig, error) {

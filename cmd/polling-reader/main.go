@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	pw "wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	pw "wingman.com/chopstick/internal/pollingworker"
 )
 
 var quarterlyFilePattern = regexp.MustCompile(`^(\d{4})-QTR([1-4])\.tsv$`)

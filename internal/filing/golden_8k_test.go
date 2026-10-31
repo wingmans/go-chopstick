@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func TestGolden8KBuildsCurrentView(t *testing.T) {

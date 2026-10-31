@@ -1,0 +1,766 @@
+package web
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+
+	templpkg "github.com/a-h/templ"
+	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/parser"
+	"wingman.com/chopstick/internal/web/templates/base"
+)
+
+templ pageLayout(page pageChrome, content templpkg.Component) {
+	@base.IndexPage(base.Page{
+		Title: page.Title,
+		Theme: "light",
+		BodyClass: page.BodyClass,
+		ActiveSection: page.ActiveSection,
+		UseHTMX: page.UseHTMX,
+		Styles: page.Styles,
+	}, content)
+}
+
+templ dashboardPage(data dashboardData) {
+	@pageLayout(data.Page, dashboardPageBody(data))
+}
+
+templ dashboardPageBody(data dashboardData) {
+	<section id="workspace" class="workspace">
+		<header class="module-header">
+			<strong>EDGAR / local filings</strong>
+			<form id="search" method="get" action="/"
+				hx-get="/" hx-target="#dashboard" hx-swap="outerHTML"
+				hx-push-url="true">
+				<input id="query" name="q" value={ data.Query }
+					placeholder="Search ticker, company, or CIK"/>
+				<select id="form-type" name="form_type" aria-label="Form type">
+					<option value="">All forms</option>
+					<option value="10-K" selected?={ data.FormType == "10-K" }>10-K</option>
+					<option value="10-Q" selected?={ data.FormType == "10-Q" }>10-Q</option>
+					<option value="8-K" selected?={ data.FormType == "8-K" }>8-K</option>
+				</select>
+				<input id="year" name="year" value={ data.Year } inputmode="numeric"
+					maxlength="4" placeholder="Year" aria-label="Filing year"/>
+				<button type="submit">Search</button>
+			</form>
+		</header>
+		<main class="module-content">
+			@dashboardFragment(data)
+		</main>
+		<script src="/assets/dashboard.js"></script>
+	</section>
+}
+
+templ dashboardFragment(data dashboardData) {
+	<div id="dashboard">
+		<div class="context" id="dataset-context">
+			<span>Local parsed filings</span>
+			<span id="set-context">
+				if data.SetName != "" {
+					Lookup set: { data.SetName } (as of { data.SetAsOf })
+				} else {
+					Ticker lookup unavailable; search by CIK
+				}
+			</span>
+		</div>
+		<nav class="trail" id="search-breadcrumb" aria-label="Search breadcrumb">
+			<strong>Search</strong>
+			<span id="search-breadcrumb-items"><span data-chip>All filings</span></span>
+		</nav>
+		<nav class="recent" id="recent-filings" aria-label="Recent filings">
+			<span>Recent filings</span><span id="recent-links"></span>
+			<button id="clear-recent" type="button">Clear</button>
+		</nav>
+		<section class="summary">
+			@summaryCard("Company", "company", valueOrAll(data.Company))
+			@summaryCard("CIK", "selected-cik", valueOrAll(data.CIK))
+			@summaryCard("Form", "selected-form", valueOrAll(data.FormType))
+			@summaryCard("Filings", "count", fmt.Sprint(data.FilingCount))
+			@summaryCard("Source", "", "Local")
+		</section>
+		<section class="panel">
+			<table>
+				<thead><tr><th>Ticker</th><th>Company</th><th>Form</th>
+					<th>Accession</th><th>Filed</th><th>Report period</th>
+					<th>Status</th><th>Facts</th></tr></thead>
+				<tbody id="filings">
+					if len(data.Filings) == 0 {
+						<tr><td colspan="8" class="empty">
+							if data.HasFilters {
+								No matching parsed filings found.
+							} else {
+								Enter a ticker, company, CIK, form, or year to search.
+							}
+						</td></tr>
+					}
+					for _, filing := range data.Filings {
+						<tr>
+							<td>{ dashIfEmpty(filing.Ticker) }</td>
+							<td><a href={ templpkg.SafeURL("/companies/" + filing.CIK) }>
+								{ dashIfEmpty(filing.Company) }</a></td>
+							<td><a data-ticker={ filing.Ticker }
+								href={ filingDetailURL(filing, data.ReturnTo) }
+								hx-get={ filingDetailURL(filing, data.ReturnTo) }
+								hx-target="body" hx-swap="outerHTML" hx-select="body"
+								hx-push-url="true">{ filing.FormType }</a></td>
+							<td>{ filing.Accession }</td><td>{ filing.FilingDate }</td>
+							<td>{ filing.ReportDate }</td>
+							<td class={ statusClass(filing.Status) }>{ filing.Status }</td>
+							<td class="num">{ fmt.Sprint(filing.Facts) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</section>
+	</div>
+}
+
+templ summaryCard(label string, id string, value string) {
+	<div class="card"><div class="label">{ label }</div>
+		if id != "" {
+			<div class="value" id={ id }>{ value }</div>
+		} else {
+			<div class="value">{ value }</div>
+		}
+	</div>
+}
+
+templ statusPage(page pageChrome, newsAvailable bool) {
+	@pageLayout(page, statusPageBody(newsAvailable))
+}
+
+templ statusPageBody(newsAvailable bool) {
+	<section id="workspace" class="workspace">
+	<header class="module-header"><strong>EDGAR / status</strong></header>
+	<main class="module-content">
+		<section class="heading"><h1>Operational status</h1>
+			<div class="subtitle">Local web application modules</div></section>
+		<section class="panel">
+			<div class="panel-heading"><h2>Web</h2></div>
+			<p>Filings and ownership are available.</p>
+			<p>News is
+				if newsAvailable {
+					available.
+				} else {
+					not configured.
+				}
+			</p>
+		</section>
+	</main>
+	</section>
+}
+
+templ newsPage(data newsPageData) {
+	@pageLayout(data.Page, newsPageBody(data))
+}
+
+templ newsPageBody(data newsPageData) {
+	<section id="workspace" class="workspace news-workspace">
+		<header class="module-header"><strong>EDGAR / filing news</strong></header>
+		<main class="module-content news-content">
+				<form method="get" action="/news" hx-get="/news"
+					hx-target="#feed" hx-push-url="true"
+					hx-trigger="change delay:200ms, submit">
+					<label>Search <input name="q" value={ data.Filter.Query }
+						placeholder="company, accession, or CIK"/></label>
+					<label>Form <input name="form" value={ data.Filter.FormType }
+						placeholder="10-K" list="supported-forms"/></label>
+					<datalist id="supported-forms">
+						for _, form := range data.SupportedForms {
+							<option value={ form }></option>
+						}
+					</datalist>
+					<label>Processing
+						<select name="selection">
+							<option value=""
+								selected?={ data.Filter.Selection == "" }>All</option>
+							<option value="selected"
+								selected?={ data.Filter.Selection == "selected" }>Selected</option>
+							<option value="skipped"
+								selected?={ data.Filter.Selection == "skipped" }>Observed only</option>
+						</select>
+					</label>
+					<label>CIK <input name="cik" value={ data.Filter.CIK }
+						inputmode="numeric"/></label>
+					<label>Filed from <input type="date" name="from"
+						value={ data.Filter.From }/></label>
+					<label>through <input type="date" name="to"
+						value={ data.Filter.To }/></label>
+					<button type="submit">Filter</button>
+				</form>
+				@newsFeed(data)
+		</main>
+	</section>
+}
+
+templ newsFeed(data newsPageData) {
+	<section id="feed" aria-live="polite">
+		if len(data.Items) == 0 {
+			<p class="empty">No filings match these filters.</p>
+		} else {
+			<ol>
+				for _, item := range data.Items {
+					<li><div class="news-item">
+						<div class="news-details">
+							<div class="title">
+								<a href={ templpkg.SafeURL(item.FilingURL) }>
+									if item.CompanyName != "" {
+										{ item.CompanyName }
+									} else {
+										CIK { item.CIK }
+									}
+								</a>
+								<span class="form">{ item.FormType }</span>
+							</div>
+							<div class="meta">filed { item.FilingDate } · CIK { item.CIK } ·
+								{ shortAccession(item.AccessionNumber) } · { item.SourceFeed }</div>
+							<div class="meta selection-state">
+								if item.Selected {
+									<span class="selection selected">
+										if item.SelectionMode == "on-demand" {
+											on demand
+										} else {
+											selected
+										}
+									</span>
+								} else {
+									<span class="selection skipped">observed only</span>
+								}
+								{ item.SelectionReason }
+							</div>
+						</div>
+						if !item.Selected {
+							<div class="news-action" id={ "download-" + item.AccessionNumber }>
+								<form method="post" action={ newsDownloadURL(item.AccessionNumber) }
+									hx-post={ newsDownloadURL(item.AccessionNumber) }
+									hx-target={ "#download-" + item.AccessionNumber }
+									hx-swap="innerHTML">
+									<button type="submit">Download and parse</button>
+								</form>
+							</div>
+						}
+					</div></li>
+				}
+			</ol>
+		}
+	</section>
+}
+
+func newsDownloadURL(accession string) templpkg.SafeURL {
+	return templpkg.SafeURL("/news/actions/download/" + accession)
+}
+
+templ companyPage(data companyPageData) {
+	@pageLayout(data.Page, companyPageBody(data))
+}
+
+templ companyPageBody(data companyPageData) {
+	<section id="workspace" class="workspace">
+	<header class="module-header"><a class="back" href="/">← Filing search</a></header>
+	<main id="company-history" data-cik={ data.History.CIK }>
+		<section class="heading"><h1>
+			if data.Ticker != "" {
+				{ data.Ticker } -
+			}
+			{ data.History.Company }
+		</h1><div class="subtitle">CIK { data.History.CIK } · local 10-K history</div></section>
+		if data.HasDividends {
+			@companyDividends(data)
+		}
+		for _, statement := range data.History.Statements {
+			<section class="section" data-statement={ statement.Title }>
+				<h2 class="section-label">{ statement.Title }</h2>
+				<div class="table-wrap"><table class="history-table"
+					style={ historyWidth(len(data.History.Years)) }>
+					<colgroup><col class="line-item-col"/>
+						for range data.History.Years {
+							<col class="value-col"/>
+						}
+					</colgroup>
+					<thead><tr><th>Line item</th>
+						for _, year := range data.History.Years {
+							<th>{ year }</th>
+						}
+					</tr></thead>
+					<tbody>
+						if len(statement.Rows) == 0 {
+							<tr><td class="empty-row" colspan={ len(data.History.Years) + 1 }>
+								No annual values selected for this statement.</td></tr>
+						}
+						for _, row := range statement.Rows {
+							<tr data-concept={ row.Key }><td>{ row.Label }</td>
+								for _, year := range data.History.Years {
+									<td class="num" data-year={ year }>
+										if value, ok := row.Values[year]; ok && !value.Nil {
+											<span title={ value.Value }>{ formatFactValue(value, row.Unit) }</span>
+										} else {
+											-
+										}
+									</td>
+								}
+							</tr>
+						}
+					</tbody>
+				</table></div>
+			</section>
+		}
+	</main>
+	</section>
+}
+
+templ companyDividends(data companyPageData) {
+	<section class="section" id="dividend-register">
+		<h2 class="section-label">Dividends</h2>
+		<div class="table-wrap"><table class="history-table dividend-history-table"
+			style={ historyWidth(len(data.DividendTable.Years)) }>
+			<colgroup><col class="line-item-col"/>
+				for range data.DividendTable.Years {
+					<col class="value-col"/>
+				}
+			</colgroup>
+			<thead><tr><th>Line item</th>
+				for _, year := range data.DividendTable.Years {
+					<th>{ year }</th>
+				}
+			</tr></thead>
+			<tbody>
+				for _, row := range data.DividendTable.Rows {
+					<tr data-concept={ row.Label }><td>{ row.Label }</td>
+						for _, year := range data.DividendTable.Years {
+							<td class="num" data-year={ year }>
+								if values := row.Values[year]; len(values) > 0 {
+									for _, value := range values {
+										<div>{ value }</div>
+									}
+								} else {
+									-
+								}
+							</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table></div>
+	</section>
+}
+
+templ rawInspectorPage(data rawInspectorData) {
+	@pageLayout(data.Page, rawInspectorPageBody(data))
+}
+
+templ rawInspectorPageBody(data rawInspectorData) {
+	<section id="workspace" class="workspace">
+	<header class="module-header"><a class="back" href="/">← Filing search</a></header>
+	<main id="raw-filing-inspector">
+		<section class="heading"><h1>Raw Filing Inspector</h1>
+			<div class="subtitle">Local parser and source artifacts</div></section>
+		<section class="panel"><div class="panel-heading"><h2>Filing</h2>
+			<span class="muted">Debug data; not an analytical read model</span></div>
+			<dl><dt>Company</dt><dd>{ filingCompany(data.Filing.Metadata.Filers) }</dd>
+				<dt>CIK</dt><dd>{ data.Filing.Metadata.CIK }</dd>
+				<dt>Accession</dt><dd>{ data.Filing.Metadata.Accession }</dd>
+				<dt>Form</dt><dd>{ data.Filing.Metadata.FormType }</dd>
+				<dt>Status</dt><dd>{ data.Filing.Status }</dd>
+				<dt>Source</dt><dd>{ data.Filing.SourceBase }: { data.Filing.SourcePath }</dd>
+			</dl>
+		</section>
+		<section class="panel" id="raw-filing-documents">
+			<div class="panel-heading"><h2>Source documents</h2>
+				<span class="muted">Requires the raw SEC filing cache</span></div>
+			<div class="documents">
+				if len(data.Filing.Documents) == 0 {
+					<p>No source documents are available.</p>
+				}
+				for index, document := range data.Filing.Documents {
+					<div><a href={ rawDocumentURL(data.Filing.Metadata.CIK,
+						data.Filing.Metadata.Accession, index) } target="_blank"
+						rel="noopener">{ document.Filename }</a>
+						<div class="document-meta">{ document.Type }
+							if document.Description != "" {
+								· { document.Description }
+							}
+						</div>
+					</div>
+				}
+			</div>
+		</section>
+	</main>
+	</section>
+}
+
+func historyWidth(years int) string {
+	return fmt.Sprintf("--history-width: %dpx; --history-mobile-width: %dpx",
+		294+years*180, 224+years*150)
+}
+
+func filingCompany(filers []parser.SubmissionFiler) string {
+	if len(filers) == 0 {
+		return "Unknown company"
+	}
+	return filers[0].Name
+}
+
+func rawDocumentURL(cik string, accession string, index int) templpkg.SafeURL {
+	return templpkg.SafeURL("/debug/raw/filings/" + cik + "/" + accession +
+		"/documents/" + strconv.Itoa(index))
+}
+
+templ detailPage(data detailData) {
+	@pageLayout(data.Page, detailPageBody(data))
+}
+
+templ detailPageBody(data detailData) {
+	<section id="workspace" class="workspace">
+	<header class="module-header"><a class="back" href={ templpkg.SafeURL(data.BackURL) }
+		hx-get={ data.BackURL } hx-target="#workspace" hx-swap="outerHTML"
+		hx-select="#workspace" hx-push-url="true">← All filings</a></header>
+	<main id="filing-detail" data-cik={ data.Filing.Metadata.CIK }
+		data-accession={ data.Filing.Metadata.Accession }>
+		<section class="heading">
+			<h1 id="filing-company">{ filingCompany(data.Filing.Metadata.Filers) }</h1>
+			<div class="subtitle" id="filing-identity">{ data.Filing.Metadata.FormType } ·
+				{ data.Filing.Metadata.Accession } · compact local view</div>
+		</section>
+		<section class="summary" id="filing-summary-cards">
+			@summaryCard("CIK", "filing-cik", data.Filing.Metadata.CIK)
+			@summaryCard("Filed", "filing-date", data.Filing.Metadata.FilingDate)
+			@summaryCard("Report date", "report-date", data.Filing.Metadata.ReportDate)
+			@summaryCard("Documents", "document-count", fmt.Sprint(data.DocumentCount))
+			@summaryCard("XBRL facts", "fact-count", fmt.Sprint(data.Facts))
+		</section>
+		<section id="financial-summary" aria-label="Financial statements">
+			for _, statement := range data.Statements {
+				@detailStatement(statement)
+			}
+		</section>
+		<section class="panel" id="key-ratios">
+			<div class="panel-heading"><h2>Key ratios</h2>
+				<span class="muted">Derived from aligned statement values</span></div>
+			<div class="table-wrap"><table class="summary-table">
+				<thead><tr><th>Ratio</th><th>Values</th></tr></thead>
+				<tbody>
+					for _, ratio := range data.Ratios {
+						<tr data-ratio={ ratio.Key }><td>{ ratio.Label }
+							<span class="concept">{ ratio.Formula }</span></td>
+							<td class="num">
+								for period, value := range ratio.Values {
+									<span data-period={ period }>{ period }: { value }</span>{ " " }
+								}
+							</td></tr>
+					}
+				</tbody>
+			</table></div>
+		</section>
+		if data.HasDividends {
+			@detailDividends(data)
+		}
+		@detailDocuments(data)
+		<section class="panel" id="parsed-summary">
+			<div class="panel-heading"><h2>Parsed structure</h2>
+				<span class="muted">Compact view metadata</span></div>
+			<div class="summary" style="margin:0;border:0;border-radius:0">
+				@summaryCard("XBRL instances", "instance-count", fmt.Sprint(data.InstanceCount))
+				@summaryCard("Contexts", "context-count", fmt.Sprint(data.ContextCount))
+				@summaryCard("Diagnostics", "diagnostic-count", fmt.Sprint(data.Diagnostics))
+				@summaryCard("Parser version", "parser-version", data.Filing.ParserVersion)
+				@summaryCard("Status", "filing-status", data.Filing.Status)
+			</div>
+		</section>
+	</main>
+	</section>
+}
+
+templ detailStatement(statement filingview.StatementView) {
+	<section class="panel statement" data-statement={ statement.Title }>
+		<div class="panel-heading"><h2>{ statement.Title }</h2>
+			<span class="muted">Default-context facts by period</span></div>
+		for _, group := range statement.Groups {
+			<div class="table-wrap" data-summary-group={ group.Title }>
+				<table class="summary-table statement-table"
+					style={ fmt.Sprintf("--statement-width: %dpx", 240+len(group.Periods)*120) }>
+					<colgroup><col class="line-item-col"/>
+						for range group.Periods {
+							<col class="value-col"/>
+						}
+					</colgroup>
+					<thead><tr><th>Line item</th>
+						for _, period := range group.Periods {
+							<th data-period={ period }>{ period }</th>
+						}
+					</tr></thead>
+					<tbody>
+						for _, series := range group.Rows {
+							<tr data-concept={ series.Concept }><td>
+								<span class="line-label" title={ series.Concept }>{ series.Label }</span>
+							</td>
+							for _, period := range group.Periods {
+								<td class="num" data-testid={ "metric-" + series.Concept + "-" + period }
+									data-period={ period }>
+									if value, ok := series.Values[period]; ok && !value.Nil {
+										<span title={ value.Value }>{ formatFactValue(value, series.Unit) }</span>
+									} else {
+										-
+									}
+								</td>
+							}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</section>
+}
+
+templ detailDividends(data detailData) {
+	<section class="panel" id="dividend-register">
+		<div class="panel-heading"><h2>Dividends</h2>
+			<span class="muted">Company register from local filings</span></div>
+		if len(data.Dividends.Events) > 0 {
+			<div class="table-wrap"><table class="summary-table">
+				<thead><tr><th>Declared</th><th>Ex-dividend</th><th>Record</th>
+					<th>Payable</th><th>Amount/share</th><th>Status</th></tr></thead>
+				<tbody>
+					for _, event := range data.Dividends.Events {
+						<tr data-dividend-id={ event.ID }><td>{ event.DeclarationDate }</td>
+							<td>{ event.ExDate }</td><td>{ event.RecordDate }</td>
+							<td>{ event.PayableDate }</td>
+							<td class="num">{ event.Currency } { event.AmountPerShare }</td>
+							<td>{ event.Status }</td></tr>
+					}
+				</tbody>
+			</table></div>
+		}
+		if len(data.Dividends.Observations) > 0 {
+			<details class="dividend-observations"><summary>Reconciliation observations</summary>
+				<div class="table-wrap"><table class="summary-table">
+					<thead><tr><th>Kind</th><th>Period</th><th>Value</th>
+						<th>Form</th><th>Filing date</th></tr></thead>
+					<tbody>
+						for _, observation := range data.Dividends.Observations {
+							<tr><td>{ observation.Kind }</td><td>{ observation.Period }</td>
+								<td class="num">{ observation.Value }</td>
+								<td>{ observation.FormType }</td><td>{ observation.FilingDate }</td></tr>
+						}
+					</tbody>
+				</table></div>
+			</details>
+		}
+	</section>
+}
+
+templ detailDocuments(data detailData) {
+	<section class="panel" id="filing-documents">
+		<div class="panel-heading"><h2>Filing documents</h2>
+			<span class="muted">Optional raw filing inspector</span></div>
+		<p><a href={ rawInspectorURL(data.Filing.Metadata.CIK,
+			data.Filing.Metadata.Accession) } target="_blank" rel="noopener">
+			Raw Filing Inspector</a></p>
+		<div class="documents">
+			for index, document := range data.Filing.Documents {
+				<div><a href={ rawDocumentURL(data.Filing.Metadata.CIK,
+					data.Filing.Metadata.Accession, index) } target="_blank"
+					rel="noopener">{ document.Filename }</a>
+					<div class="document-meta">{ document.Type }
+						if document.Description != "" {
+							· { document.Description }
+						}
+					</div>
+				</div>
+			}
+		</div>
+	</section>
+}
+
+func rawInspectorURL(cik string, accession string) templpkg.SafeURL {
+	return templpkg.SafeURL("/debug/raw/filings/" + cik + "/" + accession)
+}
+
+templ ownershipDirectoryPage(data ownershipDirectoryData) {
+	@pageLayout(data.Page, ownershipDirectoryBody(data))
+}
+
+templ ownershipDirectoryBody(data ownershipDirectoryData) {
+	<section id="workspace" class="workspace">
+	<header class="module-header"><strong>Company ownership</strong>
+		if data.SetName != "" {
+			<form method="get" action="/ownership"><input name="q" value={ data.Query }
+				placeholder="Search ticker, company, or CIK"/><button type="submit">Search</button></form>
+		}
+	</header>
+	<main><section class="heading"><h1>Company ownership</h1>
+		if data.SetName != "" {
+			<div class="subtitle">{ data.SetName } company directory · set as of { data.SetAsOf }</div>
+		} else {
+			<div class="subtitle">Choose the companies shown in this directory.</div>
+		}
+	</section>
+	if data.SetName == "" {
+		<section class="notice">Start <code>edgar serve</code> with
+			<code>--set sp500</code> or <code>--set us-gaap</code>.</section>
+	} else {
+		if !data.Available {
+			<section class="notice warning">The ownership database is not available.
+				Run the ownership importer or pass <code>--ownership-db</code> to use
+				another database.</section>
+		}
+		<section class="panel"><div class="panel-heading"><h2>Companies</h2>
+			<span class="muted">{ fmt.Sprint(len(data.Members)) } shown</span></div>
+			<div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Company</th>
+				<th>CIK</th></tr></thead><tbody>
+				if len(data.Members) == 0 {
+					<tr><td class="empty" colspan="3">No companies match.</td></tr>
+				}
+				for _, member := range data.Members {
+					<tr><td><a href={ templpkg.SafeURL("/ownership/companies/" + member.CIK) }>
+						{ member.Ticker }</a></td><td>{ member.Name }</td><td>{ member.CIK }</td></tr>
+				}
+			</tbody></table></div>
+		</section>
+	}
+	</main>
+	</section>
+}
+
+templ ownershipCompanyPage(data ownershipCompanyData) {
+	@pageLayout(data.Page, ownershipCompanyBody(data))
+}
+
+templ ownershipCompanyBody(data ownershipCompanyData) {
+	<section id="workspace" class="workspace">
+	<header class="module-header"><a class="back" href="/ownership">← Company ownership</a>
+		<a href={ templpkg.SafeURL("/companies/" + data.Member.CIK) }>Financial history</a>
+	</header>
+	<main><section class="heading"><h1>{ data.Member.Ticker } - { data.Member.Name }</h1>
+		<div class="subtitle">CIK { data.Member.CIK }</div></section>
+	<section class="notice">Reported ownership is not real-time. Form 13F positions
+		appear only when a security has an explicit issuer mapping from ownership filings.</section>
+	if !data.Available {
+		<section class="notice warning">The ownership database is not available. Run the
+			ownership importer or pass <code>--ownership-db</code> to use another database.</section>
+	} else {
+		<section class="ownership-section"><div class="panel-heading">
+			<h2>Schedule 13D/G beneficial ownership</h2><span class="muted">latest reported state</span>
+		</div><div class="panel table-wrap"><table>
+			<thead><tr><th>Owner</th><th>Event date</th><th>Security</th><th>CUSIP</th>
+				<th>Shares</th><th>Percent</th><th>Filing</th></tr></thead><tbody>
+			if len(data.Data.Beneficial) == 0 {
+				<tr><td class="empty" colspan="7">No mapped Schedule 13D/G reports.</td></tr>
+			}
+			for _, item := range data.Data.Beneficial {
+				<tr><td>{ item.OwnerName }</td><td>{ item.EventDate }</td><td>{ item.Security }</td>
+					<td>{ item.CUSIP }</td><td class="num">{ item.Shares }</td>
+					<td class="num">{ item.Percentage }</td><td>
+						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
+					</td></tr>
+			}
+			</tbody></table></div>
+		</section>
+		<section class="ownership-section"><div class="panel-heading"><h2>Insider holdings</h2>
+			<span class="muted">latest reported state</span></div><div class="panel table-wrap"><table>
+			<thead><tr><th>Owner</th><th>As of</th><th>Security</th><th>Amount</th>
+				<th>Ownership</th><th>Filing</th></tr></thead><tbody>
+			if len(data.Data.InsiderHoldings) == 0 {
+				<tr><td class="empty" colspan="6">No insider holdings.</td></tr>
+			}
+			for _, item := range data.Data.InsiderHoldings {
+				<tr><td>{ item.OwnerName }</td><td>{ item.AsOfDate }</td><td>{ item.Security }
+					if item.Derivative {
+						(derivative)
+					}
+					</td><td class="num">{ item.Amount }</td><td>{ item.DirectOrIndirect }</td><td>
+						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
+					</td></tr>
+			}
+			</tbody></table></div>
+		</section>
+		<section class="ownership-section"><div class="panel-heading"><h2>Recent insider transactions</h2>
+			<span class="muted">up to 100 rows</span></div><div class="panel table-wrap"><table>
+			<thead><tr><th>Owner</th><th>Date</th><th>Security</th><th>Code</th><th>A/D</th>
+				<th>Amount</th><th>Price</th><th>After</th><th>Filing</th></tr></thead><tbody>
+			if len(data.Data.InsiderTransactions) == 0 {
+				<tr><td class="empty" colspan="9">No insider transactions.</td></tr>
+			}
+			for _, item := range data.Data.InsiderTransactions {
+				<tr><td>{ item.OwnerName }</td><td>{ item.TransactionDate }</td><td>{ item.Security }</td>
+					<td>{ item.Code }</td><td>{ item.AcquiredDisposed }</td><td class="num">{ item.Amount }</td>
+					<td class="num">{ item.Price }</td><td class="num">{ item.SharesAfter }</td><td>
+						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
+					</td></tr>
+			}
+			</tbody></table></div>
+		</section>
+		<section class="ownership-section"><div class="panel-heading"><h2>Mapped Form 13F positions</h2>
+			<span class="muted">effective positions, up to 250 rows</span></div>
+			<div class="panel table-wrap"><table><thead><tr><th>Manager</th><th>Period</th>
+				<th>Security</th><th>CUSIP</th><th>Value</th><th>Amount</th><th>Type</th>
+				<th>Put/call</th><th>Filing</th></tr></thead><tbody>
+			if len(data.Data.Institutional) == 0 {
+				<tr><td class="empty" colspan="9">No explicitly mapped Form 13F positions.</td></tr>
+			}
+			for _, item := range data.Data.Institutional {
+				<tr><td>{ item.ManagerName }</td><td>{ item.Period }</td><td>{ item.Security }</td>
+					<td>{ item.CUSIP }</td><td class="num">{ item.Value }</td>
+					<td class="num">{ item.Amount }</td><td>{ item.AmountType }</td><td>{ item.PutCall }</td><td>
+						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
+					</td></tr>
+			}
+			</tbody></table></div>
+		</section>
+		<section class="ownership-section"><div class="panel-heading"><h2>Import coverage</h2>
+			<span class="muted">latest interval by family</span></div><div class="panel table-wrap"><table>
+			<thead><tr><th>Family</th><th>From</th><th>Through</th><th>Status</th>
+				<th>Processed</th><th>Failed</th><th>Unsupported</th></tr></thead><tbody>
+			if len(data.Coverage) == 0 {
+				<tr><td class="empty" colspan="7">No completion run has recorded coverage yet.</td></tr>
+			}
+			for _, item := range data.Coverage {
+				<tr><td>{ item.Family }</td><td>{ item.FromDate }</td><td>{ item.ThroughDate }</td>
+					<td>{ item.Status }</td><td class="num">{ fmt.Sprint(item.Processed) } /
+						{ fmt.Sprint(item.Expected) }</td><td class="num">{ fmt.Sprint(item.Failed) }</td>
+					<td class="num">{ fmt.Sprint(item.Unsupported) }</td></tr>
+			}
+			</tbody></table></div>
+		</section>
+	}
+	</main>
+	</section>
+}
+
+templ ownershipFilingLink(sourceURL string, formType string, accession string,
+	filingDate string) {
+	if sourceURL != "" {
+		<a href={ templpkg.SafeURL(sourceURL) }>{ formType } { shortAccession(accession) }</a>
+	} else {
+		{ formType } { shortAccession(accession) }
+	}
+	<span class="source">filed { filingDate }</span>
+}
+
+func valueOrAll(value string) string {
+	if value == "" {
+		return "All"
+	}
+	return value
+}
+
+func dashIfEmpty(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
+func statusClass(status string) string {
+	if status == "partial" || status == "failed" {
+		return "status-" + status
+	}
+	return ""
+}
+
+func filingDetailURL(filing filingSummary, returnTo string) templpkg.SafeURL {
+	return templpkg.SafeURL("/filings/" + filing.CIK + "/" +
+		filing.Accession + "?return_to=" + url.QueryEscape(returnTo))
+}

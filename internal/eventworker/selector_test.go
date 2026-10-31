@@ -3,7 +3,7 @@ package eventworker
 import (
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/pollingworker"
 )
 
 func TestSelectionDecision(t *testing.T) {

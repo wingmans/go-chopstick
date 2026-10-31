@@ -1,5 +1,4 @@
-// Package store reads the generated filing artifacts used by the local
-// filing viewer.
+// Package store reads the generated filing artifacts used by the local filing viewer.
 package store
 
 import (
@@ -11,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	dividendview "wingman.com/chopstick/internal/dividend"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 // Store defines the read operations needed by the analytical web application.

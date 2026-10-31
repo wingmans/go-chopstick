@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/ctxlog"
+	"wingman.com/chopstick/internal/ctxlog"
 )
 
 type Fetcher interface {

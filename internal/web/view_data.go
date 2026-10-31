@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
-	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
-	filingstore "wingman.com/fetch-ecb/internal/web/store"
+	dividendview "wingman.com/chopstick/internal/dividend"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/ownershipstore"
+	filingstore "wingman.com/chopstick/internal/web/store"
 )
 
 type filingSummary struct {
@@ -25,9 +27,11 @@ type filingSummary struct {
 }
 
 type pageChrome struct {
-	Title     string
-	BodyClass string
-	UseHTMX   bool
+	Title         string
+	BodyClass     string
+	ActiveSection string
+	UseHTMX       bool
+	Styles        []string
 }
 
 type dashboardData struct {
@@ -45,6 +49,13 @@ type dashboardData struct {
 	Filings     []filingSummary `json:"filings"`
 }
 
+type newsPageData struct {
+	Page           pageChrome
+	Items          []news.Item
+	Filter         news.Filter
+	SupportedForms []string
+}
+
 type companyPageData struct {
 	Page          pageChrome
 	History       filingview.CompanyHistory
@@ -52,6 +63,29 @@ type companyPageData struct {
 	Dividends     dividendview.View
 	DividendTable companyDividendTable
 	HasDividends  bool
+}
+
+type ownershipDirectoryData struct {
+	Page      pageChrome
+	SetName   string
+	SetAsOf   string
+	Query     string
+	Members   []ownershipDirectoryMember
+	Available bool
+}
+
+type ownershipDirectoryMember struct {
+	CIK    string
+	Ticker string
+	Name   string
+}
+
+type ownershipCompanyData struct {
+	Page      pageChrome
+	Member    ownershipDirectoryMember
+	Data      ownershipstore.CompanyOwnership
+	Coverage  []ownershipstore.Coverage
+	Available bool
 }
 
 type companyDividendTable struct {
@@ -167,9 +201,10 @@ func dividendYear(value string) string {
 // dashboardData prepares the data needed to render the dashboard page based on the current request.
 func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
 	page := pageChrome{
-		Title:     "EDGAR local filings",
-		BodyClass: "dashboard-page",
-		UseHTMX:   true,
+		Title:         "EDGAR local filings",
+		BodyClass:     "dashboard-page",
+		ActiveSection: "filings",
+		UseHTMX:       true,
 	}
 
 	cik := strings.TrimSpace(r.URL.Query().Get("cik"))

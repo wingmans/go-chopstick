@@ -19,13 +19,13 @@ import (
 	"syscall"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/constituents"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	filingview "wingman.com/fetch-ecb/internal/filing"
-	filingworkflow "wingman.com/fetch-ecb/internal/pipeline"
-	"wingman.com/fetch-ecb/internal/xerr"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
+	filingworkflow "wingman.com/chopstick/internal/pipeline"
+	"wingman.com/chopstick/internal/xerr"
 )
 
 const defaultUserAgent = "wingman paul@wingmen.io"
@@ -34,6 +34,7 @@ const (
 	edgarUserAgentEnv   = "EDGAR_USER_AGENT"
 	edgarBaseURLEnv     = "EDGAR_BASE_URL"
 	edgarNATSURLEnv     = "EDGAR_NATS_URL"
+	edgarHTTPAddressEnv = "EDGAR_HTTP_ADDRESS"
 	edgarNewsAddressEnv = "EDGAR_NEWS_ADDRESS"
 	edgarWebAddressEnv  = "EDGAR_FILINGS_ADDRESS"
 	edgarSetEnv         = "EDGAR_SET"
@@ -47,6 +48,7 @@ type appConfig struct {
 	command    string
 	events     eventCommandConfig
 	backfill   backfillConfig
+	ownership  ownershipCommandConfig
 	operations operationsConfig
 	artifacts  artifactCommandConfig
 	index      edgar.Config
@@ -75,10 +77,12 @@ type appConfig struct {
 		reprocess  bool
 	}
 	serve struct {
-		address    string
-		parsedDir  string
-		analysisDB string
-		setName    string
+		address     string
+		parsedDir   string
+		analysisDB  string
+		ownershipDB string
+		newsDB      string
+		setName     string
 	}
 	taxonomy struct {
 		operation string
@@ -205,6 +209,8 @@ func run(ctx context.Context, args []string) error {
 		commandErr = runEventCommand(ctx, cfg.command, cfg.events, logger)
 	case "backfill":
 		commandErr = runBackfill(ctx, client, cfg.backfill, logger)
+	case "ownership":
+		commandErr = runOwnership(ctx, client, cfg.ownership)
 	case "doctor":
 		commandErr = runDoctor(ctx, cfg.operations)
 	case "status":
@@ -256,7 +262,8 @@ func run(ctx context.Context, args []string) error {
 			"parsed_directory", cfg.serve.parsedDir, "set", cfg.serve.setName)
 
 		commandErr = runServe(ctx, logger, cfg.serve.address, cfg.serve.parsedDir,
-			cfg.serve.setName, cfg.serve.analysisDB)
+			cfg.serve.setName, cfg.serve.analysisDB, cfg.serve.ownershipDB,
+			cfg.serve.newsDB)
 	case "taxonomy":
 		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
 			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter,
@@ -334,6 +341,8 @@ func parseConfig(args []string) (appConfig, error) {
 		return parseEventCommandConfig(args[0], args[1:])
 	case "backfill":
 		return parseBackfillConfig(args[1:])
+	case "ownership":
+		return parseOwnershipConfig(args[1:])
 	case "doctor", "status", "errors", "retry":
 		return parseOperationsConfig(args[0], args[1:])
 	case "artifacts":
@@ -981,6 +990,20 @@ func environmentValue(name, fallback string) string {
 	return fallback
 }
 
+func webAddressFromEnvironment() string {
+	address := environmentValue(edgarHTTPAddressEnv, "")
+	if address != "" {
+		return address
+	}
+
+	address = environmentValue(edgarWebAddressEnv, "")
+	if address != "" {
+		return address
+	}
+
+	return environmentValue(edgarNewsAddressEnv, "127.0.0.1:8083")
+}
+
 func environmentFromYear(fallback int) (int, error) {
 	raw := strings.TrimSpace(os.Getenv(edgarFromYearEnv))
 	if raw == "" {
@@ -1003,20 +1026,21 @@ func printUsage() {
 	fmt.Fprintln(os.Stdout, "  select            observed filings for processing")
 	fmt.Fprintln(os.Stdout, "  discover          select filings from a local master index")
 	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
+	fmt.Fprintln(os.Stdout, "  ownership         import and inspect ownership filings")
 	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")
 	fmt.Fprintln(os.Stdout, "  status            summarize pipeline state and backlogs")
 	fmt.Fprintln(os.Stdout, "  errors            list unresolved pipeline failures")
 	fmt.Fprintln(os.Stdout, "  retry             requeue unresolved pipeline failures")
 	fmt.Fprintln(os.Stdout, "  download          filings from discovery events")
 	fmt.Fprintln(os.Stdout, "  process           parse downloaded filings and aggregate data")
-	fmt.Fprintln(os.Stdout, "  news              serve the stream-backed EDGAR news page")
+	fmt.Fprintln(os.Stdout, "  news              serve the local web application and news consumer")
 	fmt.Fprintln(os.Stdout,
 		"  run               all continuous roles and HTTP services")
 	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
 	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
 	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
 	fmt.Fprintln(os.Stdout, "  artifacts         list, extract, or clean source documents")
-	fmt.Fprintln(os.Stdout, "  serve             browse locally parsed filing data")
+	fmt.Fprintln(os.Stdout, "  serve             the local web application")
 	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
 	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")
 	fmt.Fprintln(os.Stdout)

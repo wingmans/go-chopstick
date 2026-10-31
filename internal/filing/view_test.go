@@ -3,7 +3,7 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 const testUSGAAPNamespace = "http://fasb.org/us-gaap/2024-01-31"

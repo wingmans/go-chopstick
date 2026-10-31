@@ -1,8 +1,9 @@
-module wingman.com/fetch-ecb
+module wingman.com/chopstick
 
 go 1.27.3
 
 require (
+	github.com/a-h/templ v0.3.1001
 	github.com/lmittmann/tint v1.2.0
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/nats-io/nats.go v1.41.1

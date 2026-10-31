@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 // ProcessFilings streams the filtered index, ensures local source files, then

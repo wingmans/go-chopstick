@@ -3,7 +3,7 @@ package filing
 import (
 	"strings"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 // unitMap creates a mapping from unit IDs to their normalized string representations.

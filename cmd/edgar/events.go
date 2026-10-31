@@ -13,14 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/appdata"
-	"wingman.com/fetch-ecb/internal/ctxlog"
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/eventworker"
-	"wingman.com/fetch-ecb/internal/news"
-	"wingman.com/fetch-ecb/internal/pollingworker"
-	"wingman.com/fetch-ecb/internal/web"
+	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/eventworker"
+	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/pollingworker"
+	"wingman.com/chopstick/internal/web"
 )
 
 type eventCommandConfig struct {
@@ -30,11 +30,11 @@ type eventCommandConfig struct {
 	filingsDirectory string
 	parsedDirectory  string
 	analysisDB       string
+	ownershipDB      string
 	masterPath       string
 	userAgent        string
 	baseURL          string
 	address          string
-	filingsAddress   string
 	interval         time.Duration
 	filter           edgar.IndexFilter
 	setName          string
@@ -69,11 +69,11 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			filingsDirectory: appdata.Path("cache", "filings"),
 			parsedDirectory:  appdata.Path("parsed"),
 			analysisDB:       appdata.Path("analysis.db"),
+			ownershipDB:      appdata.Path("ownership.db"),
 			masterPath:       appdata.Path("cache", "indexes", "master.tsv"),
 			userAgent:        environmentValue(edgarUserAgentEnv, defaultUserAgent),
 			baseURL:          environmentValue(edgarBaseURLEnv, ""),
-			address:          environmentValue(edgarNewsAddressEnv, "127.0.0.1:8081"),
-			filingsAddress:   environmentValue(edgarWebAddressEnv, "127.0.0.1:8083"),
+			address:          webAddressFromEnvironment(),
 			interval:         time.Minute,
 			setName:          environmentValue(edgarSetEnv, ""),
 			maxAttempts:      5,
@@ -213,11 +213,11 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 		flags.StringVar(&cfg.events.newsDB, "news-db", cfg.events.newsDB,
 			"disposable news database")
 		flags.StringVar(&cfg.events.address, "address", cfg.events.address,
-			"news HTTP listen address")
+			"application HTTP listen address")
 
 		options = append(options,
 			helpOption{"--news-db <path>", "Disposable news database."},
-			helpOption{"--address <host:port>", "News HTTP address."},
+			helpOption{"--address <host:port>", "Application HTTP address."},
 		)
 	case "run":
 		flags.StringVar(&cfg.events.pollingDB, "polling-db",
@@ -230,14 +230,16 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			cfg.events.parsedDirectory, "parsed filing directory")
 		flags.StringVar(&cfg.events.analysisDB, "analysis-db",
 			cfg.events.analysisDB, "analysis database")
+		flags.StringVar(&cfg.events.ownershipDB, "ownership-db",
+			cfg.events.ownershipDB, "ownership database")
 		flags.StringVar(&cfg.events.userAgent, "user-agent",
 			cfg.events.userAgent, "SEC user agent")
 		flags.StringVar(&cfg.events.baseURL, "base-url", cfg.events.baseURL,
 			"SEC base URL override")
 		flags.StringVar(&cfg.events.address, "address", cfg.events.address,
-			"news HTTP listen address")
-		flags.StringVar(&cfg.events.filingsAddress, "filings-address",
-			cfg.events.filingsAddress, "filings web HTTP listen address")
+			"application HTTP listen address")
+		flags.StringVar(&cfg.events.address, "filings-address",
+			cfg.events.address, "deprecated alias for --address")
 		flags.DurationVar(&cfg.events.interval, "interval",
 			cfg.events.interval, "Atom polling interval")
 		flags.IntVar(&cfg.events.maxAttempts, "max-attempts",
@@ -255,12 +257,13 @@ func parseEventCommandConfig(command string, args []string) (appConfig, error) {
 			helpOption{"--filings-dir <path>", "Downloaded filing directory."},
 			helpOption{"--parsed-dir <path>", "Parsed filing directory."},
 			helpOption{"--analysis-db <path>", "Analysis database."},
+			helpOption{"--ownership-db <path>", "Ownership database."},
 			helpOption{"--user-agent <value>", "SEC user agent."},
 			helpOption{"--base-url <url>", "SEC base URL override."},
-			helpOption{"--address <host:port>", "News HTTP address."},
+			helpOption{"--address <host:port>", "Application HTTP address."},
 			helpOption{
 				"--filings-address <host:port>",
-				"Filings web HTTP address.",
+				"Deprecated alias for --address.",
 			},
 			helpOption{"--interval <duration>", "Atom polling interval."},
 			helpOption{"--max-attempts <count>", "Attempts before work is marked failed."},
@@ -394,7 +397,7 @@ func eventCommandDescription(command string) string {
 		"select":   "Select observed filings for automatic processing.",
 		"download": "Download files for discovery events, serially.",
 		"process":  "Parse downloaded filings and update aggregates, serially.",
-		"news":     "Serve a rebuildable filing news feed.",
+		"news":     "Serve the web application and rebuildable filing news.",
 		"run":      "Run all continuous roles and HTTP services in one process.",
 	}[command]
 }
@@ -446,9 +449,9 @@ func runEventCommand(ctx context.Context, command string,
 	errorsCh := make(chan error, 1)
 
 	for _, role := range []string{
-		"atom", "select", "download", "process", "news", "filings-web",
+		"atom", "select", "download", "process", "ownership", "web",
 	} {
-		if role != "filings-web" {
+		if role != "web" {
 			go superviseRole(ctx, role, logger, func() error {
 				return runRole(ctx, role, cfg, logger)
 			})
@@ -656,17 +659,37 @@ func runRole(ctx context.Context, role string, cfg eventCommandConfig,
 			MaxAttempts:      cfg.maxAttempts,
 			Failures:         failures,
 		}, logger)
+	case "ownership":
+		logger.Info("starting ownership worker", "consumer",
+			eventworker.OwnershipDurable, "selection", "all ownership forms",
+			"database", cfg.ownershipDB, "max_attempts", cfg.maxAttempts)
+
+		failures, err := pollingworker.NewDedupeServiceContext(ctx,
+			cfg.pollingDB)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = failures.Close() }()
+
+		return eventworker.Ownership(ctx, bus, eventworker.OwnershipConfig{
+			FilingsDirectory: cfg.filingsDirectory,
+			DatabasePath:     cfg.ownershipDB,
+			UserAgent:        cfg.userAgent,
+			BaseURL:          cfg.baseURL,
+			Drain:            cfg.drain,
+			MaxAttempts:      cfg.maxAttempts,
+			Failures:         failures,
+		}, logger)
 	case "news":
-		logger.Info("starting news feed", "address", cfg.address,
+		logger.Info("starting web application", "address", cfg.address,
 			"database", cfg.newsDB)
 
-		return runNews(ctx, bus, cfg, logger)
-	case "filings-web":
-		logger.Info("starting filings web", "address", cfg.filingsAddress,
+		return runWeb(ctx, bus, cfg, logger)
+	case "web":
+		logger.Info("starting web application", "address", cfg.address,
 			"parsed_directory", cfg.parsedDirectory)
 
-		return runServe(ctx, logger, cfg.filingsAddress, cfg.parsedDirectory,
-			"", cfg.analysisDB)
+		return runWeb(ctx, bus, cfg, logger)
 	default:
 		return fmt.Errorf("unknown event role %q", role)
 	}
@@ -759,7 +782,7 @@ func runDiscovery(ctx context.Context, bus *eventbus.NATS,
 	}
 }
 
-func runNews(ctx context.Context, bus *eventbus.NATS,
+func runWeb(ctx context.Context, bus *eventbus.NATS,
 	cfg eventCommandConfig, logger *slog.Logger,
 ) error {
 	roleCtx, cancel := context.WithCancel(ctx)
@@ -771,6 +794,16 @@ func runNews(ctx context.Context, bus *eventbus.NATS,
 	}
 	defer func() { _ = store.Close() }()
 
+	application, err := web.NewConfiguredServerWithDatabases(roleCtx,
+		cfg.parsedDirectory, cfg.analysisDB, cfg.ownershipDB,
+		appdata.Path("sets"), cfg.setName, logger)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = application.Close() }()
+
+	application.MountNews(web.NewNewsServer(store, bus, logger))
+
 	consumerErr := make(chan error, 1)
 	go func() {
 		consumerErr <- news.Consume(roleCtx, bus, store, replay, logger)
@@ -778,7 +811,7 @@ func runNews(ctx context.Context, bus *eventbus.NATS,
 
 	server := &http.Server{
 		Addr:              cfg.address,
-		Handler:           web.NewNewsServer(store, bus, logger),
+		Handler:           application,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -870,7 +903,9 @@ func waitForNewsConsumer(consumerErr <-chan error, bus *eventbus.NATS,
 }
 
 func ensureParentDirectories(cfg eventCommandConfig) error {
-	for _, path := range []string{cfg.pollingDB, cfg.newsDB, cfg.analysisDB} {
+	for _, path := range []string{
+		cfg.pollingDB, cfg.newsDB, cfg.analysisDB, cfg.ownershipDB,
+	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			return fmt.Errorf("create directory for %s: %w", path, err)
 		}

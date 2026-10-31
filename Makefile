@@ -5,6 +5,7 @@
 BIN_DIR := bin
 CHOPSTICK_DATA_DIR ?= ./data
 SQLC ?= .tools/bin/sqlc
+TEMPL ?= .tools/bin/templ
 
 -include .env
 
@@ -14,6 +15,7 @@ export EDGAR_SET
 export EDGAR_FORM_TYPES
 export EDGAR_FROM_YEAR
 export EDGAR_NATS_URL
+export EDGAR_HTTP_ADDRESS
 export EDGAR_NEWS_ADDRESS
 export EDGAR_FILINGS_ADDRESS
 export EDGAR_USER_AGENT
@@ -47,7 +49,7 @@ help:
 		'  watch                   Open the tiled Ghostty development console' \
 		'  overview                Refresh polling and news metrics each minute' \
 		'  index-refresh           Refresh latest SEC index and master.tsv' \
-		'  filings-web             Run only the filings web server' \
+		'  filings-web             Run the local web application' \
 		'  build                   Build all command binaries' \
 		'  test                    Run the Go test suite' \
 		'  lint                    Run golangci-lint with auto-fixes' \
@@ -96,9 +98,13 @@ setup:
 	bash scripts/install-tools.sh
 
 generate:
+	@command -v "$(TEMPL)" >/dev/null 2>&1 || { \
+		echo 'templ is unavailable; run make setup' >&2; exit 1; \
+	}
 	@command -v "$(SQLC)" >/dev/null 2>&1 || { \
 		echo 'sqlc is unavailable; run make setup' >&2; exit 1; \
 	}
+	$(TEMPL) generate ./internal/web
 	$(SQLC) generate
 
 check-generated: generate
@@ -107,13 +113,15 @@ check-generated: generate
 		internal/pollingworker/dbgen \
 		internal/marketstore/dbgen \
 		internal/analysisstore/dbgen \
-		internal/news/dbgen)" || { \
+		internal/news/dbgen \
+		internal/web/templates_templ.go)" || { \
 		echo 'generated database code is out of date' >&2; \
 		git status --short --untracked-files=all -- \
 			internal/pollingworker/dbgen \
 			internal/marketstore/dbgen \
 			internal/analysisstore/dbgen \
-			internal/news/dbgen; \
+			internal/news/dbgen \
+			internal/web/templates_templ.go; \
 		exit 1; \
 	}
 

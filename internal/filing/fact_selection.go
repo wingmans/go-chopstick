@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wingman.com/fetch-ecb/internal/edgar"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 type selectedFact struct {

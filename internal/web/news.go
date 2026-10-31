@@ -5,22 +5,20 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/news"
-	"wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/pollingworker"
 )
 
 // NewsServer serves the small, stream-backed EDGAR news page.
 type NewsServer struct {
 	store     *news.Store
-	template  *template.Template
 	logger    *slog.Logger
 	publisher eventbus.Publisher
 }
@@ -33,22 +31,15 @@ func NewNewsServer(store *news.Store, publisher eventbus.Publisher,
 		store:     store,
 		logger:    logger,
 		publisher: publisher,
-		template: template.Must(template.New("news").Funcs(template.FuncMap{
-			"shortAccession": shortAccession,
-		}).ParseFS(templateFiles, "templates/news.html")),
 	}
 }
 
 func (s *NewsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
-	case "/":
+	case "/news", "/news/":
 		s.index(w, r)
-	case "/assets/news.css":
-		s.asset(w, "assets/news.css", "text/css")
-	case "/assets/htmx.min.js":
-		s.asset(w, "assets/htmx-4.0.0.min.js", "text/javascript")
 	default:
-		if strings.HasPrefix(r.URL.Path, "/actions/download/") {
+		if strings.HasPrefix(r.URL.Path, "/news/actions/download/") {
 			s.requestDownload(w, r)
 		} else {
 			http.NotFound(w, r)
@@ -78,23 +69,26 @@ func (s *NewsServer) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := struct {
-		Items          []news.Item
-		Filter         news.Filter
-		SupportedForms []string
-	}{
+	data := newsPageData{
+		Page: pageChrome{
+			Title: "EDGAR news", BodyClass: "news-page",
+			ActiveSection: "news", UseHTMX: true,
+			Styles: []string{"/assets/news.css"},
+		},
 		Items: items, Filter: filter,
 		SupportedForms: edgar.SupportedFormTypes(),
 	}
 
-	templateName := "news-page"
-	if strings.EqualFold(r.Header.Get("Hx-Request"), "true") {
-		templateName = "news-feed"
+	component := newsPage(data)
+	if isWorkspaceRequest(r) {
+		component = newsPageBody(data)
+	} else if strings.EqualFold(r.Header.Get("Hx-Request"), "true") {
+		component = newsFeed(data)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if err := s.template.ExecuteTemplate(w, templateName, data); err != nil &&
+	if err := component.Render(r.Context(), w); err != nil &&
 		s.logger != nil {
 		s.logger.Error("render news", "error", err)
 	}
@@ -115,7 +109,7 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accession := strings.TrimPrefix(r.URL.Path, "/actions/download/")
+	accession := strings.TrimPrefix(r.URL.Path, "/news/actions/download/")
 	if accession == "" || strings.Contains(accession, "/") {
 		http.NotFound(w, r)
 
@@ -164,19 +158,6 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte("<span class=\"selection selected\">queued</span>"))
-}
-
-func (s *NewsServer) asset(w http.ResponseWriter, path, contentType string) {
-	data, err := templateFiles.ReadFile(path)
-	if err != nil {
-		http.Error(w, "asset not found", http.StatusNotFound)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	_, _ = w.Write(data)
 }
 
 func shortAccession(accession string) string {

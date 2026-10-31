@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/ecb"
-	"wingman.com/fetch-ecb/internal/xerr"
+	"wingman.com/chopstick/internal/ecb"
+	"wingman.com/chopstick/internal/xerr"
 )
 
 func main() {

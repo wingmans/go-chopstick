@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/fetch-ecb/internal/analysisstore/dbgen"
-	dividendview "wingman.com/fetch-ecb/internal/dividend"
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	"wingman.com/chopstick/internal/analysisstore/dbgen"
+	dividendview "wingman.com/chopstick/internal/dividend"
+	filingview "wingman.com/chopstick/internal/filing"
 )
 
 // Store is the SQLite-backed read model for normalized filing data.

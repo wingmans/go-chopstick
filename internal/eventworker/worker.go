@@ -12,17 +12,21 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/fetch-ecb/internal/edgar"
-	"wingman.com/fetch-ecb/internal/eventbus"
-	"wingman.com/fetch-ecb/internal/pipeline"
-	"wingman.com/fetch-ecb/internal/pollingworker"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/ownership"
+	"wingman.com/chopstick/internal/ownershippipeline"
+	"wingman.com/chopstick/internal/ownershipstore"
+	"wingman.com/chopstick/internal/pipeline"
+	"wingman.com/chopstick/internal/pollingworker"
 )
 
 const (
-	DownloadDurable = "edgar-download-v2"
-	ProcessDurable  = "edgar-process-v1"
-	defaultAttempts = 5
-	progressEvery   = 5 * time.Second
+	DownloadDurable  = "edgar-download-v2"
+	ProcessDurable   = "edgar-process-v1"
+	OwnershipDurable = "edgar-ownership-v1"
+	defaultAttempts  = 5
+	progressEvery    = 5 * time.Second
 )
 
 // FailureStore persists the current error state for pipeline work.
@@ -50,6 +54,79 @@ type ProcessConfig struct {
 	Drain            bool
 	MaxAttempts      int
 	Failures         FailureStore
+}
+
+// OwnershipConfig configures the all-CIK ownership discovery consumer.
+type OwnershipConfig struct {
+	FilingsDirectory string
+	DatabasePath     string
+	UserAgent        string
+	BaseURL          string
+	Drain            bool
+	MaxAttempts      int
+	Failures         FailureStore
+}
+
+// Ownership consumes discovery events independently of financial-statement
+// selection. It acknowledges recognized forms after a durable ownership
+// outcome has been stored.
+func Ownership(ctx context.Context, bus *eventbus.NATS, cfg OwnershipConfig,
+	logger *slog.Logger,
+) error {
+	store, err := ownershipstore.Open(ctx, cfg.DatabasePath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+
+	downloader, err := edgar.NewFilingDownloader(&http.Client{
+		Timeout: 30 * time.Second,
+	}, edgar.FilingDownloadConfig{
+		Directory: cfg.FilingsDirectory,
+		UserAgent: cfg.UserAgent,
+		BaseURL:   cfg.BaseURL,
+	})
+	if err != nil {
+		return err
+	}
+
+	subscription, err := pullSubscription(bus,
+		eventbus.DiscoverySubject+".>", OwnershipDurable)
+	if err != nil {
+		return err
+	}
+
+	return consume(ctx, subscription, logger, "ownership", cfg.Drain,
+		cfg.MaxAttempts, cfg.Failures, func(message *nats.Msg,
+			event pollingworker.FilingEvent,
+		) error {
+			if !ownership.RecognizesForm(event.FormType) {
+				return message.Ack()
+			}
+
+			filed, err := time.Parse("2006-01-02", event.FilingDate)
+			if err != nil {
+				return err
+			}
+
+			record := edgar.EdgarIndex{
+				CIK: event.CIK, CompanyName: event.CompanyName,
+				FormType: event.FormType, DateFiled: filed,
+				FilingPath: event.FilingPath,
+			}
+
+			decision, err := ownershippipeline.ProcessOne(ctx, store,
+				downloader, ownershippipeline.Config{}, record)
+			if err != nil {
+				return err
+			}
+
+			logger.Info("ownership filing handled",
+				"accession", event.AccessionNumber,
+				"decision", decision.String())
+
+			return message.Ack()
+		})
 }
 
 // Download consumes discovery events and publishes downloaded events only

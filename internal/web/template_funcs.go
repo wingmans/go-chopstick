@@ -4,16 +4,8 @@ import (
 	"math/big"
 	"strings"
 
-	filingview "wingman.com/fetch-ecb/internal/filing"
+	filingview "wingman.com/chopstick/internal/filing"
 )
-
-func add(left, right int) int {
-	return left + right
-}
-
-func mul(left, right int) int {
-	return left * right
-}
 
 // formatFactValue formats a filingview.FactValue for display, including handling units like USD and per share.
 func formatFactValue(value filingview.FactValue, unit string) string {
