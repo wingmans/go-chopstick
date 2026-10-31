@@ -15,9 +15,28 @@ Start the existing project-local NATS service, then run `edgard` in the
 foreground:
 
 ```bash
-bash scripts/nats-dev.sh start
-go run ./cmd/edgard
+make nats-start
+make run
 ```
+
+Use `make nats-status`, `make nats-stop`, and `make nats-reset` to inspect or
+manage the project-local development instance. Reset requires NATS to be
+stopped.
+
+`make run` is deliberately a thin development shortcut for
+`go run ./cmd/edgard`. It does not start or supervise NATS and does not perform
+application operations.
+
+The default instance runs the complete local monolith:
+
+- Atom ingestion and durable publication.
+- Filing selection.
+- Filing download.
+- Filing parsing and analysis-database updates.
+- Ownership processing.
+- News projection and the HTTP application.
+- Missing-index bootstrap and startup reconciliation from the local master
+  index.
 
 Use another terminal for application commands:
 

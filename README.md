@@ -199,8 +199,8 @@ make clean    # Remove build artifacts
 Run the EDGAR application in the foreground during development:
 
 ```bash
-bash scripts/nats-dev.sh start
-go run ./cmd/edgard
+make nats-start
+make run
 ```
 
 The separate control CLI communicates with the running application over NATS:

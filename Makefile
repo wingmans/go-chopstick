@@ -1,4 +1,4 @@
-.PHONY: help setup generate check-generated build test lint docs-pdf clean
+.PHONY: help setup generate check-generated build run test lint docs-pdf clean
 
 .DEFAULT_GOAL := help
 
@@ -12,16 +12,25 @@ help:
 		'Coding:' \
 		'' \
 		'  help                    Display this command list' \
-		'  setup                   Prepare the development environment' \
+		'  deps                   Prepare the development environment' \
 		'  generate                Generate checked-in database code' \
 		'  check-generated          Verify generated database code' \
 		'  build                   Build all command binaries' \
+		'  run                     Run edgard in the foreground' \
 		'  test                    Run the Go test suite' \
 		'  lint                    Run golangci-lint with auto-fixes' \
 		'  docs-pdf                Build the documentation PDF' \
-		'  clean                   Remove build artifacts'
+		'  clean                   Remove build artifacts' \
+		'' \
+		'Infrastructure:' \
+		'' \
+		'  nats-start              Start project-local NATS' \
+		'  nats-stop               Stop project-local NATS' \
+		'  nats-status             Show project-local NATS status' \
+		'  nats-reset              Remove local NATS state' \
+		'' \
 
-setup:
+deps	:
 	@bash -c '[[ -f .env ]] && echo ".env already exists" || { \
 		cp .env.example .env && echo "created .env"; \
 	}'
@@ -63,6 +72,9 @@ build:
 	go build -o $(BIN_DIR)/constituents ./cmd/constituents
 	go build -o $(BIN_DIR)/yahoo-prices ./cmd/yf
 
+run:
+	go run ./cmd/edgard
+
 lint:
 	golangci-lint run --fix ./cmd/... ./internal/...
 
@@ -74,3 +86,17 @@ test:
 
 clean:
 	rm -rf $(BIN_DIR) dist
+
+
+nats-start:
+	bash scripts/nats-dev.sh start
+
+nats-stop:
+	bash scripts/nats-dev.sh stop
+
+nats-status:
+	bash scripts/nats-dev.sh status
+
+nats-reset:
+	bash scripts/nats-dev.sh reset
+
