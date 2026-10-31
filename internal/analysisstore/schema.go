@@ -103,7 +103,7 @@ func analysisSchemaIsLocked(err error) bool {
 func outdatedSchemaError(version int) error {
 	return fmt.Errorf(
 		"analysis database schema version is %d, want %d; "+
-			"run 'make rebuild-edgar'",
+			"run 'edgar rebuild edgar --confirm'",
 		version,
 		analysisSchemaVersion,
 	)

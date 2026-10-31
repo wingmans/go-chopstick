@@ -1,7 +1,14 @@
-## Inspect the database interactively:
+# Inspect market data
 
+Open the market database with column headings:
+
+```bash
 sqlite3 -header -column data/market.db
-Then run:
+```
+
+Inspect overall coverage:
+
+```sql
 SELECT
     MIN(observation_date) AS earliest,
     MAX(observation_date) AS latest,
@@ -9,10 +16,11 @@ SELECT
     COUNT(DISTINCT security_id) AS securities
 FROM market_prices
 WHERE provider = 'yahoo';
+```
 
+Inspect Microsoft coverage:
 
-## Inspect MSFT:
-
+```sql
 SELECT
     s.symbol,
     MIN(p.observation_date) AS earliest,
@@ -25,10 +33,11 @@ JOIN market_prices AS p
 WHERE s.provider = 'yahoo'
   AND s.symbol = 'MSFT'
 GROUP BY s.symbol;
+```
 
+Inspect stored watermarks:
 
-## Inspect stored watermarks:
-
+```sql
 SELECT
     s.symbol,
     w.covered_through,
@@ -41,12 +50,13 @@ JOIN market_securities AS s
 WHERE w.provider = 'yahoo'
 ORDER BY s.symbol
 LIMIT 20;
+```
 
+Count securities lacking history from 2020:
 
-## Count securities lacking 2020 history:
-
+```sql
 SELECT COUNT(*) AS missing_2020_history
 FROM market_sync_state
 WHERE provider = 'yahoo'
   AND (observed_from IS NULL OR observed_from > '2020-01-01');
- 
+```

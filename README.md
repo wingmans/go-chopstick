@@ -195,3 +195,20 @@ make test     # Run all tests
 make lint     # Run golangci-lint
 make clean    # Remove build artifacts
 ```
+
+Run the EDGAR application in the foreground during development:
+
+```bash
+bash scripts/nats-dev.sh start
+go run ./cmd/edgard
+```
+
+The separate control CLI communicates with the running application over NATS:
+
+```bash
+go run ./cmd/edgar status
+go run ./cmd/edgar failures list
+```
+
+See the [EDGAR project guide](docs/index.md) for the executable and operational
+boundaries.

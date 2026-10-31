@@ -6,13 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
-	"strconv"
 
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/edgarapp"
 	"wingman.com/chopstick/internal/eventbus"
-	"wingman.com/chopstick/internal/pollingworker"
 )
 
 type backfillConfig struct {
@@ -23,7 +21,7 @@ type backfillConfig struct {
 
 // parseBackfillConfig parses the command-line arguments and environment variables.
 func parseBackfillConfig(args []string) (appConfig, error) {
-	fromYear, err := environmentFromYear(edgar.EarliestPipelineYear)
+	fromYear, err := environmentFromYear()
 	if err != nil {
 		return appConfig{}, err
 	}
@@ -78,73 +76,29 @@ func parseBackfillConfig(args []string) (appConfig, error) {
 	return cfg, nil
 }
 
-func runBackfill(ctx context.Context, client *http.Client,
-	cfg backfillConfig, logger *slog.Logger,
+func runBackfill(ctx context.Context, cfg backfillConfig,
+	logger *slog.Logger,
 ) error {
-	logger.Info("starting backfill", "set", cfg.setName,
-		"from_year", cfg.fromYear, "through", "current available data")
-
-	indexCfg, err := parseDownloadIndexConfig([]string{
-		"--from-year", strconv.Itoa(cfg.fromYear),
-	})
+	config, err := resolveBackfillConfig(cfg)
 	if err != nil {
 		return err
 	}
 
-	if err := edgar.DownloadIndex(ctx, client, indexCfg.index); err != nil {
-		return fmt.Errorf("index stage: %w", err)
-	}
+	return edgarapp.Backfill(ctx, config, logger)
+}
 
-	discoverCfg, err := parseEventCommandConfig("discover", []string{
-		"--set", cfg.setName,
-		"--from-year", strconv.Itoa(cfg.fromYear),
-		"--nats-url", cfg.natsURL,
-	})
+func resolveBackfillConfig(cfg backfillConfig) (edgarapp.Config, error) {
+	config, err := edgarapp.ConfigFromEnvironment()
 	if err != nil {
-		return err
+		return edgarapp.Config{}, err
 	}
 
-	if err := runEventCommand(ctx, "discover", discoverCfg.events,
-		logger); err != nil {
-		return fmt.Errorf("discover stage: %w", err)
+	config.NATSURL = cfg.natsURL
+	config.FromYear = cfg.fromYear
+
+	if err := config.SetConstituentSet(cfg.setName); err != nil {
+		return edgarapp.Config{}, err
 	}
 
-	for _, stage := range []string{"select", "download", "process"} {
-		stageArgs := []string{"--drain", "--nats-url", cfg.natsURL}
-		if stage == "select" {
-			stageArgs = append(stageArgs, "--set", cfg.setName)
-		}
-
-		stageCfg, err := parseEventCommandConfig(stage, stageArgs)
-		if err != nil {
-			return err
-		}
-
-		if err := runEventCommand(ctx, stage, stageCfg.events,
-			logger); err != nil {
-			return fmt.Errorf("%s stage: %w", stage, err)
-		}
-	}
-
-	store, err := pollingworker.NewDedupeServiceContext(ctx,
-		discoverCfg.events.pollingDB)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = store.Close() }()
-
-	failures, err := store.WorkFailures(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	if len(failures) > 0 {
-		return fmt.Errorf("backfill completed with %d unresolved failure(s); "+
-			"run 'edgar errors'", len(failures))
-	}
-
-	logger.Info("backfill complete", "set", cfg.setName,
-		"from_year", cfg.fromYear)
-
-	return nil
+	return config, nil
 }

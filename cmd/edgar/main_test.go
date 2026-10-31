@@ -56,14 +56,24 @@ func TestParseDownloadIndexConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestParseIndexImportConfig(t *testing.T) {
+	config, err := parseConfig([]string{
+		"index", "import", "--latest", "--dry-run",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if config.command != "index-import" ||
+		!config.indexImport.value.Latest ||
+		!config.indexImport.value.DryRun {
+		t.Fatalf("unexpected index import config: %+v", config.indexImport)
+	}
+}
+
 func TestConfiguredDataRootControlsCommandDefaults(t *testing.T) {
 	t.Setenv(appdata.EnvName, "/srv/chopstick")
 	t.Setenv(edgarSetEnv, "")
-
-	events, err := parseEventCommandConfig("run", nil)
-	if err != nil {
-		t.Fatalf("parse event config: %v", err)
-	}
 
 	index, err := parseDownloadIndexConfig(nil)
 	if err != nil {
@@ -76,11 +86,6 @@ func TestConfiguredDataRootControlsCommandDefaults(t *testing.T) {
 	}
 
 	paths := map[string]string{
-		"polling database":  events.events.pollingDB,
-		"news database":     events.events.newsDB,
-		"filings":           events.events.filingsDirectory,
-		"parsed":            events.events.parsedDirectory,
-		"analysis database": events.events.analysisDB,
 		"master index":      index.index.MasterPath,
 		"quarterly indexes": index.index.Directory,
 		"index archives":    index.index.ZipDirectory,
@@ -91,89 +96,6 @@ func TestConfiguredDataRootControlsCommandDefaults(t *testing.T) {
 		if !strings.HasPrefix(path, "/srv/chopstick/") {
 			t.Errorf("%s path %q is outside configured data root", name, path)
 		}
-	}
-}
-
-func TestParseDiscoverConfigAppliesPipelineBoundaryAndFilters(t *testing.T) {
-	t.Chdir(filepath.Join("..", ".."))
-
-	cfg, err := parseConfig([]string{
-		"discover", "--set", "us-gaap", "--from-year", "2022",
-		"--to-year", "2026", "--form-type", "10-K",
-	})
-	if err != nil {
-		t.Fatalf("parseConfig returned error: %v", err)
-	}
-
-	if cfg.events.filter.FromYear != 2022 ||
-		cfg.events.filter.ToYear != 2026 {
-		t.Fatalf("unexpected year range: %+v", cfg.events.filter)
-	}
-
-	if len(cfg.events.filter.CIKs) == 0 {
-		t.Fatal("constituent set did not populate CIKs")
-	}
-
-	if got := cfg.events.filter.FormTypes; len(got) != 1 || got[0] != "10-K" {
-		t.Fatalf("unexpected form types: %v", got)
-	}
-}
-
-func TestParseDiscoverConfigDefaultsToPipelineBoundary(t *testing.T) {
-	t.Setenv(edgarFromYearEnv, "")
-	t.Setenv(edgarSetEnv, "")
-
-	cfg, err := parseConfig([]string{"discover"})
-	if err != nil {
-		t.Fatalf("parseConfig returned error: %v", err)
-	}
-
-	if cfg.events.filter.FromYear != edgar.EarliestPipelineYear {
-		t.Fatalf("discover from year = %d, want %d",
-			cfg.events.filter.FromYear, edgar.EarliestPipelineYear)
-	}
-
-	if _, err := parseConfig([]string{
-		"discover", "--from-year", "2015",
-	}); !errors.Is(err, flag.ErrHelp) {
-		t.Fatalf("pre-boundary discover returned %v, want help error", err)
-	}
-}
-
-func TestParseEventWorkersSupportDrainMode(t *testing.T) {
-	for _, command := range []string{"download", "process"} {
-		cfg, err := parseConfig([]string{command, "--drain"})
-		if err != nil {
-			t.Fatalf("%s config returned error: %v", command, err)
-		}
-
-		if !cfg.events.drain {
-			t.Fatalf("%s did not enable drain mode", command)
-		}
-	}
-}
-
-func TestParseDiscoverAlias(t *testing.T) {
-	cfg, err := parseConfig([]string{"discover", "--from-year", "2022"})
-	if err != nil {
-		t.Fatalf("parseConfig returned error: %v", err)
-	}
-
-	if cfg.command != "discover" || cfg.events.filter.FromYear != 2022 {
-		t.Fatalf("unexpected discover config: %+v", cfg)
-	}
-}
-
-func TestExplicitYearOverridesEnvironmentFromYear(t *testing.T) {
-	t.Setenv(edgarFromYearEnv, "2022")
-
-	cfg, err := parseConfig([]string{"discover", "--year", "2024"})
-	if err != nil {
-		t.Fatalf("parseConfig returned error: %v", err)
-	}
-
-	if cfg.events.filter.Year != 2024 || cfg.events.filter.FromYear != 0 {
-		t.Fatalf("unexpected year selection: %+v", cfg.events.filter)
 	}
 }
 
@@ -194,6 +116,27 @@ func TestParseBackfillUsesEnvironmentDefaults(t *testing.T) {
 	}
 }
 
+func TestParseRebuildRequiresConfirmation(t *testing.T) {
+	t.Chdir(filepath.Join("..", ".."))
+	t.Setenv(edgarSetEnv, "us-gaap")
+	t.Setenv(edgarFromYearEnv, "2022")
+
+	if _, err := parseConfig([]string{"rebuild", "edgar"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("rebuild without confirmation returned %v", err)
+	}
+
+	config, err := parseConfig([]string{
+		"rebuild", "edgar", "--confirm",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !config.rebuild.confirm || config.rebuild.backfill.fromYear != 2022 {
+		t.Fatalf("unexpected rebuild config: %+v", config.rebuild)
+	}
+}
+
 func TestParseDoctorVerbose(t *testing.T) {
 	cfg, err := parseConfig([]string{"doctor", "--verbose"})
 	if err != nil {
@@ -205,124 +148,35 @@ func TestParseDoctorVerbose(t *testing.T) {
 	}
 }
 
-func TestHTTPAddressUsesNewsCompatibilityDefault(t *testing.T) {
-	t.Setenv(edgarSetEnv, "")
-	t.Setenv(edgarHTTPAddressEnv, "")
-	t.Setenv(edgarWebAddressEnv, "")
-	t.Setenv(edgarNewsAddressEnv, "127.0.0.1:8082")
-
-	for _, command := range []string{"run", "news", "status"} {
-		cfg, err := parseConfig([]string{command})
-		if err != nil {
-			t.Fatalf("parseConfig(%q) returned error: %v", command, err)
-		}
-
-		address := cfg.events.address
-		if command == "status" {
-			address = cfg.operations.httpAddress
-		}
-
-		if address != "127.0.0.1:8082" {
-			t.Fatalf("parseConfig(%q) address = %q", command, address)
-		}
-	}
-
-	cfg, err := parseConfig([]string{
-		"run", "--address", "127.0.0.1:8083",
-	})
-	if err != nil {
-		t.Fatalf("parseConfig with address returned error: %v", err)
-	}
-
-	if cfg.events.address != "127.0.0.1:8083" {
-		t.Fatalf("CLI address did not override environment: %q",
-			cfg.events.address)
-	}
-}
-
-func TestRunUsesEnvironmentReconciliationScope(t *testing.T) {
-	t.Setenv(edgarSetEnv, "")
-	t.Setenv(edgarFormTypesEnv, "10-K,10-Q,8-K")
-	t.Setenv(edgarFromYearEnv, "2022")
-
-	cfg, err := parseConfig([]string{"run"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.events.filter.FromYear != 2022 {
-		t.Fatalf("run from year = %d", cfg.events.filter.FromYear)
-	}
-
-	if len(cfg.events.filter.FormTypes) != 3 {
-		t.Fatalf("run forms = %v", cfg.events.filter.FormTypes)
-	}
-}
-
-func TestHTTPAddressUsesEnvironmentDefault(t *testing.T) {
-	t.Setenv(edgarSetEnv, "")
-	t.Setenv(edgarHTTPAddressEnv, "127.0.0.1:8084")
-
-	cfg, err := parseConfig([]string{"run"})
-	if err != nil {
-		t.Fatalf("parseConfig run returned error: %v", err)
-	}
-
-	if cfg.events.address != "127.0.0.1:8084" {
-		t.Fatalf("run HTTP address = %q", cfg.events.address)
-	}
-
-	cfg, err = parseConfig([]string{
-		"run", "--filings-address", "127.0.0.1:8085",
-	})
-	if err != nil {
-		t.Fatalf("parseConfig run with address returned error: %v", err)
-	}
-
-	if cfg.events.address != "127.0.0.1:8085" {
-		t.Fatalf("run CLI address did not override environment: %q",
-			cfg.events.address)
-	}
-
-	cfg, err = parseConfig([]string{"serve"})
-	if err != nil {
-		t.Fatalf("parseConfig returned error: %v", err)
-	}
-
-	if cfg.serve.address != "127.0.0.1:8084" {
-		t.Fatalf("serve address = %q", cfg.serve.address)
-	}
-
-	cfg, err = parseConfig([]string{
-		"serve", "--address", "127.0.0.1:8085",
-	})
-	if err != nil {
-		t.Fatalf("parseConfig with address returned error: %v", err)
-	}
-
-	if cfg.serve.address != "127.0.0.1:8085" {
-		t.Fatalf("CLI address did not override environment: %q",
-			cfg.serve.address)
-	}
-}
-
 func TestParseRetryRequiresValidStage(t *testing.T) {
 	for _, args := range [][]string{
-		{"retry"},
-		{"retry", "--stage", "unknown"},
+		{"failures", "retry"},
+		{"failures", "retry", "--stage", "unknown"},
 	} {
 		if _, err := parseConfig(args); !errors.Is(err, flag.ErrHelp) {
 			t.Fatalf("parseConfig(%v) returned %v, want help", args, err)
 		}
 	}
 
-	cfg, err := parseConfig([]string{"retry", "--stage", "download"})
+	cfg, err := parseConfig([]string{
+		"failures", "retry", "--stage", "download",
+	})
 	if err != nil {
 		t.Fatalf("parseConfig returned error: %v", err)
 	}
 
 	if cfg.operations.stage != "download" {
 		t.Fatalf("unexpected retry stage %q", cfg.operations.stage)
+	}
+}
+
+func TestServiceCommandsAreNotControlCLICommands(t *testing.T) {
+	for _, command := range []string{
+		"run", "serve", "atom", "select", "download", "process", "news",
+	} {
+		if _, err := parseConfig([]string{command}); !errors.Is(err, flag.ErrHelp) {
+			t.Fatalf("parseConfig(%q) returned %v, want help", command, err)
+		}
 	}
 }
 
@@ -388,42 +242,6 @@ func TestParseConfigWithoutCommandShowsHelp(t *testing.T) {
 	_, err := parseConfig(nil)
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("got %v, want flag.ErrHelp", err)
-	}
-}
-
-func TestParseServeConfigDefaults(t *testing.T) {
-	t.Setenv(appdata.EnvName, "")
-
-	cfg, err := parseConfig([]string{"serve"})
-	if err != nil {
-		t.Fatalf("parseConfig returned error: %v", err)
-	}
-
-	if cfg.serve.address != "127.0.0.1:8083" {
-		t.Fatalf("unexpected serve address %q", cfg.serve.address)
-	}
-
-	if cfg.serve.parsedDir != "data/parsed" {
-		t.Fatalf("unexpected parsed directory %q", cfg.serve.parsedDir)
-	}
-
-	if cfg.serve.ownershipDB != "data/ownership.db" {
-		t.Fatalf("unexpected ownership database %q", cfg.serve.ownershipDB)
-	}
-
-	cfg, err = parseConfig([]string{
-		"serve", "--set", "golden", "--ownership-db", "other.db",
-	})
-	if err != nil {
-		t.Fatalf("parseConfig with set returned error: %v", err)
-	}
-
-	if cfg.serve.setName != "golden" {
-		t.Fatalf("unexpected serve set %q", cfg.serve.setName)
-	}
-
-	if cfg.serve.ownershipDB != "other.db" {
-		t.Fatalf("unexpected ownership database %q", cfg.serve.ownershipDB)
 	}
 }
 

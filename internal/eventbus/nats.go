@@ -87,6 +87,23 @@ func Inspect(url string) (*NATS, error) {
 	return &NATS{connection: connection, jetstream: jetstream}, nil
 }
 
+// ResetStream removes all retained EDGAR events and durable consumers. The
+// next Connect call recreates the stream.
+func ResetStream(url string) error {
+	bus, err := Inspect(url)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = bus.Close() }()
+
+	if err := bus.jetstream.DeleteStream(StreamName); err != nil &&
+		!errors.Is(err, nats.ErrStreamNotFound) {
+		return fmt.Errorf("delete EDGAR event stream: %w", err)
+	}
+
+	return nil
+}
+
 //nolint:funcorder // Kept beside Connect, which invokes it during construction.
 func (n *NATS) ensureStream() error {
 	if _, err := n.jetstream.StreamInfo(StreamName); err == nil {

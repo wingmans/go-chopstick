@@ -103,7 +103,7 @@ func newsSchemaIsLocked(err error) bool {
 func outdatedSchemaError(version int) error {
 	return fmt.Errorf(
 		"news database schema version is %d, want %d; "+
-			"run 'make rebuild-edgar'",
+			"run 'edgar rebuild edgar --confirm'",
 		version,
 		newsSchemaVersion,
 	)

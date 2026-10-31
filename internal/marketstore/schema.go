@@ -108,8 +108,7 @@ func marketSchemaIsLocked(err error) bool {
 
 func outdatedSchemaError(version int) error {
 	return fmt.Errorf(
-		"market database schema version is %d, want %d; "+
-			"run 'make rebuild-market'",
+		"market database schema version is %d, want %d; rebuild is required",
 		version,
 		marketSchemaVersion,
 	)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,11 +16,11 @@ import (
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/control"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
 	"wingman.com/chopstick/internal/eventworker"
 	"wingman.com/chopstick/internal/news"
-	"wingman.com/chopstick/internal/pollingworker"
 )
 
 // operationsConfig holds the configuration for the operations subcommands.
@@ -40,6 +39,14 @@ type operationsConfig struct {
 // parseOperationsConfig parses the command-line arguments and environment variables
 // for the operations subcommands, returning an appConfig with the parsed settings.
 func parseOperationsConfig(command string, args []string) (appConfig, error) {
+	displayCommand := command
+	switch command {
+	case "errors":
+		displayCommand = "failures list"
+	case "retry":
+		displayCommand = "failures retry"
+	}
+
 	cfg := appConfig{
 		command: command,
 		operations: operationsConfig{
@@ -52,7 +59,7 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 		},
 	}
 
-	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	flags := flag.NewFlagSet(displayCommand, flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.StringVar(&cfg.operations.natsURL, "nats-url", cfg.operations.natsURL, "NATS server URL")
 	flags.StringVar(&cfg.operations.pollingDB, "polling-db", cfg.operations.pollingDB, "pipeline state database")
@@ -99,7 +106,8 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 	}
 
 	flags.Usage = func() {
-		printSubcommandHelp(command, operationsDescription(command), options)
+		printSubcommandHelp(displayCommand, operationsDescription(command),
+			options)
 	}
 	if err := flags.Parse(args); err != nil {
 		return appConfig{}, flag.ErrHelp
@@ -133,6 +141,12 @@ func operationsDescription(command string) string {
 		"errors": "List unresolved download and processing failures.",
 		"retry":  "Requeue unresolved failures for one stage.",
 	}[command]
+}
+
+func configuredFormTypes() ([]string, error) {
+	value := environmentValue(edgarFormTypesEnv, "10-K,10-Q,8-K")
+
+	return edgar.ValidateSupportedFormTypes(strings.Split(value, ","))
 }
 
 type doctorReport struct {
@@ -190,7 +204,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 
 	bus, err := eventbus.Inspect(cfg.natsURL)
 	if err != nil {
-		report.check("FAIL", "NATS", "unavailable; run make nats-start")
+		report.check("FAIL", "NATS", "unavailable; start local NATS")
 
 		if cfg.verbose {
 			fmt.Printf("       detail         %v\n", err)
@@ -203,7 +217,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 		if _, err := bus.JetStream().StreamInfo(eventbus.StreamName); err != nil {
 			if errors.Is(err, nats.ErrStreamNotFound) {
 				report.check("WARN", "JetStream",
-					"EDGAR_EVENTS will be created by make dev")
+					"EDGAR_EVENTS will be created by edgard")
 			} else {
 				report.check("FAIL", "JetStream", err.Error())
 			}
@@ -212,6 +226,7 @@ func runDoctor(ctx context.Context, cfg operationsConfig) error {
 			checkConsumer(&report, bus, eventworker.DownloadDurable)
 			checkConsumer(&report, bus, eventworker.ProcessDurable)
 			checkConsumer(&report, bus, eventworker.SelectionDurable)
+			checkConsumer(&report, bus, eventworker.OwnershipDurable)
 			checkConsumer(&report, bus, news.DurableName)
 		}
 	}
@@ -239,7 +254,7 @@ func checkSQLite(ctx context.Context, report *doctorReport,
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			report.check("WARN", component,
-				path+" does not exist; run make dev")
+				path+" does not exist; start edgard")
 		} else {
 			report.check("FAIL", component, err.Error())
 		}
@@ -262,7 +277,7 @@ func checkSQLite(ctx context.Context, report *doctorReport,
 			WHERE type = 'table' AND name = ?`, table).Scan(&found)
 		if err != nil || found == 0 {
 			report.check("FAIL", component,
-				"missing table "+table+"; run make dev")
+				"missing table "+table+"; start edgard")
 
 			return
 		}
@@ -302,7 +317,7 @@ func checkConsumer(report *doctorReport, bus *eventbus.NATS, durable string) {
 	switch {
 	case errors.Is(err, nats.ErrConsumerNotFound):
 		report.check("WARN", "consumer",
-			durable+" has not been created; run make dev")
+			durable+" has not been created; start edgard")
 	case err != nil:
 		report.check("FAIL", "consumer", durable+": "+err.Error())
 	default:
@@ -333,7 +348,7 @@ func checkConfiguredSet(report *doctorReport) {
 }
 
 func printResolvedConfiguration(cfg operationsConfig) {
-	fromYear, _ := environmentFromYear(edgar.EarliestPipelineYear)
+	fromYear, _ := environmentFromYear()
 	baseURL := environmentValue(edgarBaseURLEnv, edgar.DefaultBaseURL)
 	forms, _ := configuredFormTypes()
 
@@ -347,7 +362,7 @@ func printResolvedConfiguration(cfg operationsConfig) {
 	fmt.Printf("  SEC archives      %s\n", baseURL)
 	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv, defaultUserAgent))
 	fmt.Printf("  NATS              %s\n", cfg.natsURL)
-	fmt.Printf("  web URL           %s (started by make dev)\n",
+	fmt.Printf("  web URL           %s (served by edgard)\n",
 		httpURL(cfg.httpAddress))
 	fmt.Printf("  data directory    %s\n", appdata.Root())
 	fmt.Printf("  filings cache     %s\n", appdata.Path("cache", "filings"))
@@ -454,168 +469,35 @@ func formatBytes(bytes int64) string {
 }
 
 func runStatus(ctx context.Context, cfg operationsConfig) error {
+	client, err := control.NewClient(cfg.natsURL)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	status, err := client.Status(ctx)
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("EDGAR status")
 	fmt.Println()
+	fmt.Printf("  started           %s\n", status.StartedAt.Format(time.RFC3339))
+	fmt.Printf("  web URL           %s\n", httpURL(status.HTTPAddress))
+	fmt.Printf("  accessions        %d\n", status.Pipeline.Accessions)
+	fmt.Printf("  outbox pending    %d\n", status.Pipeline.OutboxPending)
+	fmt.Printf("  outbox published  %d\n", status.Pipeline.OutboxPublished)
+	fmt.Printf("  failures          %d\n", status.Pipeline.Failures)
+	fmt.Printf("  stream messages   %d\n", status.StreamMessages)
+	fmt.Printf("  stream bytes      %d\n", status.StreamBytes)
 
-	printDatabaseStatus(ctx, cfg.pollingDB)
-	printNATSStatus(cfg.natsURL)
-	printViewerStatus(ctx, cfg.newsDB, cfg.httpAddress)
-
-	return ctx.Err()
-}
-
-func printDatabaseStatus(ctx context.Context, path string) {
-	fmt.Println("Pipeline database")
-
-	db, err := openSQLiteReadOnly(ctx, path)
-	if err != nil {
-		fmt.Printf("  state             unavailable: %v\n\n", err)
-
-		return
+	for _, consumer := range status.Consumers {
+		fmt.Printf("  %-17s remaining=%d pending=%d in_flight=%d\n",
+			consumer.Name, consumer.Pending+uint64(max(consumer.InFlight, 0)),
+			consumer.Pending, consumer.InFlight)
 	}
 
-	defer func() { _ = db.Close() }()
-
-	printCount(ctx, db, "accessions", `SELECT COUNT(*) FROM processed_accessions`)
-	printCount(ctx, db, "outbox pending", `SELECT COUNT(*) FROM polling_outbox
-		WHERE published_at IS NULL`)
-	printCount(ctx, db, "outbox published", `SELECT COUNT(*) FROM polling_outbox
-		WHERE published_at IS NOT NULL`)
-
-	if sqliteTableExists(ctx, db, "work_failures") {
-		printCount(ctx, db, "failures", `SELECT COUNT(*) FROM work_failures
-			WHERE resolved_at IS NULL`)
-	} else {
-		fmt.Println("  failures          not initialized")
-	}
-
-	fmt.Println()
-}
-
-func printCount(ctx context.Context, db *sql.DB, label, query string) {
-	var count int64
-	if err := db.QueryRowContext(ctx, query).Scan(&count); err != nil {
-		fmt.Printf("  %-17s unavailable: %v\n", label, err)
-
-		return
-	}
-
-	fmt.Printf("  %-17s %d\n", label, count)
-}
-
-func sqliteTableExists(ctx context.Context, db *sql.DB, table string) bool {
-	var found int
-
-	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master
-		WHERE type = 'table' AND name = ?`, table).Scan(&found)
-
-	return err == nil && found > 0
-}
-
-// printNATSStatus prints the status of the NATS server, including stream and consumer information.
-func printNATSStatus(url string) {
-	fmt.Println("NATS")
-
-	bus, err := eventbus.Inspect(url)
-	if err != nil {
-		fmt.Printf("  server            unavailable: %v\n\n", err)
-
-		return
-	}
-
-	defer func() { _ = bus.Close() }()
-
-	fmt.Println("  server            running at " + url)
-
-	stream, err := bus.JetStream().StreamInfo(eventbus.StreamName)
-	if err != nil {
-		fmt.Printf("  stream            unavailable: %v\n\n", err)
-
-		return
-	}
-
-	fmt.Printf("  stream messages   %d\n", stream.State.Msgs)
-	fmt.Printf("  stream bytes      %d\n", stream.State.Bytes)
-
-	for _, durable := range []string{
-		eventworker.SelectionDurable,
-		eventworker.DownloadDurable,
-		eventworker.ProcessDurable,
-		news.DurableName,
-	} {
-		consumer, err := bus.JetStream().ConsumerInfo(eventbus.StreamName,
-			durable)
-		if errors.Is(err, nats.ErrConsumerNotFound) {
-			fmt.Printf("  %-17s not created\n", durable)
-
-			continue
-		}
-
-		if err != nil {
-			fmt.Printf("  %-17s unavailable: %v\n", durable, err)
-
-			continue
-		}
-
-		ackPending := uint64(0)
-		if consumer.NumAckPending > 0 {
-			ackPending = uint64(consumer.NumAckPending)
-		}
-
-		remaining := consumer.NumPending + ackPending
-		fmt.Printf("  %-17s state=%s remaining=%d pending=%d in_flight=%d\n",
-			durable, consumerActivity(consumer), remaining,
-			consumer.NumPending, consumer.NumAckPending)
-		fmt.Printf("  %-17s redelivered=%d caught_up=%t\n", "",
-			consumer.NumRedelivered, remaining == 0)
-
-		if consumer.Delivered.Last != nil {
-			fmt.Printf("  %-17s last activity %s\n", "",
-				consumer.Delivered.Last.UTC().Format(time.RFC3339))
-		}
-	}
-
-	fmt.Println()
-}
-
-// consumerActivity determines the current activity state of a NATS consumer based on its pending and waiting messages.
-func consumerActivity(info *nats.ConsumerInfo) string {
-	if info.NumAckPending > 0 {
-		return "working"
-	}
-
-	if info.NumWaiting > 0 {
-		return "waiting"
-	}
-
-	return "idle-or-stopped"
-}
-
-// printViewerStatus prints the status of the viewer server and its associated SQLite database.
-func printViewerStatus(ctx context.Context, path, address string) {
-	fmt.Println("Web application")
-
-	dialer := net.Dialer{Timeout: 250 * time.Millisecond}
-
-	connection, err := dialer.DialContext(ctx, "tcp", address)
-	if err == nil {
-		_ = connection.Close()
-
-		fmt.Println("  URL               " + httpURL(address) + " (listening)")
-	} else {
-		fmt.Println("  URL               " + httpURL(address) + " (stopped)")
-	}
-
-	db, err := openSQLiteReadOnly(ctx, path)
-	if err != nil {
-		fmt.Printf("  projection        unavailable: %v\n", err)
-
-		return
-	}
-	defer func() { _ = db.Close() }()
-
-	printCount(ctx, db, "projection rows", `SELECT COUNT(*) FROM feed_items`)
-	fmt.Println()
+	return nil
 }
 
 func httpURL(address string) string {
@@ -629,77 +511,51 @@ func httpURL(address string) string {
 
 // runErrors retrieves and displays unresovled work failures from the polling database.
 func runErrors(ctx context.Context, cfg operationsConfig) error {
-	db, err := openSQLiteReadOnly(ctx, cfg.pollingDB)
+	client, err := control.NewClient(cfg.natsURL)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = db.Close() }()
+	defer client.Close()
 
-	if !sqliteTableExists(ctx, db, "work_failures") {
-		fmt.Println("No pipeline failures have been recorded.")
+	rows, err := client.Failures(ctx, control.FailureRequest{
+		Stage: cfg.stage, Limit: cfg.limit,
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(rows) == 0 {
+		fmt.Println("No unresolved pipeline failures.")
 
 		return nil
 	}
 
-	query := `SELECT stage, accession_number, attempts, last_failed_at,
-		last_error FROM work_failures WHERE resolved_at IS NULL`
-	args := []any{}
-
-	if cfg.stage != "" {
-		query += " AND stage = ?"
-
-		args = append(args, cfg.stage)
-	}
-
-	query += " ORDER BY last_failed_at DESC LIMIT ?"
-
-	args = append(args, cfg.limit)
-
-	rows, err := db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("read work failures: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
 	fmt.Printf("%-10s %-22s %-8s %-19s %s\n", "STAGE", "ACCESSION", "ATTEMPTS", "LAST FAILURE", "ERROR")
 
-	for rows.Next() {
-		var (
-			stage, accession, failedAt, message string
-			attempts                            int
-		)
-
-		if err := rows.Scan(&stage, &accession, &attempts, &failedAt,
-			&message); err != nil {
-			return err
-		}
-
-		fmt.Printf("%-10s %-22s %-8d %-19s %s\n", stage, accession,
-			attempts, failedAt, message)
+	for _, row := range rows {
+		fmt.Printf("%-10s %-22s %-8d %-19s %s\n", row.Stage,
+			row.AccessionNumber, row.Attempts,
+			row.LastFailedAt.Format(time.RFC3339), row.LastError)
 	}
 
-	return rows.Err()
+	return nil
 }
 
 func runRetry(ctx context.Context, cfg operationsConfig) error {
-	store, err := pollingworker.NewDedupeServiceContext(ctx, cfg.pollingDB)
+	client, err := control.NewClient(cfg.natsURL)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = store.Close() }()
+	defer client.Close()
 
-	bus, err := eventbus.Connect(cfg.natsURL)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = bus.Close() }()
-
-	count, err := store.RetryWorkFailures(ctx, cfg.stage, bus)
+	result, err := client.RetryFailures(ctx, control.RetryRequest{
+		Stage: cfg.stage,
+	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Requeued %d %s failure(s)\n", count, cfg.stage)
+	fmt.Printf("Requeued %d %s failure(s)\n", result.Count, cfg.stage)
 
 	return nil
 }

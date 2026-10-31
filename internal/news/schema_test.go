@@ -72,7 +72,7 @@ func TestNewsSchemaRejectsUnversionedDatabase(t *testing.T) {
 		t.Fatal("Open() succeeded for an unversioned news database")
 	}
 
-	if !strings.Contains(err.Error(), "make rebuild-edgar") {
+	if !strings.Contains(err.Error(), "edgar rebuild edgar --confirm") {
 		t.Fatalf("error %q does not explain how to rebuild", err)
 	}
 }

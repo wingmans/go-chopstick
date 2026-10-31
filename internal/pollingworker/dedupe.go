@@ -65,6 +65,15 @@ type DedupeService struct {
 	mu      sync.Mutex
 }
 
+// Stats summarizes durable ingestion and failure state without exposing the
+// polling database schema to callers.
+type Stats struct {
+	Accessions      int64 `json:"accessions"`
+	OutboxPending   int64 `json:"outbox_pending"`
+	OutboxPublished int64 `json:"outbox_published"`
+	Failures        int64 `json:"failures"`
+}
+
 // NewDedupeService initializes SQLite with WAL mode for performance.
 func NewDedupeService(dbPath string) (*DedupeService, error) {
 	return NewDedupeServiceContext(context.Background(), dbPath)
@@ -98,6 +107,32 @@ func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService
 // NewSQLiteStore is the name used by the polling command.
 func NewSQLiteStore(dbPath string) (*DedupeService, error) {
 	return NewDedupeService(dbPath)
+}
+
+// Stats returns the current durable pipeline counts.
+func (s *DedupeService) Stats(ctx context.Context) (Stats, error) {
+	var result Stats
+
+	queries := []struct {
+		value *int64
+		query string
+	}{
+		{&result.Accessions, `SELECT COUNT(*) FROM processed_accessions`},
+		{&result.OutboxPending, `SELECT COUNT(*) FROM polling_outbox
+			WHERE published_at IS NULL`},
+		{&result.OutboxPublished, `SELECT COUNT(*) FROM polling_outbox
+			WHERE published_at IS NOT NULL`},
+		{&result.Failures, `SELECT COUNT(*) FROM work_failures
+			WHERE resolved_at IS NULL`},
+	}
+
+	for _, item := range queries {
+		if err := s.db.QueryRowContext(ctx, item.query).Scan(item.value); err != nil {
+			return Stats{}, fmt.Errorf("read polling statistics: %w", err)
+		}
+	}
+
+	return result, nil
 }
 
 // SaveDeadLetter persists a dead letter entry into the database.

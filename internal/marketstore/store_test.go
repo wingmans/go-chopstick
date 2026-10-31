@@ -194,7 +194,7 @@ func TestOpenRejectsUnversionedDatabase(t *testing.T) {
 		t.Fatal("Open() succeeded for an unversioned market database")
 	}
 
-	if !strings.Contains(err.Error(), "make rebuild-market") {
+	if !strings.Contains(err.Error(), "rebuild is required") {
 		t.Fatalf("error %q does not explain how to rebuild", err)
 	}
 }
