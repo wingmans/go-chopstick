@@ -5,6 +5,7 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bin_dir="${root_dir}/.tools/bin"
 nats_server_version="v2.15.1"
 sqlc_version="v1.31.1"
+templ_version="v0.3.1001"
 
 mkdir -p "${bin_dir}"
 
@@ -19,3 +20,9 @@ GOBIN="${bin_dir}" go install \
   "github.com/sqlc-dev/sqlc/cmd/sqlc@${sqlc_version}"
 
 "${bin_dir}/sqlc" version
+
+echo "Installing templ ${templ_version} into ${bin_dir}"
+GOBIN="${bin_dir}" go install \
+  "github.com/a-h/templ/cmd/templ@${templ_version}"
+
+"${bin_dir}/templ" version

@@ -27,15 +27,14 @@ import (
 // operationsConfig holds the configuration for the operations subcommands.
 // It includes settings for NATS, databases, file paths, HTTP addresses, and command-specific options.
 type operationsConfig struct {
-	natsURL        string
-	pollingDB      string
-	newsDB         string
-	masterPath     string
-	newsAddress    string
-	filingsAddress string
-	stage          string
-	limit          int
-	verbose        bool
+	natsURL     string
+	pollingDB   string
+	newsDB      string
+	masterPath  string
+	httpAddress string
+	stage       string
+	limit       int
+	verbose     bool
 }
 
 // parseOperationsConfig parses the command-line arguments and environment variables
@@ -44,13 +43,12 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 	cfg := appConfig{
 		command: command,
 		operations: operationsConfig{
-			natsURL:        environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
-			pollingDB:      appdata.Path("polling.db"),
-			newsDB:         appdata.Path("feed.db"),
-			masterPath:     appdata.Path("cache", "indexes", "master.tsv"),
-			newsAddress:    environmentValue(edgarNewsAddressEnv, "127.0.0.1:8081"),
-			filingsAddress: environmentValue(edgarWebAddressEnv, "127.0.0.1:8083"),
-			limit:          50,
+			natsURL:     environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
+			pollingDB:   appdata.Path("polling.db"),
+			newsDB:      appdata.Path("feed.db"),
+			masterPath:  appdata.Path("cache", "indexes", "master.tsv"),
+			httpAddress: webAddressFromEnvironment(),
+			limit:       50,
 		},
 	}
 
@@ -77,11 +75,12 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 		)
 	case "status":
 		flags.StringVar(&cfg.operations.newsDB, "news-db", cfg.operations.newsDB, "disposable news database")
-		flags.StringVar(&cfg.operations.newsAddress, "address", cfg.operations.newsAddress, "news HTTP listen address")
+		flags.StringVar(&cfg.operations.httpAddress, "address",
+			cfg.operations.httpAddress, "application HTTP listen address")
 
 		options = append(options,
 			helpOption{"--news-db <path>", "Disposable news database."},
-			helpOption{"--address <host:port>", "News HTTP address."},
+			helpOption{"--address <host:port>", "Application HTTP address."},
 		)
 	case "errors":
 		flags.StringVar(&cfg.operations.stage, "stage", "", "limit failures to download or process")
@@ -348,8 +347,8 @@ func printResolvedConfiguration(cfg operationsConfig) {
 	fmt.Printf("  SEC archives      %s\n", baseURL)
 	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv, defaultUserAgent))
 	fmt.Printf("  NATS              %s\n", cfg.natsURL)
-	fmt.Printf("  news URL          %s (started by make dev)\n", httpURL(cfg.newsAddress))
-	fmt.Printf("  filings web URL   %s (started by make dev)\n", httpURL(cfg.filingsAddress))
+	fmt.Printf("  web URL           %s (started by make dev)\n",
+		httpURL(cfg.httpAddress))
 	fmt.Printf("  data directory    %s\n", appdata.Root())
 	fmt.Printf("  filings cache     %s\n", appdata.Path("cache", "filings"))
 	fmt.Printf("  parsed filings    %s\n", appdata.Path("parsed"))
@@ -460,8 +459,7 @@ func runStatus(ctx context.Context, cfg operationsConfig) error {
 
 	printDatabaseStatus(ctx, cfg.pollingDB)
 	printNATSStatus(cfg.natsURL)
-	printViewerStatus(ctx, cfg.newsDB, cfg.newsAddress)
-	printHTTPStatus("Filings web", cfg.filingsAddress)
+	printViewerStatus(ctx, cfg.newsDB, cfg.httpAddress)
 
 	return ctx.Err()
 }
@@ -595,7 +593,7 @@ func consumerActivity(info *nats.ConsumerInfo) string {
 
 // printViewerStatus prints the status of the viewer server and its associated SQLite database.
 func printViewerStatus(ctx context.Context, path, address string) {
-	fmt.Println("News")
+	fmt.Println("Web application")
 
 	dialer := net.Dialer{Timeout: 250 * time.Millisecond}
 
@@ -617,24 +615,6 @@ func printViewerStatus(ctx context.Context, path, address string) {
 	defer func() { _ = db.Close() }()
 
 	printCount(ctx, db, "projection rows", `SELECT COUNT(*) FROM feed_items`)
-	fmt.Println()
-}
-
-// printHTTPStatus prints the status of an HTTP service by attempting to connect to its address.
-func printHTTPStatus(name, address string) {
-	fmt.Println(name)
-
-	dialer := net.Dialer{Timeout: 250 * time.Millisecond}
-
-	connection, err := dialer.Dial("tcp", address)
-	if err == nil {
-		_ = connection.Close()
-
-		fmt.Println("  URL               " + httpURL(address) + " (listening)")
-	} else {
-		fmt.Println("  URL               " + httpURL(address) + " (stopped)")
-	}
-
 	fmt.Println()
 }
 

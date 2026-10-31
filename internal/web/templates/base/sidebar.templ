@@ -1,0 +1,49 @@
+package base
+
+templ Sidebar(activeSection string) {
+	<aside class="module-sidebar" aria-label="Web modules">
+		<div class="module-sidebar-heading">
+			<strong>Applications</strong>
+			<span>Select a local view</span>
+		</div>
+		<nav>
+			@sidebarLink("filings", "Filings", "Companies and filing detail", "/",
+				activeSection)
+			@sidebarLink("ownership", "Ownership", "Institutional and insider views",
+				"/ownership", activeSection)
+			@sidebarLink("news", "Filing news", "Recently discovered filings", "/news",
+				activeSection)
+			@sidebarLink("status", "Status", "Application availability", "/status",
+				activeSection)
+			<div class="module-link unavailable" aria-disabled="true">
+				<span>Prices</span>
+				<small>Web view not available yet</small>
+			</div>
+		</nav>
+	</aside>
+}
+
+templ sidebarLink(section string, label string, description string, href string,
+	activeSection string) {
+	<a class={ sidebarLinkClass(section, activeSection) }
+		href={ href } aria-current={ ariaCurrent(section, activeSection) }
+		hx-get={ href } hx-target="#workspace" hx-select="#workspace"
+		hx-swap="outerHTML" hx-push-url="true">
+		<span>{ label }</span>
+		<small>{ description }</small>
+	</a>
+}
+
+func sidebarLinkClass(section string, activeSection string) string {
+	if section == activeSection {
+		return "module-link active"
+	}
+	return "module-link"
+}
+
+func ariaCurrent(section string, activeSection string) string {
+	if section == activeSection {
+		return "page"
+	}
+	return "false"
+}

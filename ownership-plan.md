@@ -538,6 +538,7 @@ Acceptance criteria:
 - Add completion reconciliation and coverage summaries.
 - Add bounded retries and classified failure reporting.
 - Add database and parser-version status output.
+- Improve development-run manageability before another large replay.
 - Run and measure the 2022-to-present backfill.
 - Add indexes only when measurements show a query or import bottleneck.
 
@@ -547,6 +548,34 @@ Acceptance criteria:
 - Expected, processed, failed, and unsupported totals reconcile.
 - A failed accession can be repaired independently.
 - SQLite remains a single-writer streaming workload with bounded memory.
+
+### Operational manageability follow-up
+
+The cross-system requirements and architecture decision are maintained in
+[Operations and runtime manageability](.docs/operations.md).
+
+The current `make dev` experience is not sufficiently understandable. It
+starts multiple long-lived roles and interleaves Atom discovery, selection,
+downloads, processing, ownership ingestion, and web-server output. An operator
+cannot readily tell whether it is replaying history, polling the live Atom
+feed, processing ownership filings, or merely serving HTTP.
+
+Improve this before treating the continuous pipeline as routine:
+
+- print a startup summary listing every active role and its purpose;
+- distinguish bounded backfill, retained-event replay, and live Atom polling;
+- show per-role pending, completed, failed, and current-item progress;
+- include the ownership consumer in the normal status command;
+- keep per-filing messages behind debug logging or in role-specific logs;
+- make failures prominent without flooding the shared terminal;
+- document separate commands for websites only, core filings, ownership, and
+  the complete continuous stack;
+- make shutdown and safe restart behavior explicit;
+- show a clear caught-up or idle state for every consumer.
+
+`make dev` should not require reading interleaved logs to infer what the system
+is doing. Its default output should answer: what is running, what phase is each
+role in, how much work remains, and whether intervention is required.
 
 ### Phase 6: continuous ingestion and earlier history
 

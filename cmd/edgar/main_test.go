@@ -205,8 +205,10 @@ func TestParseDoctorVerbose(t *testing.T) {
 	}
 }
 
-func TestNewsAddressUsesEnvironmentDefault(t *testing.T) {
+func TestHTTPAddressUsesNewsCompatibilityDefault(t *testing.T) {
 	t.Setenv(edgarSetEnv, "")
+	t.Setenv(edgarHTTPAddressEnv, "")
+	t.Setenv(edgarWebAddressEnv, "")
 	t.Setenv(edgarNewsAddressEnv, "127.0.0.1:8082")
 
 	for _, command := range []string{"run", "news", "status"} {
@@ -217,7 +219,7 @@ func TestNewsAddressUsesEnvironmentDefault(t *testing.T) {
 
 		address := cfg.events.address
 		if command == "status" {
-			address = cfg.operations.newsAddress
+			address = cfg.operations.httpAddress
 		}
 
 		if address != "127.0.0.1:8082" {
@@ -257,17 +259,17 @@ func TestRunUsesEnvironmentReconciliationScope(t *testing.T) {
 	}
 }
 
-func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
+func TestHTTPAddressUsesEnvironmentDefault(t *testing.T) {
 	t.Setenv(edgarSetEnv, "")
-	t.Setenv(edgarWebAddressEnv, "127.0.0.1:8084")
+	t.Setenv(edgarHTTPAddressEnv, "127.0.0.1:8084")
 
 	cfg, err := parseConfig([]string{"run"})
 	if err != nil {
 		t.Fatalf("parseConfig run returned error: %v", err)
 	}
 
-	if cfg.events.filingsAddress != "127.0.0.1:8084" {
-		t.Fatalf("run filings address = %q", cfg.events.filingsAddress)
+	if cfg.events.address != "127.0.0.1:8084" {
+		t.Fatalf("run HTTP address = %q", cfg.events.address)
 	}
 
 	cfg, err = parseConfig([]string{
@@ -277,9 +279,9 @@ func TestFilingsAddressUsesEnvironmentDefault(t *testing.T) {
 		t.Fatalf("parseConfig run with address returned error: %v", err)
 	}
 
-	if cfg.events.filingsAddress != "127.0.0.1:8085" {
+	if cfg.events.address != "127.0.0.1:8085" {
 		t.Fatalf("run CLI address did not override environment: %q",
-			cfg.events.filingsAddress)
+			cfg.events.address)
 	}
 
 	cfg, err = parseConfig([]string{"serve"})

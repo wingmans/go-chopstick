@@ -7,7 +7,6 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"html/template"
 	"io"
 	"log/slog"
 	"mime"
@@ -26,11 +25,10 @@ import (
 	"wingman.com/chopstick/internal/xerr"
 )
 
-//go:embed templates/*.html assets/chopstick.svg assets/filingweb.css assets/news.css assets/htmx-4.0.0.min.js
-var templateFiles embed.FS
+//go:embed static/assets/* static/css/* static/script/*
+var staticFiles embed.FS
 
 type Server struct {
-	template    *template.Template
 	store       filingstore.Store
 	rawStore    filingstore.RawStore
 	ownership   *ownershipstore.Store
@@ -40,6 +38,7 @@ type Server struct {
 	members     []constituents.Member
 	memberByCIK map[string]constituents.Member
 	memberByKey map[string][]string
+	news        http.Handler
 }
 
 // NewServer creates a server instance with default configuration.
@@ -95,16 +94,10 @@ func NewConfiguredServerWithDatabases(ctx context.Context, parsedDir,
 	}
 
 	server := &Server{
-		store:     store,
-		rawStore:  store,
-		ownership: ownershipStore,
-		logger:    logger,
-		template: template.Must(template.New("filingweb").Funcs(template.FuncMap{
-			"formatFact":     formatFactValue,
-			"shortAccession": shortAccession,
-			"add":            add,
-			"mul":            mul,
-		}).ParseFS(templateFiles, "templates/*.html")),
+		store:       store,
+		rawStore:    store,
+		ownership:   ownershipStore,
+		logger:      logger,
 		setName:     setName,
 		setAsOf:     "",
 		memberByCIK: map[string]constituents.Member{},
@@ -140,6 +133,11 @@ func NewConfiguredServerWithDatabases(ctx context.Context, parsedDir,
 	return server, nil
 }
 
+// MountNews adds the filing-news module to the application at /news.
+func (s *Server) MountNews(handler http.Handler) {
+	s.news = handler
+}
+
 // Close releases the database used by the server.
 func (s *Server) Close() error {
 	var closeErrors []error
@@ -162,16 +160,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/":
 		s.index(w, r)
+	case r.URL.Path == "/news" || strings.HasPrefix(r.URL.Path, "/news/"):
+		if s.news == nil {
+			http.NotFound(w, r)
+
+			return
+		}
+
+		s.news.ServeHTTP(w, r)
+	case r.URL.Path == "/status":
+		s.status(w, r)
 	case r.URL.Path == "/ownership":
 		s.ownershipDirectory(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ownership/companies/"):
 		s.ownershipCompany(w, r)
 	case r.URL.Path == "/assets/chopstick.svg":
-		s.asset(w, r, "assets/chopstick.svg", "image/svg+xml")
+		s.asset(w, r, "static/assets/chopstick.svg", "image/svg+xml")
 	case r.URL.Path == "/assets/filingweb.css":
-		s.asset(w, r, "assets/filingweb.css", "text/css")
+		s.asset(w, r, "static/css/filingweb.css", "text/css")
+	case r.URL.Path == "/assets/news.css":
+		s.asset(w, r, "static/css/news.css", "text/css")
 	case r.URL.Path == "/assets/htmx.min.js":
-		s.asset(w, r, "assets/htmx-4.0.0.min.js", "text/javascript")
+		s.asset(w, r, "static/script/htmx-4.0.0.min.js",
+			"text/javascript")
+	case r.URL.Path == "/assets/dashboard.js":
+		s.asset(w, r, "static/script/dashboard.js", "text/javascript")
 	case strings.HasPrefix(r.URL.Path, "/companies/"):
 		s.company(w, r)
 	case strings.HasPrefix(r.URL.Path, "/debug/raw/filings/") &&
@@ -190,8 +203,26 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) status(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	page := pageChrome{
+		Title:         "EDGAR status",
+		ActiveSection: "status", UseHTMX: true,
+	}
+
+	component := statusPage(page, s.news != nil)
+	if isWorkspaceRequest(r) {
+		component = statusPageBody(s.news != nil)
+	}
+
+	if err := component.Render(r.Context(), w); err != nil {
+		s.writeError(w, err)
+	}
+}
+
 func (s *Server) asset(w http.ResponseWriter, r *http.Request, path, contentType string) {
-	data, err := templateFiles.ReadFile(path)
+	data, err := staticFiles.ReadFile(path)
 	if err != nil {
 		http.NotFound(w, r)
 
@@ -206,6 +237,16 @@ func (s *Server) asset(w http.ResponseWriter, r *http.Request, path, contentType
 	}
 }
 
+func isWorkspaceRequest(r *http.Request) bool {
+	if !strings.EqualFold(r.Header.Get("Hx-Request"), "true") {
+		return false
+	}
+
+	target := strings.TrimPrefix(strings.TrimSpace(r.Header.Get("Hx-Target")), "#")
+
+	return target == "workspace"
+}
+
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	data, err := s.dashboardData(r)
 	if err != nil {
@@ -214,13 +255,17 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateName := "dashboard-page.html"
-	if r.Header.Get("Hx-Request") == "true" &&
+	component := dashboardPage(data)
+	if isWorkspaceRequest(r) {
+		component = dashboardPageBody(data)
+	} else if r.Header.Get("Hx-Request") == "true" &&
 		strings.Contains(r.Header.Get("Hx-Target"), "#dashboard") {
-		templateName = "dashboard.html"
+		component = dashboardFragment(data)
 	}
 
-	if err := s.template.ExecuteTemplate(w, templateName, data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	if err := component.Render(r.Context(), w); err != nil {
 		s.writeError(w, err)
 	}
 }
@@ -269,14 +314,25 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := companyPageData{
-		Page:          pageChrome{Title: title, BodyClass: "company-page"},
+		Page: pageChrome{
+			Title: title, BodyClass: "company-page",
+			ActiveSection: "filings", UseHTMX: true,
+		},
 		History:       history,
 		Ticker:        member.Ticker,
 		Dividends:     dividends,
 		DividendTable: buildCompanyDividendTable(dividends, history.Years),
 		HasDividends:  len(dividends.Events) > 0 || len(dividends.Observations) > 0,
 	}
-	if err := s.template.ExecuteTemplate(w, "company-page.html", data); err != nil {
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	component := companyPage(data)
+	if isWorkspaceRequest(r) {
+		component = companyPageBody(data)
+	}
+
+	if err := component.Render(r.Context(), w); err != nil {
 		s.writeError(w, err)
 	}
 }
@@ -366,8 +422,8 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 	data := detailData{
 		Page: pageChrome{
 			Title:     view.Metadata.FormType + " " + view.Metadata.Accession,
-			BodyClass: "detail-page",
-			UseHTMX:   true,
+			BodyClass: "detail-page", ActiveSection: "filings",
+			UseHTMX: true,
 		},
 		Filing: viewFiling, Summary: view.Summary,
 		Statements: []filingview.StatementView{
@@ -387,7 +443,14 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.template.ExecuteTemplate(w, "detail-page.html", data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	component := detailPage(data)
+	if isWorkspaceRequest(r) {
+		component = detailPageBody(data)
+	}
+
+	if err := component.Render(r.Context(), w); err != nil {
 		s.writeError(w, err)
 	}
 }
@@ -421,10 +484,21 @@ func (s *Server) rawInspector(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := rawInspectorData{
-		Page:   pageChrome{Title: "Raw Filing Inspector", BodyClass: "raw-page"},
+		Page: pageChrome{
+			Title: "Raw Filing Inspector", BodyClass: "raw-page",
+			ActiveSection: "filings", UseHTMX: true,
+		},
 		Filing: filing,
 	}
-	if err := s.template.ExecuteTemplate(w, "raw-inspector-page.html", data); err != nil {
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	component := rawInspectorPage(data)
+	if isWorkspaceRequest(r) {
+		component = rawInspectorPageBody(data)
+	}
+
+	if err := component.Render(r.Context(), w); err != nil {
 		s.writeError(w, err)
 	}
 }

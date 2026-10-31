@@ -1,5 +1,4 @@
-// Package store reads the generated filing artifacts used by the local
-// filing viewer.
+// Package store reads the generated filing artifacts used by the local filing viewer.
 package store
 
 import (

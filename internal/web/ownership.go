@@ -12,8 +12,10 @@ func (s *Server) ownershipDirectory(w http.ResponseWriter, r *http.Request) {
 	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	data := ownershipDirectoryData{
 		Page: pageChrome{
-			Title:     "Company ownership",
-			BodyClass: "ownership-page",
+			Title:         "Company ownership",
+			BodyClass:     "ownership-page",
+			ActiveSection: "ownership",
+			UseHTMX:       true,
 		},
 		SetName:   s.setName,
 		SetAsOf:   s.setAsOf,
@@ -37,8 +39,14 @@ func (s *Server) ownershipDirectory(w http.ResponseWriter, r *http.Request) {
 		return data.Members[i].Ticker < data.Members[j].Ticker
 	})
 
-	if err := s.template.ExecuteTemplate(w, "ownership-directory-page.html",
-		data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	component := ownershipDirectoryPage(data)
+	if isWorkspaceRequest(r) {
+		component = ownershipDirectoryBody(data)
+	}
+
+	if err := component.Render(r.Context(), w); err != nil {
 		s.writeError(w, err)
 	}
 }
@@ -62,8 +70,10 @@ func (s *Server) ownershipCompany(w http.ResponseWriter, r *http.Request) {
 
 	data := ownershipCompanyData{
 		Page: pageChrome{
-			Title:     member.Name + " ownership",
-			BodyClass: "ownership-page",
+			Title:         member.Name + " ownership",
+			BodyClass:     "ownership-page",
+			ActiveSection: "ownership",
+			UseHTMX:       true,
 		},
 		Member: ownershipDirectoryMember{
 			CIK: member.CIK, Ticker: member.Ticker, Name: member.Name,
@@ -90,8 +100,14 @@ func (s *Server) ownershipCompany(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := s.template.ExecuteTemplate(w, "ownership-company-page.html",
-		data); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	component := ownershipCompanyPage(data)
+	if isWorkspaceRequest(r) {
+		component = ownershipCompanyBody(data)
+	}
+
+	if err := component.Render(r.Context(), w); err != nil {
 		s.writeError(w, err)
 	}
 }

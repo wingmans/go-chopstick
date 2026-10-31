@@ -9,6 +9,7 @@ import (
 	dividendview "wingman.com/chopstick/internal/dividend"
 	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/news"
 	"wingman.com/chopstick/internal/ownershipstore"
 	filingstore "wingman.com/chopstick/internal/web/store"
 )
@@ -26,9 +27,11 @@ type filingSummary struct {
 }
 
 type pageChrome struct {
-	Title     string
-	BodyClass string
-	UseHTMX   bool
+	Title         string
+	BodyClass     string
+	ActiveSection string
+	UseHTMX       bool
+	Styles        []string
 }
 
 type dashboardData struct {
@@ -44,6 +47,13 @@ type dashboardData struct {
 	HasFilters  bool            `json:"-"`
 	ReturnTo    string          `json:"-"`
 	Filings     []filingSummary `json:"filings"`
+}
+
+type newsPageData struct {
+	Page           pageChrome
+	Items          []news.Item
+	Filter         news.Filter
+	SupportedForms []string
 }
 
 type companyPageData struct {
@@ -191,9 +201,10 @@ func dividendYear(value string) string {
 // dashboardData prepares the data needed to render the dashboard page based on the current request.
 func (s *Server) dashboardData(r *http.Request) (dashboardData, error) {
 	page := pageChrome{
-		Title:     "EDGAR local filings",
-		BodyClass: "dashboard-page",
-		UseHTMX:   true,
+		Title:         "EDGAR local filings",
+		BodyClass:     "dashboard-page",
+		ActiveSection: "filings",
+		UseHTMX:       true,
 	}
 
 	cik := strings.TrimSpace(r.URL.Query().Get("cik"))

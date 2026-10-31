@@ -16,6 +16,7 @@ import (
 	dividendview "wingman.com/chopstick/internal/dividend"
 	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/news"
 )
 
 type goldenDetailResults struct {
@@ -132,7 +133,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		"<link rel=\"icon\" href=\"/assets/chopstick.svg\" type=\"image/svg+xml\">",
 		"href=\"/?q=MSFT\"",
 		"hx-get=\"/?q=MSFT\"",
-		"hx-target=\"body\"",
+		"hx-target=\"#workspace\"",
 		"data-testid=\"metric-RevenueFromContractWithCustomerExcludingAssessedTax-FY2026\"",
 		"Revenue",
 		"$331.8B",
@@ -237,6 +238,13 @@ func TestIndexPageIncludesSearchBreadcrumb(t *testing.T) {
 
 	body := record.Body.String()
 	for _, marker := range []string{
+		"class=\"application-shell\"",
+		"class=\"module-sidebar\"",
+		"aria-label=\"Web modules\"",
+		"href=\"/ownership\"",
+		"href=\"/news\"",
+		"href=\"/status\"",
+		"Web view not available yet",
 		"id=\"search-breadcrumb\"",
 		"aria-label=\"Search breadcrumb\"",
 		"All filings",
@@ -245,14 +253,74 @@ func TestIndexPageIncludesSearchBreadcrumb(t *testing.T) {
 		"<link rel=\"icon\" href=\"/assets/chopstick.svg\" type=\"image/svg+xml\">",
 		"<link rel=\"stylesheet\" href=\"/assets/filingweb.css\">",
 		"<script src=\"/assets/htmx.min.js\"></script>",
-		"edgar.search-trail.v1",
-		"const searchTrailLimit = 8",
-		"function rememberSearch(query, form, year)",
+		"<script src=\"/assets/dashboard.js\"></script>",
 	} {
 		if !strings.Contains(body, marker) {
 			t.Errorf("index page is missing %q", marker)
 		}
 	}
+}
+
+func TestApplicationRoutesModulesOnOneHandler(t *testing.T) {
+	t.Parallel()
+
+	server := NewServer(t.TempDir(), nil)
+	server.MountNews(http.HandlerFunc(func(w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if r.URL.Path != "/news" {
+			t.Errorf("news path = %q", r.URL.Path)
+		}
+
+		_, _ = w.Write([]byte("news module"))
+	}))
+
+	for path, marker := range map[string]string{
+		"/":       "EDGAR / local filings",
+		"/news":   "news module",
+		"/status": "Operational status",
+	} {
+		record := httptest.NewRecorder()
+		request := httptest.NewRequestWithContext(t.Context(),
+			http.MethodGet, path, nil)
+		server.ServeHTTP(record, request)
+
+		if record.Code != http.StatusOK {
+			t.Errorf("GET %s status = %d", path, record.Code)
+		}
+
+		if !strings.Contains(record.Body.String(), marker) {
+			t.Errorf("GET %s is missing %q", path, marker)
+		}
+	}
+}
+
+func TestNewsPageUsesConsolidatedRoutes(t *testing.T) {
+	t.Parallel()
+
+	store, _, err := news.Open(t.Context(),
+		filepath.Join(t.TempDir(), "news.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+
+	server := NewServer(t.TempDir(), nil)
+	server.MountNews(NewNewsServer(store, nil, nil))
+
+	record := httptest.NewRecorder()
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
+		"/news", nil)
+	server.ServeHTTP(record, request)
+
+	if record.Code != http.StatusOK {
+		t.Fatalf("news status = %d body=%s", record.Code,
+			record.Body.String())
+	}
+
+	requireMarkers(t, record.Body.String(),
+		"action=\"/news\"", "href=\"/ownership\"",
+		"href=\"/status\"", "/assets/news.css")
 }
 
 func TestIndexPageWithoutFiltersDoesNotLoadFilings(t *testing.T) {
@@ -516,6 +584,10 @@ func TestServerServesAssets(t *testing.T) {
 	server := newCIKTestServer(t)
 	for _, test := range []struct{ path, contentType, marker string }{
 		{"/assets/htmx.min.js", "text/javascript", `version="4.0.0"`},
+		{
+			"/assets/dashboard.js", "text/javascript",
+			`const searchTrailKey = "edgar.search-trail.v1"`,
+		},
 		{"/assets/filingweb.css", "text/css", "body.detail-page"},
 		{"/assets/chopstick.svg", "image/svg+xml", "<svg"},
 	} {
