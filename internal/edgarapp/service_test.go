@@ -1,12 +1,15 @@
 package edgarapp
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/transport"
 )
 
 func TestConfigFromEnvironment(t *testing.T) {
@@ -45,6 +48,26 @@ func TestConfigRejectsInvalidServiceValues(t *testing.T) {
 
 	if err := config.Validate(); err == nil {
 		t.Fatal("Validate accepted an invalid from year")
+	}
+}
+
+func TestAdminHandlerRejectsUnknownCommand(t *testing.T) {
+	handler := &adminHandler{}
+
+	payload, err := json.Marshal(transport.Request{Command: "missing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encoded := handler.Handle(context.Background(), payload)
+
+	var response transport.Response
+	if err := json.Unmarshal(encoded, &response); err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Error != `unknown command "missing"` {
+		t.Fatalf("error = %q", response.Error)
 	}
 }
 
@@ -105,6 +128,7 @@ func validConfig(t *testing.T) Config {
 
 	return Config{
 		NATSURL:           "nats://127.0.0.1:4222",
+		CommandAddress:    transport.DefaultAddress,
 		PollingDB:         filepath.Join(root, "polling.db"),
 		NewsDB:            filepath.Join(root, "feed.db"),
 		FilingsDirectory:  filepath.Join(root, "filings"),

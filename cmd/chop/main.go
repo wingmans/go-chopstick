@@ -41,6 +41,7 @@ const (
 	edgarSetEnv         = "EDGAR_SET"
 	edgarFormTypesEnv   = "EDGAR_FORM_TYPES"
 	edgarFromYearEnv    = "EDGAR_FROM_YEAR"
+	chopCommandAddrEnv  = "CHOP_COMMAND_ADDRESS"
 	parseCommand        = "parse"
 	noopHelpFlags       = "-n, --noop"
 )
@@ -217,9 +218,9 @@ func run(ctx context.Context, args []string) error {
 	case "status":
 		commandErr = runStatus(ctx, cfg.operations)
 	case "errors":
-		commandErr = runErrors(ctx, cfg.operations)
+		commandErr = runListFailures(ctx, cfg.operations)
 	case "retry":
-		commandErr = runRetry(ctx, cfg.operations)
+		commandErr = runRetryFailures(ctx, cfg.operations)
 	case "artifacts":
 		commandErr = runArtifacts(ctx, cfg.artifacts)
 	case parseCommand:

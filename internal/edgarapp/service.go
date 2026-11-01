@@ -3,6 +3,7 @@ package edgarapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,13 +20,13 @@ import (
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/applock"
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/control"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
 	"wingman.com/chopstick/internal/eventworker"
 	"wingman.com/chopstick/internal/news"
 	"wingman.com/chopstick/internal/pollingworker"
+	"wingman.com/chopstick/internal/transport"
 	"wingman.com/chopstick/internal/web"
 )
 
@@ -40,6 +41,7 @@ const (
 // Config contains the typed configuration of the long-running application.
 type Config struct {
 	NATSURL           string
+	CommandAddress    string
 	PollingDB         string
 	NewsDB            string
 	FilingsDirectory  string
@@ -78,6 +80,7 @@ func ConfigFromEnvironment() (Config, error) {
 
 	config := Config{
 		NATSURL:           environmentValue("EDGAR_NATS_URL", eventbus.DefaultURL),
+		CommandAddress:    environmentValue("CHOP_COMMAND_ADDRESS", transport.DefaultAddress),
 		PollingDB:         appdata.Path("polling.db"),
 		NewsDB:            appdata.Path("feed.db"),
 		FilingsDirectory:  appdata.Path("cache", "filings"),
@@ -135,6 +138,8 @@ func (c *Config) Validate() error {
 	switch {
 	case strings.TrimSpace(c.NATSURL) == "":
 		return errors.New("NATS URL is required")
+	case strings.TrimSpace(c.CommandAddress) == "":
+		return errors.New("command address is required")
 	case strings.TrimSpace(c.UserAgent) == "":
 		return errors.New("SEC user agent is required")
 	case strings.TrimSpace(c.HTTPAddress) == "":
@@ -167,8 +172,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Run starts every continuous role, the web application, and the NATS control
-// plane in one foreground process.
+// Run starts every continuous role, the web application, and the local command
+// transport in one foreground process.
 func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	if err := config.Validate(); err != nil {
 		return err
@@ -199,11 +204,7 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	startedAt := time.Now().UTC()
 	admin := &adminHandler{config: config, startedAt: startedAt}
 
-	controlServer, err := control.NewServer(config.NATSURL, admin)
-	if err != nil {
-		return err
-	}
-	defer controlServer.Close()
+	commandServer := transport.NewServer(config.CommandAddress)
 
 	reconcileLogger := logger.With("role", "reconcile")
 	go reconcileAtStartup(ctx, config, reconcileLogger)
@@ -218,7 +219,11 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 
 	errorsCh := make(chan error, 2)
 	go func() { errorsCh <- runRole(ctx, "web", config, logger) }()
-	go func() { errorsCh <- controlServer.Run(ctx) }()
+	go func() {
+		errorsCh <- commandServer.Start(ctx, func(payload []byte) []byte {
+			return admin.Handle(ctx, payload)
+		})
+	}()
 
 	err = <-errorsCh
 
@@ -582,32 +587,74 @@ type adminHandler struct {
 	startedAt time.Time
 }
 
-func (h *adminHandler) Status(ctx context.Context) (control.Status, error) {
+// Handle decodes one local CLI command and delegates it to application logic.
+func (h *adminHandler) Handle(ctx context.Context, payload []byte) []byte {
+	var request transport.Request
+	if err := json.Unmarshal(payload, &request); err != nil {
+		return encodeCommandResponse(transport.Response{},
+			fmt.Errorf("decode command: %w", err))
+	}
+
+	response := transport.Response{}
+
+	var err error
+
+	switch request.Command {
+	case transport.CommandStatus:
+		var status transport.Status
+
+		status, err = h.status(ctx)
+		response.Status = &status
+	case transport.CommandListFailures:
+		response.Failures, err = h.listFailures(ctx, request)
+	case transport.CommandRetryFailures:
+		response.Retried, err = h.retryFailures(ctx, request.Stage)
+	default:
+		err = fmt.Errorf("unknown command %q", request.Command)
+	}
+
+	return encodeCommandResponse(response, err)
+}
+
+func encodeCommandResponse(response transport.Response, responseErr error) []byte {
+	if responseErr != nil {
+		response.Error = responseErr.Error()
+	}
+
+	payload, err := json.Marshal(response)
+	if err != nil {
+		return []byte(`{"error":"encode command response"}`)
+	}
+
+	return payload
+}
+
+func (h *adminHandler) status(ctx context.Context) (transport.Status, error) {
 	store, err := pollingworker.NewDedupeServiceContext(ctx, h.config.PollingDB)
 	if err != nil {
-		return control.Status{}, err
+		return transport.Status{}, err
 	}
 	defer func() { _ = store.Close() }()
 
 	stats, err := store.Stats(ctx)
 	if err != nil {
-		return control.Status{}, err
+		return transport.Status{}, err
 	}
 
 	bus, err := eventbus.Inspect(h.config.NATSURL)
 	if err != nil {
-		return control.Status{}, err
+		return transport.Status{}, err
 	}
 	defer func() { _ = bus.Close() }()
 
 	stream, err := bus.JetStream().StreamInfo(eventbus.StreamName)
 	if err != nil {
-		return control.Status{}, err
+		return transport.Status{}, err
 	}
 
-	result := control.Status{
+	result := transport.Status{
 		StartedAt: h.startedAt, HTTPAddress: h.config.HTTPAddress,
-		Pipeline: control.PipelineStats{
+		Pipeline: transport.PipelineStats{
 			Accessions: stats.Accessions, OutboxPending: stats.OutboxPending,
 			OutboxPublished: stats.OutboxPublished, Failures: stats.Failures,
 		},
@@ -628,10 +675,10 @@ func (h *adminHandler) Status(ctx context.Context) (control.Status, error) {
 		}
 
 		if consumerErr != nil {
-			return control.Status{}, consumerErr
+			return transport.Status{}, consumerErr
 		}
 
-		result.Consumers = append(result.Consumers, control.ConsumerStatus{
+		result.Consumers = append(result.Consumers, transport.ConsumerStatus{
 			Name: durable, Pending: consumer.NumPending,
 			InFlight:    consumer.NumAckPending,
 			Redelivered: consumer.NumRedelivered,
@@ -641,9 +688,9 @@ func (h *adminHandler) Status(ctx context.Context) (control.Status, error) {
 	return result, nil
 }
 
-func (h *adminHandler) Failures(ctx context.Context,
-	request control.FailureRequest,
-) ([]control.Failure, error) {
+func (h *adminHandler) listFailures(ctx context.Context,
+	request transport.Request,
+) ([]transport.Failure, error) {
 	if request.Limit <= 0 || request.Limit > 500 {
 		request.Limit = 50
 	}
@@ -663,9 +710,9 @@ func (h *adminHandler) Failures(ctx context.Context,
 		rows = rows[:request.Limit]
 	}
 
-	result := make([]control.Failure, 0, len(rows))
+	result := make([]transport.Failure, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, control.Failure{
+		result = append(result, transport.Failure{
 			Stage: row.Stage, AccessionNumber: row.AccessionNumber,
 			Attempts: row.Attempts, LastFailedAt: row.LastFailedAt,
 			LastError: row.LastError,
@@ -675,32 +722,32 @@ func (h *adminHandler) Failures(ctx context.Context,
 	return result, nil
 }
 
-func (h *adminHandler) RetryFailures(ctx context.Context,
-	request control.RetryRequest,
-) (control.RetryResult, error) {
-	if request.Stage != "download" && request.Stage != "process" {
-		return control.RetryResult{},
+func (h *adminHandler) retryFailures(ctx context.Context,
+	stage string,
+) (int, error) {
+	if stage != "download" && stage != "process" {
+		return 0,
 			errors.New("stage must be download or process")
 	}
 
 	store, err := pollingworker.NewDedupeServiceContext(ctx, h.config.PollingDB)
 	if err != nil {
-		return control.RetryResult{}, err
+		return 0, err
 	}
 	defer func() { _ = store.Close() }()
 
 	bus, err := eventbus.Connect(h.config.NATSURL)
 	if err != nil {
-		return control.RetryResult{}, err
+		return 0, err
 	}
 	defer func() { _ = bus.Close() }()
 
-	count, err := store.RetryWorkFailures(ctx, request.Stage, bus)
+	count, err := store.RetryWorkFailures(ctx, stage, bus)
 	if err != nil {
-		return control.RetryResult{}, err
+		return 0, err
 	}
 
-	return control.RetryResult{Count: count}, nil
+	return count, nil
 }
 
 func ensureParentDirectories(config Config) error {

@@ -75,21 +75,23 @@ Do not create a package for every table, form type, route, or worker. Prefer a
 small feature package with internal files until an independent contract is
 real.
 
-## NATS control-plane decision
+## Local command-transport decision
 
-Postpone using NATS as a command and control plane. Keep it as the durable
-event transport for pipeline work. The CLI and local process supervisor remain
-the control plane.
+The local TCP connection in `internal/transport` is the command boundary
+between `chop` and `chopd` for live status and failure operations. Application
+handlers remain in the daemon composition layer.
 
-Remote commands over NATS would require authentication, authorization,
-idempotency, expiry, acknowledgements, leader selection, audit history, and
-clear behaviour when a command is duplicated or a worker is disconnected.
-That is substantial complexity without a current operational requirement.
+NATS command request/reply is postponed. NATS remains the durable event
+transport between ingestion and processing roles.
 
-The status command may inspect NATS stream and consumer state. It must not
-publish start, stop, rebuild, or repair commands as an incidental part of
-status collection. Reconsider NATS control only for a concrete multi-host or
-remote-operations requirement and write a separate design first.
+The command listener is local by default. Remote exposure would require
+authentication, authorization, and audit history before changing that
+assumption.
+
+Start, stop, rebuild, and offline repair are not transport commands. Process
+lifecycle remains the responsibility of the development shell or a future
+service manager. Destructive and offline operations acquire the application
+lock and run only while `chopd` is stopped.
 
 ## Schema management
 

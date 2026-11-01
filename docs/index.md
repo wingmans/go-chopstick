@@ -78,9 +78,17 @@ daemon mode. A future systemd unit will run the same foreground executable.
 ## Boundaries
 
 The control CLI does not mutate a running application's SQLite files. Live
-status and failure operations use NATS request/reply and are handled by
-`chopd`. `doctor` performs direct dependency checks so it remains useful when
-NATS or `chopd` is unavailable.
+status and failure operations use the local TCP connection in
+`internal/transport` and are handled by `chopd`. The default command address is
+`127.0.0.1:8084` and can be changed with `CHOP_COMMAND_ADDRESS` or
+`--command-address`.
+
+NATS remains separate and carries pipeline events. It is not the CLI command
+transport.
+
+`doctor` performs direct dependency checks so it remains useful when NATS or
+`chopd` is unavailable. Backfill, rebuild, and index import remain offline
+operations and require the application lock instead of contacting `chopd`.
 
 The application remains a monolith. Its Atom, selection, download, processing,
 ownership, news, and web roles share one process while retaining their NATS

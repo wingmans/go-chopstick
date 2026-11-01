@@ -16,24 +16,25 @@ import (
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/control"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
 	"wingman.com/chopstick/internal/eventworker"
 	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/transport"
 )
 
 // operationsConfig holds the configuration for the operations subcommands.
 // It includes settings for NATS, databases, file paths, HTTP addresses, and command-specific options.
 type operationsConfig struct {
-	natsURL     string
-	pollingDB   string
-	newsDB      string
-	masterPath  string
-	httpAddress string
-	stage       string
-	limit       int
-	verbose     bool
+	natsURL        string
+	commandAddress string
+	pollingDB      string
+	newsDB         string
+	masterPath     string
+	httpAddress    string
+	stage          string
+	limit          int
+	verbose        bool
 }
 
 // parseOperationsConfig parses the command-line arguments and environment variables
@@ -50,7 +51,11 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 	cfg := appConfig{
 		command: command,
 		operations: operationsConfig{
-			natsURL:     environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
+			natsURL: environmentValue(edgarNATSURLEnv, eventbus.DefaultURL),
+			commandAddress: environmentValue(
+				chopCommandAddrEnv,
+				transport.DefaultAddress,
+			),
 			pollingDB:   appdata.Path("polling.db"),
 			newsDB:      appdata.Path("feed.db"),
 			masterPath:  appdata.Path("cache", "indexes", "master.tsv"),
@@ -61,34 +66,36 @@ func parseOperationsConfig(command string, args []string) (appConfig, error) {
 
 	flags := flag.NewFlagSet(displayCommand, flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
-	flags.StringVar(&cfg.operations.natsURL, "nats-url", cfg.operations.natsURL, "NATS server URL")
-	flags.StringVar(&cfg.operations.pollingDB, "polling-db", cfg.operations.pollingDB, "pipeline state database")
 
-	options := []helpOption{
-		{"--nats-url <url>", "NATS server; default nats://127.0.0.1:4222."},
-		{"--polling-db <path>", "Pipeline state database."},
-	}
+	options := []helpOption{}
 
 	switch command {
 	case "doctor":
+		flags.StringVar(&cfg.operations.natsURL, "nats-url",
+			cfg.operations.natsURL, "NATS server URL")
+		flags.StringVar(&cfg.operations.pollingDB, "polling-db",
+			cfg.operations.pollingDB, "pipeline state database")
 		flags.StringVar(&cfg.operations.newsDB, "news-db", cfg.operations.newsDB, "disposable news database")
 		flags.StringVar(&cfg.operations.masterPath, "master", cfg.operations.masterPath, "stitched master index")
 		flags.BoolVar(&cfg.operations.verbose, "verbose", false, "show resolved configuration and details")
 
 		options = append(options,
+			helpOption{"--nats-url <url>", "NATS server URL."},
+			helpOption{"--polling-db <path>", "Pipeline state database."},
 			helpOption{"--news-db <path>", "Disposable news database."},
 			helpOption{"--master <path>", "Stitched master index."},
 			helpOption{"--verbose", "Show configuration and check details."},
 		)
-	case "status":
-		flags.StringVar(&cfg.operations.newsDB, "news-db", cfg.operations.newsDB, "disposable news database")
-		flags.StringVar(&cfg.operations.httpAddress, "address",
-			cfg.operations.httpAddress, "application HTTP listen address")
+	case "status", "errors", "retry":
+		flags.StringVar(&cfg.operations.commandAddress, "command-address",
+			cfg.operations.commandAddress, "chopd command address")
 
-		options = append(options,
-			helpOption{"--news-db <path>", "Disposable news database."},
-			helpOption{"--address <host:port>", "Application HTTP address."},
-		)
+		options = append(options, helpOption{
+			"--command-address <host:port>", "chopd command address.",
+		})
+	}
+
+	switch command {
 	case "errors":
 		flags.StringVar(&cfg.operations.stage, "stage", "", "limit failures to download or process")
 		flags.IntVar(&cfg.operations.limit, "limit", cfg.operations.limit, "maximum failures to show")
@@ -469,16 +476,18 @@ func formatBytes(bytes int64) string {
 }
 
 func runStatus(ctx context.Context, cfg operationsConfig) error {
-	client, err := control.NewClient(cfg.natsURL)
+	response, err := transport.Send(ctx, cfg.commandAddress, transport.Request{
+		Command: transport.CommandStatus,
+	})
 	if err != nil {
 		return err
 	}
-	defer client.Close()
 
-	status, err := client.Status(ctx)
-	if err != nil {
-		return err
+	if response.Status == nil {
+		return errors.New("chopd returned an empty status")
 	}
+
+	status := *response.Status
 
 	fmt.Println("Chop status")
 	fmt.Println()
@@ -509,20 +518,18 @@ func httpURL(address string) string {
 	return "http://" + address
 }
 
-// runErrors retrieves and displays unresovled work failures from the polling database.
-func runErrors(ctx context.Context, cfg operationsConfig) error {
-	client, err := control.NewClient(cfg.natsURL)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	rows, err := client.Failures(ctx, control.FailureRequest{
-		Stage: cfg.stage, Limit: cfg.limit,
+// runListFailures retrieves unresolved work failures through chopd.
+func runListFailures(ctx context.Context, cfg operationsConfig) error {
+	response, err := transport.Send(ctx, cfg.commandAddress, transport.Request{
+		Command: transport.CommandListFailures,
+		Stage:   cfg.stage,
+		Limit:   cfg.limit,
 	})
 	if err != nil {
 		return err
 	}
+
+	rows := response.Failures
 
 	if len(rows) == 0 {
 		fmt.Println("No unresolved pipeline failures.")
@@ -541,21 +548,16 @@ func runErrors(ctx context.Context, cfg operationsConfig) error {
 	return nil
 }
 
-func runRetry(ctx context.Context, cfg operationsConfig) error {
-	client, err := control.NewClient(cfg.natsURL)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	result, err := client.RetryFailures(ctx, control.RetryRequest{
-		Stage: cfg.stage,
+func runRetryFailures(ctx context.Context, cfg operationsConfig) error {
+	response, err := transport.Send(ctx, cfg.commandAddress, transport.Request{
+		Command: transport.CommandRetryFailures,
+		Stage:   cfg.stage,
 	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Requeued %d %s failure(s)\n", result.Count, cfg.stage)
+	fmt.Printf("Requeued %d %s failure(s)\n", response.Retried, cfg.stage)
 
 	return nil
 }

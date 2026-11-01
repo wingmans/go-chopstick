@@ -40,14 +40,10 @@ func parseRebuildConfig(args []string) (appConfig, error) {
 
 	flags := flag.NewFlagSet("rebuild edgar", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
-	flags.StringVar(&config.rebuild.backfill.setName, "set",
-		config.rebuild.backfill.setName, "constituent set to rebuild")
-	flags.IntVar(&config.rebuild.backfill.fromYear, "from-year",
-		config.rebuild.backfill.fromYear, "first filing year to include")
-	flags.StringVar(&config.rebuild.backfill.natsURL, "nats-url",
-		config.rebuild.backfill.natsURL, "NATS server URL")
-	flags.BoolVar(&config.rebuild.confirm, "confirm", false,
-		"confirm removal of rebuildable EDGAR state")
+	flags.StringVar(&config.rebuild.backfill.setName, "set", config.rebuild.backfill.setName, "constituent set to rebuild")
+	flags.IntVar(&config.rebuild.backfill.fromYear, "from-year", config.rebuild.backfill.fromYear, "first filing year to include")
+	flags.StringVar(&config.rebuild.backfill.natsURL, "nats-url", config.rebuild.backfill.natsURL, "NATS server URL")
+	flags.BoolVar(&config.rebuild.confirm, "confirm", false, "confirm removal of rebuildable EDGAR state")
 	flags.Usage = func() {
 		printSubcommandHelp("rebuild edgar",
 			"Rebuild EDGAR state while preserving retained inputs.",

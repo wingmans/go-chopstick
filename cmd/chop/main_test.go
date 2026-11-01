@@ -148,6 +148,19 @@ func TestParseDoctorVerbose(t *testing.T) {
 	}
 }
 
+func TestParseStatusUsesCommandAddress(t *testing.T) {
+	t.Setenv(chopCommandAddrEnv, "127.0.0.1:19090")
+
+	cfg, err := parseConfig([]string{"status"})
+	if err != nil {
+		t.Fatalf("parseConfig returned error: %v", err)
+	}
+
+	if cfg.operations.commandAddress != "127.0.0.1:19090" {
+		t.Fatalf("command address = %q", cfg.operations.commandAddress)
+	}
+}
+
 func TestParseRetryRequiresValidStage(t *testing.T) {
 	for _, args := range [][]string{
 		{"failures", "retry"},

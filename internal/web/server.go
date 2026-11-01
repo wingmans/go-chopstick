@@ -350,8 +350,7 @@ func (s *Server) apiFilings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) rawAPIFiling(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path,
-		"/debug/raw/api/filings/"), "/")
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/debug/raw/api/filings/"), "/")
 	if len(parts) != 2 {
 		http.NotFound(w, r)
 

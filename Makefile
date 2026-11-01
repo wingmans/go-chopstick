@@ -30,7 +30,7 @@ help:
 		'  nats-reset              Remove local NATS state' \
 		'' \
 
-deps	:
+deps:
 	@bash -c '[[ -f .env ]] && echo ".env already exists" || { \
 		cp .env.example .env && echo "created .env"; \
 	}'
@@ -87,7 +87,6 @@ test:
 clean:
 	rm -rf $(BIN_DIR) dist
 
-
 nats-start:
 	bash scripts/nats-dev.sh start
 
@@ -99,4 +98,3 @@ nats-status:
 
 nats-reset:
 	bash scripts/nats-dev.sh reset
-

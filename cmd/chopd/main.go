@@ -38,6 +38,8 @@ func run() error {
 
 	flags := flag.NewFlagSet("chopd", flag.ContinueOnError)
 	flags.StringVar(&config.NATSURL, "nats-url", config.NATSURL, "NATS server URL")
+	flags.StringVar(&config.CommandAddress, "command-address",
+		config.CommandAddress, "local CLI command address")
 	flags.StringVar(&config.HTTPAddress, "address", config.HTTPAddress, "HTTP listen address")
 	flags.StringVar(&config.PollingDB, "polling-db", config.PollingDB, "pipeline state database")
 	flags.StringVar(&config.NewsDB, "news-db", config.NewsDB, "news projection database")
@@ -70,6 +72,7 @@ func run() error {
 
 	logger.Info("starting Chop application",
 		"address", config.HTTPAddress,
+		"command_address", config.CommandAddress,
 		"nats_url", config.NATSURL,
 		"set", config.SetName,
 		"form_types", config.FormTypes,

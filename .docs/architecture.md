@@ -61,21 +61,20 @@ from cached raw ZIP files, downloads only missing filings, and recreates
 
 ## CLI control plane
 
-The `chop` executable owns the operational boundaries:
+The `chop` executable parses operator commands and renders their results.
+Live commands cross the local TCP boundary in `internal/transport`:
 
-- `index` extracts and stitches index data;
-- `discover` selects index records and publishes durable work;
-- `download` and `process` consume their complete assigned queues;
-- `backfill` runs those finite stages with one explicit selection;
-- `doctor`, `status`, and `errors` expose operational state;
-- `filings` downloads and processes selected filings;
-- `parse` processes already available raw filings;
-- `taxonomy` and `coverage` run data-quality checks;
-- `serve` starts the local web application.
+- `status` reads live application and pipeline state;
+- `failures list` reads unresolved worker failures;
+- `failures retry` requests an explicit requeue.
 
-The commands are intentionally usable as one local executable today. Future
-service processes should preserve these stage contracts and database
-identities rather than introduce separate feature-specific databases.
+The `chopd` executable owns the handlers and delegates them to application
+operations. Connection handling stays inside `internal/transport`. NATS
+remains the event transport for the ingestion and processing pipeline.
+
+Backfill, rebuild, and index import are deliberately offline. They acquire the
+same application lock as `chopd` and call typed application packages directly.
+`doctor` also remains direct so it works when NATS or `chopd` is unavailable.
 
 ## Event activity
 
@@ -84,7 +83,6 @@ historical reconciliation path. Both persist an accession and outbox row in
 one SQLite transaction. JetStream carries the resulting discovery and
 downloaded events between serial, idempotent workers.
 
-Operational commands inspect SQLite and JetStream directly. They do not copy
-those values into a separate status database. Unresolved worker failures are
-kept in `polling.db`; detailed diagnostic output remains in the development
-log.
+Live operational commands do not inspect daemon-owned SQLite files directly.
+Their handlers read SQLite and JetStream inside `chopd`; no separate status
+database is introduced. Unresolved worker failures remain in `polling.db`.
