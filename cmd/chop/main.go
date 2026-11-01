@@ -12,6 +12,7 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"wingman.com/chopstick/internal/buildinfo"
 	"wingman.com/chopstick/internal/choppie"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/envfile"
@@ -22,18 +23,23 @@ type leafCommand struct {
 }
 
 type cli struct {
-	Backfill  leafCommand  `cmd:"" help:"Run a finite historical pipeline."     passthrough:""`
-	Doctor    leafCommand  `cmd:"" help:"Validate local dependencies."          passthrough:""`
-	Status    leafCommand  `cmd:"" help:"Show live application status."         passthrough:""`
-	Filings   leafCommand  `cmd:"" help:"Download and process filings."         passthrough:""`
-	Parse     leafCommand  `cmd:"" help:"Parse local submissions."              passthrough:""`
-	Coverage  leafCommand  `cmd:"" help:"Report local filing coverage."         passthrough:""`
-	Rebuild   rebuildCLI   `cmd:"" help:"Rebuild disposable state."`
-	Index     indexCLI     `cmd:"" help:"Manage SEC indexes."`
-	Ownership ownershipCLI `cmd:"" help:"Import and inspect ownership filings."`
-	Failures  failuresCLI  `cmd:"" help:"Inspect and retry failures."`
-	Artifacts artifactsCLI `cmd:"" help:"Inspect filing artifacts."`
-	Taxonomy  taxonomyCLI  `cmd:"" help:"Inspect taxonomy coverage."`
+	Version kong.VersionFlag `group:"diag" help:"Print version."                              name:"version" short:"v"`
+	Verbose bool             `group:"diag" help:"Print verbose output and use debug logging."`
+
+	Log *string `enum:"critical,error,warn,info,debug,trace,off" group:"diag" help:"Log level (default: info)." placeholder:"level"`
+
+	Backfill  leafCommand  `cmd:"" group:"data"       help:"Run a finite historical pipeline."     passthrough:""`
+	Doctor    leafCommand  `cmd:"" group:"operations" help:"Validate local dependencies."          passthrough:""`
+	Status    leafCommand  `cmd:"" group:"operations" help:"Show live application status."         passthrough:""`
+	Filings   leafCommand  `cmd:"" group:"data"       help:"Download and process filings."         passthrough:""`
+	Parse     leafCommand  `cmd:"" group:"data"       help:"Parse local submissions."              passthrough:""`
+	Coverage  leafCommand  `cmd:"" group:"data"       help:"Report local filing coverage."         passthrough:""`
+	Rebuild   rebuildCLI   `cmd:"" group:"operations" help:"Rebuild disposable state."`
+	Index     indexCLI     `cmd:"" group:"data"       help:"Manage SEC indexes."`
+	Ownership ownershipCLI `cmd:"" group:"data"       help:"Import and inspect ownership filings."`
+	Failures  failuresCLI  `cmd:"" group:"operations" help:"Inspect and retry failures."`
+	Artifacts artifactsCLI `cmd:"" group:"data"       help:"Inspect filing artifacts."`
+	Taxonomy  taxonomyCLI  `cmd:"" group:"data"       help:"Inspect taxonomy coverage."`
 }
 
 type rebuildCLI struct {
@@ -68,14 +74,63 @@ type taxonomyCLI struct {
 }
 
 func main() {
-	os.Exit(runMain())
+	os.Exit(runMain(os.Args[1:]))
 }
 
-func runMain() int {
+func runMain(args []string) int {
 	if err := envfile.Load(".env"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 
 		return 1
+	}
+
+	var model cli
+
+	parser, err := kong.New(&model,
+		kong.Name("chop"),
+		kong.Description("Operate the local Chop application and SEC EDGAR data."),
+		kong.Writers(os.Stdout, os.Stderr),
+		kong.Vars{"version": buildinfo.Version},
+		kong.Groups{
+			"operations": "Operations",
+			"data":       "EDGAR data",
+			"diag":       "Troubleshooting",
+		},
+		kong.ConfigureHelp(kong.HelpOptions{
+			Compact:             true,
+			Summary:             true,
+			NoExpandSubcommands: true,
+			WrapUpperBound:      100,
+		}),
+	)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+
+		return 1
+	}
+
+	if len(args) == 0 {
+		args = []string{"--help"}
+	}
+
+	parsed, err := parser.Parse(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+
+		return 1
+	}
+
+	if model.Verbose {
+		level := "debug"
+		model.Log = &level
+	}
+
+	if model.Log != nil {
+		if err := os.Setenv("LOG_LEVEL", *model.Log); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+
+			return 1
+		}
 	}
 
 	logger := ctxlog.New()
@@ -84,28 +139,8 @@ func runMain() int {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	var model cli
-
-	parser, err := kong.New(&model,
-		kong.Name("chop"),
-		kong.Description("Operate the local Chop application and SEC EDGAR data."),
-		kong.Writers(os.Stdout, os.Stderr),
-	)
-	if err != nil {
-		logger.Error("build CLI", "error", err)
-
-		return 1
-	}
-
-	parsed, err := parser.Parse(os.Args[1:])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-
-		return 1
-	}
-
-	args := selectedArgs(parsed.Command(), &model)
-	if err := choppie.Execute(ctx, args); err != nil {
+	commandArgs := selectedArgs(parsed.Command(), &model)
+	if err := choppie.Execute(ctx, commandArgs); err != nil {
 		if errors.Is(err, context.Canceled) {
 			logger.Info("shutdown requested")
 
@@ -120,6 +155,7 @@ func runMain() int {
 	return 0
 }
 
+// selectedArgs returns the arguments for the selected command based on the parsed command string and the CLI model.
 func selectedArgs(command string, model *cli) []string {
 	switch {
 	case strings.HasPrefix(command, "backfill"):

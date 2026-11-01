@@ -1017,11 +1017,48 @@ func printSubcommandHelp(command, description string, options []helpOption) {
 	fmt.Fprintf(os.Stdout, "Usage: chop %s [options]\n\n", command)
 	fmt.Fprintln(os.Stdout, description)
 	fmt.Fprintln(os.Stdout)
-	fmt.Fprintln(os.Stdout, "Options:")
-	fmt.Fprintln(os.Stdout)
+	fmt.Fprintln(os.Stdout, "Options")
+
+	flagWidth := 0
+	for _, option := range options {
+		flagWidth = max(flagWidth, len(option.flags))
+	}
+
+	const (
+		helpWidth = 100
+		indent    = 2
+		gap       = 4
+	)
+
+	descriptionWidth := helpWidth - indent - flagWidth - gap
 
 	for _, option := range options {
-		fmt.Fprintf(os.Stdout, "  %s\n", option.flags)
-		fmt.Fprintf(os.Stdout, "      %s\n\n", option.description)
+		lines := wrapHelp(option.description, descriptionWidth)
+		fmt.Fprintf(os.Stdout, "  %-*s    %s\n", flagWidth, option.flags, lines[0])
+
+		for _, line := range lines[1:] {
+			fmt.Fprintf(os.Stdout, "  %-*s    %s\n", flagWidth, "", line)
+		}
 	}
+}
+
+func wrapHelp(value string, width int) []string {
+	words := strings.Fields(value)
+	if len(words) == 0 || width < 1 {
+		return []string{value}
+	}
+
+	lines := []string{words[0]}
+	for _, word := range words[1:] {
+		last := len(lines) - 1
+		if len(lines[last])+1+len(word) <= width {
+			lines[last] += " " + word
+
+			continue
+		}
+
+		lines = append(lines, word)
+	}
+
+	return lines
 }

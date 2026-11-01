@@ -131,6 +131,8 @@ func parseLogLevel(raw string) slog.Level {
 	}
 
 	switch strings.ToLower(raw) {
+	case "trace":
+		return slog.LevelDebug - 4
 	case "debug":
 		return slog.LevelDebug
 	case "info":
@@ -139,6 +141,10 @@ func parseLogLevel(raw string) slog.Level {
 		return slog.LevelWarn
 	case "error":
 		return slog.LevelError
+	case "critical":
+		return slog.LevelError + 4
+	case "off":
+		return slog.Level(127)
 	default:
 		return slog.LevelInfo
 	}

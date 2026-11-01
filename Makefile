@@ -73,7 +73,7 @@ build:
 	go build -o $(BIN_DIR)/yahoo-prices ./cmd/yf
 
 run:
-	go run ./cmd/chopd
+	go run ./cmd/chopd --log=info
 
 lint:
 	golangci-lint run --fix ./cmd/... ./internal/...
