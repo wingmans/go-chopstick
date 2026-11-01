@@ -3,1068 +3,164 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
-	"wingman.com/chopstick/internal/appdata"
-	"wingman.com/chopstick/internal/constituents"
+	"github.com/alecthomas/kong"
+
+	"wingman.com/chopstick/internal/choppie"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/envfile"
-	filingview "wingman.com/chopstick/internal/filing"
-	filingworkflow "wingman.com/chopstick/internal/pipeline"
-	"wingman.com/chopstick/internal/xerr"
 )
 
-const defaultUserAgent = "wingman paul@wingmen.io"
-
-const (
-	edgarUserAgentEnv   = "EDGAR_USER_AGENT"
-	edgarBaseURLEnv     = "EDGAR_BASE_URL"
-	edgarNATSURLEnv     = "EDGAR_NATS_URL"
-	edgarHTTPAddressEnv = "EDGAR_HTTP_ADDRESS"
-	edgarNewsAddressEnv = "EDGAR_NEWS_ADDRESS"
-	edgarWebAddressEnv  = "EDGAR_FILINGS_ADDRESS"
-	edgarSetEnv         = "EDGAR_SET"
-	edgarFormTypesEnv   = "EDGAR_FORM_TYPES"
-	edgarFromYearEnv    = "EDGAR_FROM_YEAR"
-	chopCommandAddrEnv  = "CHOP_COMMAND_ADDRESS"
-	parseCommand        = "parse"
-	noopHelpFlags       = "-n, --noop"
-)
-
-type appConfig struct {
-	command     string
-	backfill    backfillConfig
-	rebuild     rebuildConfig
-	indexImport indexImportConfig
-	ownership   ownershipCommandConfig
-	operations  operationsConfig
-	artifacts   artifactCommandConfig
-	index       edgar.Config
-	parse       struct {
-		files      stringList
-		formTypes  stringList
-		masterPath string
-		analysisDB string
-		filter     edgar.IndexFilter
-		setName    string
-		year       string
-		fromYear   int
-		toYear     int
-		noop       bool
-		reprocess  bool
-	}
-	filings struct {
-		masterPath string
-		analysisDB string
-		config     edgar.FilingDownloadConfig
-		filter     edgar.IndexFilter
-		setName    string
-		year       string
-		fromYear   int
-		toYear     int
-		reprocess  bool
-	}
-	taxonomy struct {
-		operation string
-		file      string
-		taxonomy  string
-		parsedDir string
-		format    string
-		out       string
-		filter    edgar.IndexFilter
-		formTypes stringList
-		setName   string
-		year      string
-		fromYear  int
-		toYear    int
-	}
-	coverage struct {
-		masterPath string
-		indexesDir string
-		filingsDir string
-		parsedDir  string
-		analysisDB string
-		out        string
-		filter     edgar.IndexFilter
-		formTypes  stringList
-		setName    string
-		fromYear   int
-		toYear     int
-	}
+type leafCommand struct {
+	Args []string `arg:"" optional:"" passthrough:""`
 }
 
-type stringList []string
-
-type helpOption struct {
-	flags       string
-	description string
+type cli struct {
+	Backfill  leafCommand  `cmd:"" help:"Run a finite historical pipeline."     passthrough:""`
+	Doctor    leafCommand  `cmd:"" help:"Validate local dependencies."          passthrough:""`
+	Status    leafCommand  `cmd:"" help:"Show live application status."         passthrough:""`
+	Filings   leafCommand  `cmd:"" help:"Download and process filings."         passthrough:""`
+	Parse     leafCommand  `cmd:"" help:"Parse local submissions."              passthrough:""`
+	Coverage  leafCommand  `cmd:"" help:"Report local filing coverage."         passthrough:""`
+	Rebuild   rebuildCLI   `cmd:"" help:"Rebuild disposable state."`
+	Index     indexCLI     `cmd:"" help:"Manage SEC indexes."`
+	Ownership ownershipCLI `cmd:"" help:"Import and inspect ownership filings."`
+	Failures  failuresCLI  `cmd:"" help:"Inspect and retry failures."`
+	Artifacts artifactsCLI `cmd:"" help:"Inspect filing artifacts."`
+	Taxonomy  taxonomyCLI  `cmd:"" help:"Inspect taxonomy coverage."`
 }
 
-func (s *stringList) String() string {
-	return strings.Join(*s, ", ")
+type rebuildCLI struct {
+	Edgar leafCommand `cmd:"" help:"Rebuild EDGAR state." passthrough:""`
 }
 
-func (s *stringList) Set(value string) error {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return errors.New("value cannot be empty")
-	}
+type indexCLI struct {
+	Download leafCommand `cmd:"" default:"withargs"           help:"Download SEC indexes." passthrough:""`
+	Import   leafCommand `cmd:"" help:"Import local indexes." passthrough:""`
+}
 
-	*s = append(*s, value)
+type ownershipCLI struct {
+	Import leafCommand `cmd:"" default:"withargs"            help:"Import ownership filings." passthrough:""`
+	Status leafCommand `cmd:"" help:"Show ownership status." passthrough:""`
+}
 
-	return nil
+type failuresCLI struct {
+	List  leafCommand `cmd:"" help:"List unresolved failures."  passthrough:""`
+	Retry leafCommand `cmd:"" help:"Retry unresolved failures." passthrough:""`
+}
+
+type artifactsCLI struct {
+	List    leafCommand `cmd:"" help:"List source documents."     passthrough:""`
+	Extract leafCommand `cmd:"" help:"Extract source documents."  passthrough:""`
+	Serve   leafCommand `cmd:"" help:"Serve extracted documents." passthrough:""`
+	Clean   leafCommand `cmd:"" help:"Clean extracted documents." passthrough:""`
+}
+
+type taxonomyCLI struct {
+	Lint     leafCommand `cmd:"" help:"Lint compact filing views." passthrough:""`
+	Coverage leafCommand `cmd:"" help:"Report taxonomy coverage."  passthrough:""`
 }
 
 func main() {
-	if err := envfile.Load(".env"); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	if err := runMain(); err != nil {
-		os.Exit(1)
-	}
+	os.Exit(runMain())
 }
 
-func runMain() error {
+func runMain() int {
+	if err := envfile.Load(".env"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+
+		return 1
+	}
+
 	logger := ctxlog.New()
 	ctx := ctxlog.WithLogger(context.Background(), logger)
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	done := make(chan struct{})
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			stop()
-		case <-done:
-		}
-	}()
-
-	defer close(done)
-
 	defer stop()
 
-	if err := run(ctx, os.Args[1:]); err != nil {
+	var model cli
+
+	parser, err := kong.New(&model,
+		kong.Name("chop"),
+		kong.Description("Operate the local Chop application and SEC EDGAR data."),
+		kong.Writers(os.Stdout, os.Stderr),
+	)
+	if err != nil {
+		logger.Error("build CLI", "error", err)
+
+		return 1
+	}
+
+	parsed, err := parser.Parse(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+
+		return 1
+	}
+
+	args := selectedArgs(parsed.Command(), &model)
+	if err := choppie.Execute(ctx, args); err != nil {
 		if errors.Is(err, context.Canceled) {
 			logger.Info("shutdown requested")
 
-			return nil
+			return 0
 		}
 
 		logger.Error("command failed", "error", err)
 
-		return err
+		return 1
 	}
 
-	return nil
+	return 0
 }
 
-func run(ctx context.Context, args []string) error {
-	cfg, err := parseConfig(args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-
-		return xerr.Wrap(xerr.InvalidInput, "INVALID_CONFIGURATION", "invalid command-line configuration", err)
-	}
-
-	client := &http.Client{
-		Transport:     nil,
-		CheckRedirect: nil,
-		Jar:           nil,
-		Timeout:       30 * time.Second,
-	}
-	logger := ctxlog.FromContext(ctx)
-
-	if cfg.command != "doctor" && cfg.command != "status" &&
-		cfg.command != "errors" && cfg.command != "retry" {
-		started := time.Now()
-		defer func() {
-			logger.Info("finished Chop command", "command", cfg.command,
-				"duration_ms", time.Since(started).Milliseconds())
-		}()
-	}
-
-	var commandErr error
-
-	switch cfg.command {
-	case "backfill":
-		commandErr = runBackfill(ctx, cfg.backfill, logger)
-	case "rebuild":
-		commandErr = runRebuild(ctx, cfg.rebuild, logger)
-	case "index-import":
-		commandErr = runIndexImport(ctx, cfg.indexImport, logger)
-	case "ownership":
-		commandErr = runOwnership(ctx, client, cfg.ownership)
-	case "doctor":
-		commandErr = runDoctor(ctx, cfg.operations)
-	case "status":
-		commandErr = runStatus(ctx, cfg.operations)
-	case "errors":
-		commandErr = runListFailures(ctx, cfg.operations)
-	case "retry":
-		commandErr = runRetryFailures(ctx, cfg.operations)
-	case "artifacts":
-		commandErr = runArtifacts(ctx, cfg.artifacts)
-	case parseCommand:
-		commandErr = runParse(ctx, cfg)
-	case "index":
-		logger.Info("starting EDGAR index download",
-			"from_year", cfg.index.SinceYear,
-			"directory", cfg.index.Directory,
-			"stitch", cfg.index.Stitch,
-			"noop", cfg.index.Noop,
-		)
-
-		commandErr = edgar.DownloadIndex(ctx, client, cfg.index)
-	case "filings":
-		logger.Info("starting EDGAR filing workflow",
-			"master", cfg.filings.masterPath,
-			"directory", cfg.filings.config.Directory,
-			"cik", cfg.filings.filter.CIK,
-			"set", cfg.filings.setName,
-			"set_members", len(cfg.filings.filter.CIKs),
-			"form_types", cfg.filings.filter.FormTypes,
-			"year", cfg.filings.filter.Year,
-			"from_year", cfg.filings.filter.FromYear,
-			"to_year", cfg.filings.filter.ToYear,
-			"noop", cfg.filings.config.Noop,
-			"reprocess", cfg.filings.reprocess,
-		)
-
-		_, err := filingworkflow.ProcessFilings(ctx, client, cfg.filings.masterPath, cfg.filings.config, filingworkflow.ProcessingConfig{
-			Directory:        appdata.Path("parsed"),
-			FilingsDirectory: cfg.filings.config.Directory,
-			AnalysisDBPath:   cfg.filings.analysisDB,
-			FormType:         "",
-			Reprocess:        cfg.filings.reprocess,
-			Noop:             cfg.filings.config.Noop,
-		}, cfg.filings.filter)
-
-		commandErr = err
-	case "taxonomy":
-		commandErr = runTaxonomyCommand(ctx, cfg.taxonomy.operation, cfg.taxonomy.file,
-			cfg.taxonomy.taxonomy, cfg.taxonomy.parsedDir, cfg.taxonomy.filter,
-			cfg.taxonomy.setName, cfg.taxonomy.fromYear, cfg.taxonomy.toYear,
-			cfg.taxonomy.format, cfg.taxonomy.out)
-	case "coverage":
-		commandErr = runCoverageCommand(ctx, cfg)
-	default:
-		printUsage()
-
-		return flag.ErrHelp
-	}
-
-	return classifyCLIError(ctx, commandErr)
-}
-
-func classifyCLIError(ctx context.Context, err error) error {
-	if err == nil {
-		return nil
-	}
-
-	logger := ctxlog.FromContext(ctx)
-	logger.Debug("Chop command error detail", "error", err.Error())
-
-	if _, ok := errors.AsType[*xerr.Error](err); ok {
-		return err
-	}
-
+func selectedArgs(command string, model *cli) []string {
 	switch {
-	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
-		return xerr.Wrap(xerr.Canceled, "COMMAND_CANCELED", "command was canceled", err)
-	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return xerr.Wrap(xerr.DeadlineExceeded, "COMMAND_TIMEOUT", "command timed out", err)
-	case errors.Is(err, os.ErrNotExist):
-		return xerr.Wrap(xerr.NotFound, "LOCAL_DATA_NOT_FOUND", "required local data was not found", err)
+	case strings.HasPrefix(command, "backfill"):
+		return append([]string{"backfill"}, model.Backfill.Args...)
+	case strings.HasPrefix(command, "doctor"):
+		return append([]string{"doctor"}, model.Doctor.Args...)
+	case strings.HasPrefix(command, "status"):
+		return append([]string{"status"}, model.Status.Args...)
+	case strings.HasPrefix(command, "filings"):
+		return append([]string{"filings"}, model.Filings.Args...)
+	case strings.HasPrefix(command, "parse"):
+		return append([]string{"parse"}, model.Parse.Args...)
+	case strings.HasPrefix(command, "coverage"):
+		return append([]string{"coverage"}, model.Coverage.Args...)
+	case strings.HasPrefix(command, "rebuild edgar"):
+		return append([]string{"rebuild", "edgar"}, model.Rebuild.Edgar.Args...)
+	case strings.HasPrefix(command, "index import"):
+		return append([]string{"index", "import"}, model.Index.Import.Args...)
+	case strings.HasPrefix(command, "index"):
+		return append([]string{"index"}, model.Index.Download.Args...)
+	case strings.HasPrefix(command, "ownership status"):
+		return append([]string{"ownership", "status"}, model.Ownership.Status.Args...)
+	case strings.HasPrefix(command, "ownership"):
+		return append([]string{"ownership", "import"}, model.Ownership.Import.Args...)
+	case strings.HasPrefix(command, "failures list"):
+		return append([]string{"failures", "list"}, model.Failures.List.Args...)
+	case strings.HasPrefix(command, "failures retry"):
+		return append([]string{"failures", "retry"}, model.Failures.Retry.Args...)
+	case strings.HasPrefix(command, "artifacts list"):
+		return append([]string{"artifacts", "list"}, model.Artifacts.List.Args...)
+	case strings.HasPrefix(command, "artifacts extract"):
+		return append([]string{"artifacts", "extract"}, model.Artifacts.Extract.Args...)
+	case strings.HasPrefix(command, "artifacts serve"):
+		return append([]string{"artifacts", "serve"}, model.Artifacts.Serve.Args...)
+	case strings.HasPrefix(command, "artifacts clean"):
+		return append([]string{"artifacts", "clean"}, model.Artifacts.Clean.Args...)
+	case strings.HasPrefix(command, "taxonomy lint"):
+		return append([]string{"taxonomy", "lint"}, model.Taxonomy.Lint.Args...)
+	case strings.HasPrefix(command, "taxonomy coverage"):
+		return append([]string{"taxonomy", "coverage"}, model.Taxonomy.Coverage.Args...)
 	default:
-		if httpError, ok := errors.AsType[*edgar.HTTPError](err); ok {
-			logger.Debug("EDGAR HTTP error detail",
-				"url", httpError.URL,
-				"status_code", httpError.StatusCode,
-				"status", httpError.Status,
-			)
-
-			return xerr.Wrap(xerr.Unavailable, "EDGAR_REJECTED_REQUEST", "EDGAR rejected the request", err).
-				WithDetails(map[string]any{
-					"url":         httpError.URL,
-					"status_code": httpError.StatusCode,
-					"status":      httpError.Status,
-				})
-		}
-
-		if _, ok := errors.AsType[net.Error](err); ok {
-			return xerr.Wrap(xerr.Unavailable, "EDGAR_UNAVAILABLE", "EDGAR service is unavailable", err)
-		}
-
-		return xerr.Wrap(xerr.Internal, "CHOP_COMMAND_FAILED", "Chop command failed", err)
-	}
-}
-
-func parseConfig(args []string) (appConfig, error) {
-	if len(args) == 0 {
-		printUsage()
-
-		return appConfig{}, flag.ErrHelp
-	}
-
-	if args[0] == "-h" || args[0] == "--help" {
-		printUsage()
-
-		return appConfig{}, flag.ErrHelp
-	}
-
-	switch args[0] {
-	case "backfill":
-		return parseBackfillConfig(args[1:])
-	case "rebuild":
-		return parseRebuildConfig(args[1:])
-	case "ownership":
-		return parseOwnershipConfig(args[1:])
-	case "doctor", "status":
-		return parseOperationsConfig(args[0], args[1:])
-	case "failures":
-		return parseFailuresConfig(args[1:])
-	case "artifacts":
-		return parseArtifactCommand(args[1:])
-	case parseCommand:
-		return parseSubmissionConfig(args[1:])
-	case "index":
-		if len(args) > 1 && args[1] == "import" {
-			return parseIndexImportConfig(args[2:])
-		}
-
-		return parseDownloadIndexConfig(args[1:])
-	case "filings":
-		return parseDownloadFilingsConfig(args[1:])
-	case "taxonomy":
-		return parseTaxonomyConfig(args[1:])
-	case "coverage":
-		return parseCoverageConfig(args[1:])
-	default:
-		printUsage()
-
-		return appConfig{}, flag.ErrHelp
-	}
-}
-
-func parseFailuresConfig(args []string) (appConfig, error) {
-	if len(args) == 0 || args[0] == "list" {
-		if len(args) == 0 {
-			return parseOperationsConfig("errors", nil)
-		}
-
-		return parseOperationsConfig("errors", args[1:])
-	}
-
-	if args[0] == "retry" {
-		return parseOperationsConfig("retry", args[1:])
-	}
-
-	fmt.Fprintln(os.Stdout,
-		"Usage: chop failures <list|retry> [options]")
-
-	return appConfig{}, flag.ErrHelp
-}
-
-func parseTaxonomyConfig(args []string) (appConfig, error) {
-	var cfg appConfig
-
-	cfg.command = "taxonomy"
-	flags := flag.NewFlagSet("taxonomy", flag.ContinueOnError)
-	flags.SetOutput(os.Stdout)
-	flags.Usage = func() {
-		printSubcommandHelp("taxonomy <lint|coverage>", "Inspect local filing data against the taxonomy.", []helpOption{
-			{"-i, --file <path>", "Inspect one filing-view.json or filing.json."},
-			{"-c, --cik <cik>", "Select locally parsed filings for this CIK."},
-			{"-s, --set <name>", "Select a set from the configured data directory."},
-			{"-f, --form-type <type>", "Select this form type; may be repeated."},
-			{"-y, --year <year>", "Select filings filed in this year."},
-			{"    --from-year <year>", "First filing year to include."},
-			{"    --to-year <year>", "Last filing year to include."},
-			{"-d, --parsed-dir <path>", "Parsed filing directory."},
-			{"-t, --taxonomy <path>", "Use a taxonomy JSON file instead of the embedded default."},
-			{"    --format <text|json>", "Output format; default text."},
-			{"-o, --out <path>", "Write output to this file instead of stdout."},
-			{"-h, --help", "Show command help."},
-		})
-	}
-	cfg.taxonomy.parsedDir = appdata.Path("parsed")
-	cfg.taxonomy.format = "text"
-	flags.StringVar(&cfg.taxonomy.file, "i", "", "lint one compact filing-view.json")
-	flags.StringVar(&cfg.taxonomy.file, "file", "", "lint one compact filing-view.json")
-	flags.StringVar(&cfg.taxonomy.filter.CIK, "c", "", "select locally parsed filings for this CIK")
-	flags.StringVar(&cfg.taxonomy.filter.CIK, "cik", "", "select locally parsed filings for this CIK")
-	flags.StringVar(&cfg.taxonomy.setName, "s", "", "select current members from a constituent set")
-	flags.StringVar(&cfg.taxonomy.setName, "set", "", "select current members from a constituent set")
-	flags.Var(&cfg.taxonomy.formTypes, "f", "select this form type; may be repeated")
-	flags.Var(&cfg.taxonomy.formTypes, "form-type", "select this form type; may be repeated")
-	flags.StringVar(&cfg.taxonomy.year, "y", "", "select filings filed in this year")
-	flags.StringVar(&cfg.taxonomy.year, "year", "", "select filings filed in this year")
-	flags.IntVar(&cfg.taxonomy.fromYear, "from-year", 0, "first filing year to include")
-	flags.IntVar(&cfg.taxonomy.toYear, "to-year", 0, "last filing year to include")
-	flags.StringVar(&cfg.taxonomy.parsedDir, "d", cfg.taxonomy.parsedDir, "parsed filing directory")
-	flags.StringVar(&cfg.taxonomy.parsedDir, "parsed-dir", cfg.taxonomy.parsedDir, "parsed filing directory")
-	flags.StringVar(&cfg.taxonomy.taxonomy, "t", "", "taxonomy JSON file")
-	flags.StringVar(&cfg.taxonomy.taxonomy, "taxonomy", "", "taxonomy JSON file")
-	flags.StringVar(&cfg.taxonomy.format, "format", cfg.taxonomy.format, "output format")
-	flags.StringVar(&cfg.taxonomy.out, "o", "", "output path")
-	flags.StringVar(&cfg.taxonomy.out, "out", "", "output path")
-
-	if len(args) == 0 || (args[0] != "lint" && args[0] != "coverage") {
-		return subcommandError(flags, errors.New("use 'chop taxonomy <lint|coverage>'"))
-	}
-
-	cfg.taxonomy.operation = args[0]
-	if err := flags.Parse(args[1:]); err != nil {
-		return appConfig{}, flag.ErrHelp
-	}
-
-	if flags.NArg() != 0 {
-		return subcommandError(flags, errors.New("use 'chop taxonomy <lint|coverage>'"))
-	}
-
-	if strings.TrimSpace(cfg.taxonomy.file) != "" &&
-		(cfg.taxonomy.filter.CIK != "" || cfg.taxonomy.setName != "" ||
-			len(cfg.taxonomy.formTypes) > 0 || strings.TrimSpace(cfg.taxonomy.year) != "" ||
-			cfg.taxonomy.fromYear != 0 || cfg.taxonomy.toYear != 0) {
-		return subcommandError(flags, errors.New("--file cannot be combined with filters"))
-	}
-
-	if cfg.taxonomy.parsedDir == "" {
-		return subcommandError(flags, errors.New("--parsed-dir cannot be empty"))
-	}
-
-	if cfg.taxonomy.format != "text" && cfg.taxonomy.format != "json" {
-		return subcommandError(flags, errors.New("--format must be text or json"))
-	}
-
-	cfg.taxonomy.filter.FormTypes = cfg.taxonomy.formTypes
-	if err := applyConstituentSet(&cfg.taxonomy.filter, cfg.taxonomy.setName); err != nil {
-		return subcommandError(flags, err)
-	}
-
-	if err := applyYearSelection(&cfg.taxonomy.filter, cfg.taxonomy.year,
-		cfg.taxonomy.fromYear, cfg.taxonomy.toYear); err != nil {
-		return subcommandError(flags, err)
-	}
-
-	return cfg, nil
-}
-
-type taxonomyBatchReport struct {
-	SchemaVersion   int                    `json:"schema_version"`
-	Operation       string                 `json:"operation"`
-	TaxonomyVersion string                 `json:"taxonomy_version"`
-	GeneratedAt     string                 `json:"generated_at"`
-	Selection       taxonomySelection      `json:"selection"`
-	Summary         taxonomyBatchSummary   `json:"summary"`
-	Filings         []taxonomyFilingReport `json:"filings"`
-}
-
-type taxonomySelection struct {
-	File      string   `json:"file,omitempty"`
-	Set       string   `json:"set,omitempty"`
-	CIK       string   `json:"cik,omitempty"`
-	CIKs      []string `json:"ciks,omitempty"`
-	FormTypes []string `json:"form_types,omitempty"`
-	Year      int      `json:"year,omitempty"`
-	FromYear  int      `json:"from_year,omitempty"`
-	ToYear    int      `json:"to_year,omitempty"`
-}
-
-type taxonomyBatchSummary struct {
-	Selected      int `json:"selected"`
-	Failed        int `json:"failed"`
-	Findings      int `json:"findings"`
-	QualityIssues int `json:"quality_issues,omitempty"`
-}
-
-type taxonomyFilingReport struct {
-	Path       string                     `json:"path"`
-	CIK        string                     `json:"cik,omitempty"`
-	Accession  string                     `json:"accession,omitempty"`
-	FormType   string                     `json:"form_type,omitempty"`
-	FilingDate string                     `json:"filing_date,omitempty"`
-	Lint       *filingview.LintReport     `json:"lint,omitempty"`
-	Coverage   *filingview.CoverageReport `json:"coverage,omitempty"`
-	Error      string                     `json:"error,omitempty"`
-}
-
-func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
-	parsedDir string, filter edgar.IndexFilter, setName string, fromYear,
-	toYear int, format, out string,
-) error {
-	taxonomy, err := filingview.LoadTaxonomy(taxonomyPath)
-	if err != nil {
-		return err
-	}
-
-	paths := []string{path}
-	if path == "" {
-		if operation == "coverage" {
-			paths, err = parsedFilingPaths(ctx, parsedDir, filter, fromYear, toYear)
-		} else {
-			paths, err = filingViewPaths(ctx, parsedDir, filter, fromYear, toYear)
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-
-	failed := 0
-	findings := 0
-	qualityIssues := 0
-	batch := taxonomyBatchReport{
-		SchemaVersion:   1,
-		Operation:       operation,
-		TaxonomyVersion: taxonomy.TaxonomyVersion,
-		GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
-		Selection: taxonomySelection{
-			File: path, Set: setName, CIK: filter.CIK, CIKs: filter.CIKs,
-			FormTypes: filter.FormTypes, Year: filter.Year,
-			FromYear: fromYear, ToYear: toYear,
-		},
-		Summary: taxonomyBatchSummary{
-			Selected: 0, Failed: 0, Findings: 0, QualityIssues: 0,
-		},
-		Filings: nil,
-	}
-
-	var text strings.Builder
-
-	for _, filingPath := range paths {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		entry := taxonomyFilingReport{
-			Path: filingPath, CIK: "", Accession: "", FormType: "",
-			FilingDate: "", Lint: nil, Coverage: nil, Error: "",
-		}
-
-		if operation == "coverage" {
-			filing, loadErr := edgar.LoadParsedFiling(filingPath)
-			if loadErr != nil {
-				fmt.Fprintf(&text, "%s error=%v\n", filingPath, loadErr)
-				entry.Error = loadErr.Error()
-				batch.Filings = append(batch.Filings, entry)
-
-				failed++
-
-				continue
-			}
-
-			report := filingview.Coverage(filing, taxonomy)
-			findings += len(report.Unmapped)
-			entry.CIK = filing.Metadata.CIK
-			entry.Accession = filing.Metadata.Accession
-			entry.FormType = filing.Metadata.FormType
-			entry.FilingDate = filing.Metadata.FilingDate
-			entry.Coverage = &report
-			batch.Filings = append(batch.Filings, entry)
-
-			fmt.Fprintf(&text, "%s cik=%s form=%s %s\n", filingPath,
-				filing.Metadata.CIK, filing.Metadata.FormType, report)
-
-			continue
-		}
-
-		view, loadErr := filingview.Load(filingPath)
-		if loadErr != nil {
-			fmt.Fprintf(&text, "%s error=%v\n", filingPath, loadErr)
-			entry.Error = loadErr.Error()
-			batch.Filings = append(batch.Filings, entry)
-
-			failed++
-
-			continue
-		}
-
-		report := filingview.LintView(view, taxonomy)
-		findings += len(report.Unmapped)
-		qualityIssues += len(report.QualityIssues)
-		entry.CIK = view.Metadata.CIK
-		entry.Accession = view.Metadata.Accession
-		entry.FormType = view.Metadata.FormType
-		entry.FilingDate = view.Metadata.FilingDate
-		entry.Lint = &report
-		batch.Filings = append(batch.Filings, entry)
-
-		fmt.Fprintf(&text, "%s cik=%s form=%s %s\n", filingPath,
-			view.Metadata.CIK, view.Metadata.FormType, report)
-	}
-
-	// Lint findings are review evidence for taxonomy work, not operational
-	// failures. Only unreadable or malformed inputs increment failed and
-	// produce a non-zero exit.
-	batch.Summary = taxonomyBatchSummary{
-		Selected: len(paths), Failed: failed, Findings: findings,
-		QualityIssues: qualityIssues,
-	}
-
-	fmt.Fprintf(&text, "taxonomy %s summary selected=%d findings=%d failed=%d\n",
-		operation, len(paths), findings, failed)
-
-	if format == "json" {
-		if err := writeTaxonomyJSON(out, batch); err != nil {
-			return err
-		}
-	} else if err := writeTaxonomyText(out, text.String()); err != nil {
-		return err
-	}
-
-	if failed > 0 {
-		return fmt.Errorf("%d filing view(s) failed linting", failed)
-	}
-
-	return nil
-}
-
-// filingViewPaths returns the paths to all filing-view.json files in the given directory that match the filter.
-// The returned paths are sorted in lexicographical order.
-func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFilter, fromYear, toYear int) ([]string, error) {
-	paths := []string{}
-
-	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		if walkErr != nil {
-			return walkErr
-		}
-
-		if entry.IsDir() || entry.Name() != "filing-view.json" {
-			return nil
-		}
-
-		view, err := filingview.Load(path)
-		if err != nil {
-			return fmt.Errorf("inspect %s: %w", path, err)
-		}
-
-		dateFiled, _ := parseFilingDate(view.Metadata.FilingDate)
-		if !inYearRange(dateFiled.Year(), fromYear, toYear) {
-			return nil
-		}
-
-		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
-			CIK: view.Metadata.CIK, CompanyName: view.Metadata.Company,
-			FormType: view.Metadata.FormType, DateFiled: dateFiled,
-			FilingPath: "local", IndexPath: "",
-		}, filter) {
-			return nil
-		}
-
-		paths = append(paths, path)
-
 		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scan parsed directory: %w", err)
-	}
-
-	sort.Strings(paths)
-
-	return paths, nil
-}
-
-// parsedFilingPaths returns the paths to all filing.json files in the given directory that match the filter.
-// The returned paths are sorted in lexicographical order.
-func parsedFilingPaths(ctx context.Context, directory string, filter edgar.IndexFilter, fromYear, toYear int) ([]string, error) {
-	paths := []string{}
-
-	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		if walkErr != nil {
-			return walkErr
-		}
-
-		if entry.IsDir() || entry.Name() != "filing.json" {
-			return nil
-		}
-
-		filing, err := edgar.LoadParsedFiling(path)
-		if err != nil {
-			return fmt.Errorf("inspect %s: %w", path, err)
-		}
-
-		dateFiled, _ := parseFilingDate(filing.Metadata.FilingDate)
-		if !inYearRange(dateFiled.Year(), fromYear, toYear) {
-			return nil
-		}
-
-		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
-			CIK: filing.Metadata.CIK, CompanyName: "",
-			FormType: filing.Metadata.FormType, DateFiled: dateFiled,
-			FilingPath: "local", IndexPath: "",
-		}, filter) {
-			return nil
-		}
-
-		paths = append(paths, path)
-
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scan parsed directory: %w", err)
-	}
-
-	sort.Strings(paths)
-
-	return paths, nil
-}
-
-func writeTaxonomyJSON(path string, report taxonomyBatchReport) error {
-	var (
-		writer io.Writer = os.Stdout
-		file   *os.File
-	)
-
-	if path != "" {
-		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-			return fmt.Errorf("create taxonomy report directory: %w", err)
-		}
-
-		created, err := os.Create(path)
-		if err != nil {
-			return fmt.Errorf("create taxonomy report: %w", err)
-		}
-
-		file = created
-		writer = file
-	}
-
-	if file != nil {
-		defer func() { _ = file.Close() }()
-	}
-
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-
-	if err := encoder.Encode(report); err != nil {
-		return fmt.Errorf("write taxonomy report: %w", err)
-	}
-
-	return nil
-}
-
-func writeTaxonomyText(path, text string) error {
-	if path == "" {
-		fmt.Fprint(os.Stdout, text)
-
-		return nil
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return fmt.Errorf("create taxonomy report directory: %w", err)
-	}
-
-	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
-		return fmt.Errorf("write taxonomy report: %w", err)
-	}
-
-	return nil
-}
-
-func inYearRange(year, fromYear, toYear int) bool {
-	return (fromYear == 0 || year >= fromYear) && (toYear == 0 || year <= toYear)
-}
-
-func parseFilingDate(value string) (time.Time, error) {
-	value = strings.TrimSpace(value)
-	for _, layout := range []string{"2006-01-02", "20060102"} {
-		parsed, err := time.Parse(layout, value)
-		if err == nil {
-			return parsed, nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("invalid filing date %q", value)
-}
-
-func applyYearSelection(filter *edgar.IndexFilter, year string, fromYear, toYear int) error {
-	if fromYear != 0 && (fromYear < edgar.EarliestYear || fromYear > 9999) {
-		return errors.New("--from-year must be a valid EDGAR year")
-	}
-
-	if toYear != 0 && (toYear < edgar.EarliestYear || toYear > 9999) {
-		return errors.New("--to-year must be a valid EDGAR year")
-	}
-
-	if fromYear != 0 && toYear != 0 && fromYear > toYear {
-		return errors.New("--from-year must not be after --to-year")
-	}
-
-	if strings.TrimSpace(year) != "" {
-		if fromYear != 0 || toYear != 0 {
-			return errors.New("--year cannot be combined with --from-year or --to-year")
-		}
-
-		parsedYear, err := strconv.Atoi(strings.TrimSpace(year))
-		if err != nil || parsedYear < 1000 || parsedYear > 9999 {
-			return errors.New("--year must be a four-digit year")
-		}
-
-		filter.Year = parsedYear
-
-		return nil
-	}
-
-	filter.FromYear = fromYear
-	filter.ToYear = toYear
-
-	return nil
-}
-
-func parseDownloadIndexConfig(args []string) (appConfig, error) {
-	var cfg appConfig
-
-	fromYear, err := environmentFromYear()
-	if err != nil {
-		return appConfig{}, err
-	}
-
-	cfg.command = "index"
-	cfg.index = edgar.Config{
-		Directory:     appdata.Path("cache", "indexes", "quarterly"),
-		ZipDirectory:  appdata.Path("cache", "index-zips"),
-		MasterPath:    appdata.Path("cache", "indexes", "master.tsv"),
-		SinceYear:     fromYear,
-		UserAgent:     environmentValue(edgarUserAgentEnv, defaultUserAgent),
-		RefreshLatest: false,
-		Stitch:        true,
-		BaseURL:       environmentValue(edgarBaseURLEnv, ""),
-		Noop:          false,
-	}
-
-	flags := flag.NewFlagSet("index", flag.ContinueOnError)
-	flags.SetOutput(os.Stdout)
-	flags.Usage = func() {
-		printSubcommandHelp("index", "Download SEC quarterly filing indexes.", []helpOption{
-			{"-y, --from-year <year>", "First year to download."},
-			{"-r, --refresh-latest", "Refresh the latest quarter and reuse older files."},
-			{"-s, --stitch", "Concatenate quarterly TSV files into master.tsv."},
-			{noopHelpFlags, "Show actions without downloading, extracting, or writing files."},
-		})
-	}
-	flags.IntVar(&cfg.index.SinceYear, "y", cfg.index.SinceYear, "first year to download")
-	flags.IntVar(&cfg.index.SinceYear, "from-year", cfg.index.SinceYear, "first year to download")
-	flags.BoolVar(&cfg.index.RefreshLatest, "r", false, "refresh the latest quarter and reuse older files")
-	flags.BoolVar(&cfg.index.RefreshLatest, "refresh-latest", false, "refresh the latest quarter and reuse older files")
-	flags.BoolVar(&cfg.index.Stitch, "s", cfg.index.Stitch, "concatenate quarterly TSV files into master.tsv")
-	flags.BoolVar(&cfg.index.Stitch, "stitch", cfg.index.Stitch, "concatenate quarterly TSV files into master.tsv")
-	flags.BoolVar(&cfg.index.Noop, "n", false, "show actions without downloading, extracting, or writing files")
-	flags.BoolVar(&cfg.index.Noop, "noop", false, "show actions without downloading, extracting, or writing files")
-
-	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return appConfig{}, err
-		}
-
-		return appConfig{}, flag.ErrHelp
-	}
-
-	if cfg.index.SinceYear < edgar.EarliestPipelineYear {
-		return subcommandError(flags, fmt.Errorf("--from-year must be %d or later",
-			edgar.EarliestPipelineYear))
-	}
-
-	return cfg, nil
-}
-
-func parseDownloadFilingsConfig(args []string) (appConfig, error) {
-	formTypes := stringList{}
-
-	var cfg appConfig
-
-	cfg.command = "filings"
-	cfg.filings.masterPath = appdata.Path("cache", "indexes", "master.tsv")
-	cfg.filings.analysisDB = appdata.Path("analysis.db")
-	cfg.filings.config = edgar.FilingDownloadConfig{
-		Directory: appdata.Path("cache", "filings"),
-		UserAgent: environmentValue(edgarUserAgentEnv, defaultUserAgent),
-		BaseURL:   environmentValue(edgarBaseURLEnv, ""),
-		Noop:      false,
-	}
-	flags := flag.NewFlagSet("filings", flag.ContinueOnError)
-	flags.SetOutput(os.Stdout)
-	flags.Usage = func() {
-		printSubcommandHelp("filings", "Download filings selected from master.tsv and reuse or rebuild parsed results.", []helpOption{
-			{"-c, --cik <cik>", "Select filings for this CIK."},
-			{"    --set <name>", "Select a set from the configured data directory."},
-			{"-f, --form-type <type>", "Select this form type; may be repeated."},
-			{"-y, --year <year>", "Select filings filed in this year; default is all years."},
-			{"    --from-year <year>", "First filing year to include."},
-			{"    --to-year <year>", "Last filing year to include."},
-			{"-r, --reprocess", "Rebuild parsed results without forcing a new download."},
-			{noopHelpFlags, "Show planned downloads and processing without changing files."},
-		})
-	}
-	flags.StringVar(&cfg.filings.filter.CIK, "c", "", "only download filings for this CIK")
-	flags.StringVar(&cfg.filings.filter.CIK, "cik", "", "only download filings for this CIK")
-	flags.StringVar(&cfg.filings.setName, "set", "", "only download filings for this constituent set")
-	flags.StringVar(&cfg.filings.analysisDB, "analysis-db", cfg.filings.analysisDB, "SQLite analysis database")
-	flags.Var(&formTypes, "form-type", "only download this form type; may be repeated")
-	flags.Var(&formTypes, "f", "only download this form type; may be repeated")
-	flags.BoolVar(&cfg.filings.config.Noop, "noop", false, "show actions without downloading or writing files")
-	flags.BoolVar(&cfg.filings.config.Noop, "n", false, "show actions without downloading or writing files")
-	flags.StringVar(&cfg.filings.year, "y", "", "only download filings filed in this year")
-	flags.StringVar(&cfg.filings.year, "year", "", "only download filings filed in this year")
-	flags.IntVar(&cfg.filings.fromYear, "from-year", 0, "first filing year to include")
-	flags.IntVar(&cfg.filings.toYear, "to-year", 0, "last filing year to include")
-	flags.BoolVar(&cfg.filings.reprocess, "r", false, "rebuild parsed results")
-	flags.BoolVar(&cfg.filings.reprocess, "reprocess", false, "rebuild parsed results")
-
-	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return appConfig{}, err
-		}
-
-		return appConfig{}, flag.ErrHelp
-	}
-
-	if strings.TrimSpace(cfg.filings.config.UserAgent) == "" {
-		return subcommandError(flags, fmt.Errorf("%s cannot be empty", edgarUserAgentEnv))
-	}
-
-	if flags.NArg() != 0 {
-		return subcommandError(flags, errors.New("unexpected positional arguments"))
-	}
-
-	validatedForms, err := edgar.ValidateSupportedFormTypes(formTypes)
-	if err != nil {
-		return subcommandError(flags, err)
-	}
-
-	cfg.filings.filter.FormTypes = validatedForms
-	if err := applyConstituentSet(&cfg.filings.filter, cfg.filings.setName); err != nil {
-		return subcommandError(flags, err)
-	}
-
-	if err := applyYearSelection(&cfg.filings.filter, cfg.filings.year,
-		cfg.filings.fromYear, cfg.filings.toYear); err != nil {
-		return subcommandError(flags, err)
-	}
-
-	return cfg, nil
-}
-
-func applyConstituentSet(filter *edgar.IndexFilter, name string) error {
-	name = strings.TrimSpace(name)
-
-	if name == "" {
-		return nil
-	}
-
-	if filepath.Base(name) != name || filepath.Ext(name) != "" {
-		return errors.New("--set must be a set name, not a path")
-	}
-
-	set, err := constituents.LoadJSON(appdata.Path("sets", name+".json"))
-	if err != nil {
-		return err
-	}
-
-	filter.CIKs = set.CIKs()
-
-	return nil
-}
-
-func subcommandError(flags *flag.FlagSet, err error) (appConfig, error) {
-	fmt.Fprintf(os.Stdout, "Error: %v\n\n", err)
-	flags.Usage()
-
-	return appConfig{}, flag.ErrHelp
-}
-
-func environmentValue(name, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-		return value
-	}
-
-	return fallback
-}
-
-func webAddressFromEnvironment() string {
-	address := environmentValue(edgarHTTPAddressEnv, "")
-	if address != "" {
-		return address
-	}
-
-	address = environmentValue(edgarWebAddressEnv, "")
-	if address != "" {
-		return address
-	}
-
-	return environmentValue(edgarNewsAddressEnv, "127.0.0.1:8083")
-}
-
-func environmentFromYear() (int, error) {
-	raw := strings.TrimSpace(os.Getenv(edgarFromYearEnv))
-	if raw == "" {
-		return edgar.EarliestPipelineYear, nil
-	}
-
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an integer", edgarFromYearEnv)
-	}
-
-	return value, nil
-}
-
-func printUsage() {
-	fmt.Fprintln(os.Stdout, "Usage: chop <command> [options]")
-	fmt.Fprintln(os.Stdout)
-	fmt.Fprintln(os.Stdout, "Commands:")
-	fmt.Fprintln(os.Stdout, "  backfill          index, discover, download, and process")
-	fmt.Fprintln(os.Stdout, "  rebuild           restore disposable application state")
-	fmt.Fprintln(os.Stdout, "  ownership         import and inspect ownership filings")
-	fmt.Fprintln(os.Stdout, "  doctor            validate local pipeline dependencies")
-	fmt.Fprintln(os.Stdout, "  status            query the running Chop application")
-	fmt.Fprintln(os.Stdout, "  failures          list or retry pipeline failures")
-	fmt.Fprintln(os.Stdout, "  index             download quarterly SEC filing indexes")
-	fmt.Fprintln(os.Stdout, "  filings           download and process filings selected from master.tsv")
-	fmt.Fprintln(os.Stdout, "  parse             read local submissions and persist XBRL data")
-	fmt.Fprintln(os.Stdout, "  artifacts         list, extract, or clean source documents")
-	fmt.Fprintln(os.Stdout, "  taxonomy          lint compact filing views")
-	fmt.Fprintln(os.Stdout, "  coverage          report expected local filing coverage")
-	fmt.Fprintln(os.Stdout)
-	fmt.Fprintln(os.Stdout, "Use 'chop <command> --help' for command-specific options.")
-}
-
-func printSubcommandHelp(command, description string, options []helpOption) {
-	fmt.Fprintf(os.Stdout, "Usage: chop %s [options]\n\n", command)
-	fmt.Fprintln(os.Stdout, description)
-	fmt.Fprintln(os.Stdout)
-	fmt.Fprintln(os.Stdout, "Options:")
-	fmt.Fprintln(os.Stdout)
-
-	for _, option := range options {
-		fmt.Fprintf(os.Stdout, "  %s\n", option.flags)
-		fmt.Fprintf(os.Stdout, "      %s\n\n", option.description)
 	}
 }

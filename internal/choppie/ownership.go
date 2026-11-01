@@ -1,4 +1,4 @@
-package main
+package choppie
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/ownership"
 	"wingman.com/chopstick/internal/ownershippipeline"
-	"wingman.com/chopstick/internal/ownershipstore"
 )
 
 type ownershipCommandConfig struct {
@@ -60,28 +59,17 @@ func parseOwnershipConfig(args []string) (appConfig, error) {
 	}
 	flags := ownershipFlagSet("ownership import")
 	flags.Usage = func() { printOwnershipImportHelp() }
-	flags.StringVar(&cfg.ownership.masterPath, "master",
-		cfg.ownership.masterPath, "master index path")
-	flags.StringVar(&cfg.ownership.databasePath, "database",
-		cfg.ownership.databasePath, "ownership database path")
-	flags.StringVar(&cfg.ownership.download.Directory, "cache-dir",
-		cfg.ownership.download.Directory, "raw filing cache directory")
-	flags.Var(&cfg.ownership.formTypes, "f",
-		"select this ownership form; may be repeated")
-	flags.Var(&cfg.ownership.formTypes, "form-type",
-		"select this ownership form; may be repeated")
-	flags.IntVar(&cfg.ownership.fromYear, "from-year",
-		cfg.ownership.fromYear, "first filing year to include")
-	flags.IntVar(&cfg.ownership.toYear, "to-year", 0,
-		"last filing year to include")
-	flags.BoolVar(&cfg.ownership.reprocess, "r", false,
-		"reparse terminal outcomes at the current parser version")
-	flags.BoolVar(&cfg.ownership.reprocess, "reprocess", false,
-		"reparse terminal outcomes at the current parser version")
-	flags.BoolVar(&cfg.ownership.noop, "n", false,
-		"show the number of selected accessions without changing files")
-	flags.BoolVar(&cfg.ownership.noop, "noop", false,
-		"show the number of selected accessions without changing files")
+	flags.StringVar(&cfg.ownership.masterPath, "master", cfg.ownership.masterPath, "master index path")
+	flags.StringVar(&cfg.ownership.databasePath, "database", cfg.ownership.databasePath, "ownership database path")
+	flags.StringVar(&cfg.ownership.download.Directory, "cache-dir", cfg.ownership.download.Directory, "raw filing cache directory")
+	flags.Var(&cfg.ownership.formTypes, "f", "select this ownership form; may be repeated")
+	flags.Var(&cfg.ownership.formTypes, "form-type", "select this ownership form; may be repeated")
+	flags.IntVar(&cfg.ownership.fromYear, "from-year", cfg.ownership.fromYear, "first filing year to include")
+	flags.IntVar(&cfg.ownership.toYear, "to-year", 0, "last filing year to include")
+	flags.BoolVar(&cfg.ownership.reprocess, "r", false, "reparse terminal outcomes at the current parser version")
+	flags.BoolVar(&cfg.ownership.reprocess, "reprocess", false, "reparse terminal outcomes at the current parser version")
+	flags.BoolVar(&cfg.ownership.noop, "n", false, "show the number of selected accessions without changing files")
+	flags.BoolVar(&cfg.ownership.noop, "noop", false, "show the number of selected accessions without changing files")
 
 	if err := flags.Parse(args); err != nil {
 		return appConfig{}, err
@@ -138,9 +126,7 @@ func parseOwnershipConfig(args []string) (appConfig, error) {
 	return cfg, nil
 }
 
-func parseOwnershipStatusConfig(cfg appConfig,
-	args []string,
-) (appConfig, error) {
+func parseOwnershipStatusConfig(cfg appConfig, args []string) (appConfig, error) {
 	flags := ownershipFlagSet("ownership status")
 	flags.Usage = func() {
 		printSubcommandHelp("ownership status",
@@ -200,14 +186,12 @@ func printOwnershipImportHelp() {
 		})
 }
 
-func runOwnership(ctx context.Context, client *http.Client,
-	cfg ownershipCommandConfig,
-) error {
+func runOwnership(ctx context.Context, client *http.Client, cfg ownershipCommandConfig) error {
 	if cfg.operation == "status" {
 		return printOwnershipStatus(ctx, cfg.databasePath)
 	}
 
-	summary, err := ownershippipeline.Run(ctx, client,
+	summary, err := ImportOwnership(ctx, client,
 		ownershippipeline.Config{
 			MasterPath: cfg.masterPath, DatabasePath: cfg.databasePath,
 			Download: cfg.download, FromYear: cfg.fromYear,
@@ -223,19 +207,9 @@ func runOwnership(ctx context.Context, client *http.Client,
 }
 
 func printOwnershipStatus(ctx context.Context, databasePath string) error {
-	if _, err := os.Stat(databasePath); err != nil {
+	coverage, counts, err := OwnershipStatus(ctx, databasePath)
+	if err != nil {
 		return fmt.Errorf("inspect ownership database: %w", err)
-	}
-
-	store, err := ownershipstore.Open(ctx, databasePath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = store.Close() }()
-
-	coverage, err := store.LatestCoverage(ctx, ownership.ParserVersion)
-	if err != nil {
-		return err
 	}
 
 	if len(coverage) == 0 {
@@ -249,11 +223,6 @@ func printOwnershipStatus(ctx context.Context, databasePath string) error {
 				row.FromDate, row.ThroughDate, row.Processed,
 				row.Failed, row.Unsupported)
 		}
-	}
-
-	counts, err := store.Counts(ctx, "", "")
-	if err != nil {
-		return err
 	}
 
 	if len(counts) > 0 {

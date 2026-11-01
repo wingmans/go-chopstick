@@ -1,10 +1,8 @@
-package main
+package choppie
 
 import (
-	"context"
 	"errors"
 	"flag"
-	"log/slog"
 	"os"
 
 	"wingman.com/chopstick/internal/appdata"
@@ -26,25 +24,15 @@ func parseIndexImportConfig(args []string) (appConfig, error) {
 
 	flags := flag.NewFlagSet("index import", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
-	flags.StringVar(&config.indexImport.value.IndexesDirectory,
-		"indexes-dir", config.indexImport.value.IndexesDirectory,
-		"quarterly index directory")
-	flags.StringVar(&config.indexImport.value.PollingDB, "polling-db",
-		config.indexImport.value.PollingDB, "pipeline state database")
-	flags.StringVar(&config.indexImport.value.NATSURL, "nats-url",
-		config.indexImport.value.NATSURL, "NATS server URL")
-	flags.StringVar(&config.indexImport.value.File, "file", "",
-		"import one quarterly TSV file")
-	flags.BoolVar(&config.indexImport.value.Latest, "latest", false,
-		"import the newest local quarterly TSV")
-	flags.IntVar(&config.indexImport.value.Year, "year", 0,
-		"import all quarters for one year")
-	flags.IntVar(&config.indexImport.value.FromYear, "from-year", 0,
-		"first year to import")
-	flags.IntVar(&config.indexImport.value.ToYear, "to-year", 0,
-		"last year to import")
-	flags.BoolVar(&config.indexImport.value.DryRun, "dry-run", false,
-		"read and report without writing")
+	flags.StringVar(&config.indexImport.value.IndexesDirectory, "indexes-dir", config.indexImport.value.IndexesDirectory, "quarterly index directory")
+	flags.StringVar(&config.indexImport.value.PollingDB, "polling-db", config.indexImport.value.PollingDB, "pipeline state database")
+	flags.StringVar(&config.indexImport.value.NATSURL, "nats-url", config.indexImport.value.NATSURL, "NATS server URL")
+	flags.StringVar(&config.indexImport.value.File, "file", "", "import one quarterly TSV file")
+	flags.BoolVar(&config.indexImport.value.Latest, "latest", false, "import the newest local quarterly TSV")
+	flags.IntVar(&config.indexImport.value.Year, "year", 0, "import all quarters for one year")
+	flags.IntVar(&config.indexImport.value.FromYear, "from-year", 0, "first year to import")
+	flags.IntVar(&config.indexImport.value.ToYear, "to-year", 0, "last year to import")
+	flags.BoolVar(&config.indexImport.value.DryRun, "dry-run", false, "read and report without writing")
 	flags.Usage = func() {
 		printSubcommandHelp("index import",
 			"Import local quarterly indexes into the event pipeline.",
@@ -72,10 +60,4 @@ func parseIndexImportConfig(args []string) (appConfig, error) {
 	}
 
 	return config, nil
-}
-
-func runIndexImport(ctx context.Context, config indexImportConfig,
-	logger *slog.Logger,
-) error {
-	return indeximport.Run(ctx, config.value, logger)
 }

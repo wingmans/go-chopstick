@@ -1,15 +1,12 @@
-package main
+package choppie
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 
 	"wingman.com/chopstick/internal/edgar"
-	"wingman.com/chopstick/internal/edgarapp"
 	"wingman.com/chopstick/internal/eventbus"
 )
 
@@ -74,31 +71,4 @@ func parseBackfillConfig(args []string) (appConfig, error) {
 	}
 
 	return cfg, nil
-}
-
-func runBackfill(ctx context.Context, cfg backfillConfig,
-	logger *slog.Logger,
-) error {
-	config, err := resolveBackfillConfig(cfg)
-	if err != nil {
-		return err
-	}
-
-	return edgarapp.Backfill(ctx, config, logger)
-}
-
-func resolveBackfillConfig(cfg backfillConfig) (edgarapp.Config, error) {
-	config, err := edgarapp.ConfigFromEnvironment()
-	if err != nil {
-		return edgarapp.Config{}, err
-	}
-
-	config.NATSURL = cfg.natsURL
-	config.FromYear = cfg.fromYear
-
-	if err := config.SetConstituentSet(cfg.setName); err != nil {
-		return edgarapp.Config{}, err
-	}
-
-	return config, nil
 }

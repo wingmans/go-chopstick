@@ -1,15 +1,12 @@
-package main
+package choppie
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 
 	"wingman.com/chopstick/internal/edgar"
-	"wingman.com/chopstick/internal/edgarapp"
 	"wingman.com/chopstick/internal/eventbus"
 )
 
@@ -84,15 +81,4 @@ func parseRebuildConfig(args []string) (appConfig, error) {
 	}
 
 	return config, nil
-}
-
-func runRebuild(ctx context.Context, config rebuildConfig,
-	logger *slog.Logger,
-) error {
-	applicationConfig, err := resolveBackfillConfig(config.backfill)
-	if err != nil {
-		return err
-	}
-
-	return edgarapp.Rebuild(ctx, applicationConfig, logger)
 }

@@ -68,6 +68,10 @@ Live commands cross the local TCP boundary in `internal/transport`:
 - `failures list` reads unresolved worker failures;
 - `failures retry` requests an explicit requeue.
 
+`cmd/chop/main.go` owns the Kong command hierarchy and process lifecycle.
+Validation, terminal rendering, and application workflows live in
+`internal/choppie`.
+
 The `chopd` executable owns the handlers and delegates them to application
 operations. Connection handling stays inside `internal/transport`. NATS
 remains the event transport for the ingestion and processing pipeline.

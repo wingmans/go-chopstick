@@ -1,17 +1,13 @@
-package main
+package choppie
 
 import (
 	"context"
 	"errors"
 	"flag"
 	"os"
-	"time"
 
 	"wingman.com/chopstick/internal/appdata"
-	"wingman.com/chopstick/internal/coverage"
-	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
-	filingview "wingman.com/chopstick/internal/filing"
 )
 
 func parseCoverageConfig(args []string) (appConfig, error) {
@@ -101,34 +97,16 @@ func parseCoverageConfig(args []string) (appConfig, error) {
 // runCoverageCommand executes the coverage analysis based on the provided application configuration.
 // It generates a coverage report and writes it to the specified output path.
 func runCoverageCommand(ctx context.Context, cfg appConfig) error {
-	taxonomy, err := filingview.LoadTaxonomy("")
-	if err != nil {
-		return err
-	}
-
-	report, err := coverage.Build(ctx, coverage.Config{
-		MasterPath: cfg.coverage.masterPath, IndexesDir: cfg.coverage.indexesDir,
-		FilingsDir: cfg.coverage.filingsDir, ParsedDir: cfg.coverage.parsedDir,
+	return Coverage(ctx, CoverageConfig{
+		MasterPath: cfg.coverage.masterPath,
+		IndexesDir: cfg.coverage.indexesDir,
+		FilingsDir: cfg.coverage.filingsDir,
+		ParsedDir:  cfg.coverage.parsedDir,
 		AnalysisDB: cfg.coverage.analysisDB,
-		Filter:     cfg.coverage.filter, SetName: cfg.coverage.setName,
-		FromYear: cfg.coverage.fromYear, ToYear: cfg.coverage.toYear,
-		Taxonomy: taxonomy, GeneratedAt: time.Now().UTC(),
+		OutputPath: cfg.coverage.out,
+		Filter:     cfg.coverage.filter,
+		SetName:    cfg.coverage.setName,
+		FromYear:   cfg.coverage.fromYear,
+		ToYear:     cfg.coverage.toYear,
 	})
-	if err != nil {
-		return err
-	}
-
-	if err := coverage.WriteJSON(cfg.coverage.out, report); err != nil {
-		return err
-	}
-
-	logger := ctxlog.FromContext(ctx)
-	logger.Info("EDGAR coverage report written", "path", cfg.coverage.out,
-		"expected", report.Summary.Expected, "downloaded", report.Summary.Downloaded,
-		"parsed", report.Summary.Parsed, "missing", report.Summary.Missing,
-		"unparsed", report.Summary.Unparsed,
-		"missing_metrics", report.Summary.MissingMetrics,
-		"acquisition_requests", len(report.Acquisition))
-
-	return nil
 }

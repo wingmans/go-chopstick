@@ -1,4 +1,4 @@
-package main
+package choppie
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/ctxlog"
-	filingworkflow "wingman.com/chopstick/internal/pipeline"
 )
 
 func parseSubmissionConfig(args []string) (appConfig, error) {
@@ -100,22 +99,12 @@ func runParse(ctx context.Context, cfg appConfig) error {
 		"reprocess", cfg.parse.reprocess,
 	)
 
-	processing := filingworkflow.ProcessingConfig{
-		Directory:        appdata.Path("parsed"),
-		FilingsDirectory: appdata.Path("cache", "filings"),
-		AnalysisDBPath:   cfg.parse.analysisDB,
-		FormType:         "",
-		Reprocess:        cfg.parse.reprocess,
-		Noop:             cfg.parse.noop,
-	}
-	if len(cfg.parse.files) > 0 {
-		_, err := filingworkflow.ProcessLocalSubmissions(ctx, cfg.parse.files, processing)
-
-		return err
-	}
-
-	_, err := filingworkflow.ProcessLocalFilings(ctx, cfg.parse.masterPath,
-		appdata.Path("cache", "filings"), processing, cfg.parse.filter)
-
-	return err
+	return Parse(ctx, ParseConfig{
+		Files:      cfg.parse.files,
+		MasterPath: cfg.parse.masterPath,
+		AnalysisDB: cfg.parse.analysisDB,
+		Filter:     cfg.parse.filter,
+		Noop:       cfg.parse.noop,
+		Reprocess:  cfg.parse.reprocess,
+	})
 }
