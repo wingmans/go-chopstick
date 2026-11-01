@@ -1,4 +1,4 @@
-// Package appdata resolves paths in the application's data directory.
+// Package appdata owns application data paths and the process ownership lock.
 package appdata
 
 import (

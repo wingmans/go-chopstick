@@ -11,7 +11,7 @@ import (
 
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/ownership"
-	"wingman.com/chopstick/internal/ownershipstore"
+	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 )
 
 func TestOwnershipViewerUsesSelectedCompanySet(t *testing.T) {

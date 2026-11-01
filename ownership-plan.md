@@ -478,7 +478,7 @@ upgrades, and temporary failures.
 ### Phase 1: foundation
 
 - Add the ownership form registry and family classification.
-- Add `ownershipstore` with an embedded, versioned SQLite schema.
+- Add `ownership/store` with an embedded, versioned SQLite schema.
 - Add filing, party, security, provenance, and coverage tables.
 - Add a streaming candidate iterator with accession deduplication.
 - Add a command that defaults to `data/ownership.db` and the existing cache.

@@ -17,7 +17,7 @@ import (
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/marketstore"
+	marketstore "wingman.com/chopstick/internal/market/store"
 )
 
 const (

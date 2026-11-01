@@ -1,4 +1,4 @@
-package ownershippipeline
+package pipeline
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"wingman.com/chopstick/internal/edgar"
-	"wingman.com/chopstick/internal/ownershipstore"
+	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 )
 
 type rejectingTransport struct {

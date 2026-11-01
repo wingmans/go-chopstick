@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/marketstore"
-	"wingman.com/chopstick/internal/marketworker"
+	marketstore "wingman.com/chopstick/internal/market/store"
+	marketworker "wingman.com/chopstick/internal/market/worker"
 )
 
 var errSyncIncomplete = errors.New("yahoo synchronization is incomplete")

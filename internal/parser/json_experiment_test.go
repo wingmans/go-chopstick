@@ -1,11 +1,11 @@
-// Package jsonexp contains experiments for the parsed-filing JSON boundary.
-// It is intentionally separate from production persistence code.
+// These tests contain experiments for the parsed-filing JSON boundary.
+// They are intentionally separate from production persistence code.
 //
 // The tests are an A/B harness, not application tests. They answer whether a
 // change to JSON reading or writing is worth carrying into the parser. Keep
 // the fixture and the large local artifact as separate cases: the fixture is
 // stable in CI, while the local artifact represents realistic filing size.
-package jsonexp
+package parser_test
 
 import (
 	"bufio"
@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	fixturePath = "testdata/filing.json"
+	fixturePath = "testdata/jsonexp/filing.json"
 	// largePath is deliberately a package-level path rather than an environment
 	// variable. It points at a real parsed filing when the local data set is
 	// available; the related benchmark skips when it is not.

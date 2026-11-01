@@ -1,4 +1,4 @@
-package ownershipstore
+package store
 
 import (
 	"database/sql"

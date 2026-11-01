@@ -15,8 +15,8 @@ import (
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
 	"wingman.com/chopstick/internal/ownership"
-	"wingman.com/chopstick/internal/ownershippipeline"
-	"wingman.com/chopstick/internal/ownershipstore"
+	ownershippipeline "wingman.com/chopstick/internal/ownership/pipeline"
+	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 	"wingman.com/chopstick/internal/pipeline"
 	"wingman.com/chopstick/internal/pollingworker"
 )

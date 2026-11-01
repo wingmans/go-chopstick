@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/marketstore"
-	"wingman.com/chopstick/internal/marketworker"
+	marketstore "wingman.com/chopstick/internal/market/store"
+	marketworker "wingman.com/chopstick/internal/market/worker"
 )
 
 // workReader and workWriter keep the downloader independent of SQLite. A

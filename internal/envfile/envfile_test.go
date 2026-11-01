@@ -8,9 +8,7 @@ import (
 
 func TestLoadPreservesExistingEnvironment(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(path, []byte(
-		"EXISTING=file\nNEW_VALUE='from file'\n",
-	), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("EXISTING=file\nNEW_VALUE='from file'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

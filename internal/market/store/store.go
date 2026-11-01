@@ -1,6 +1,6 @@
-// Package marketstore persists market prices, corporate actions, and the
+// Package store persists market prices, corporate actions, and the
 // operational state needed to incrementally update them.
-package marketstore
+package store
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/marketstore/dbgen"
+	"wingman.com/chopstick/internal/market/store/dbgen"
 )
 
 const dateLayout = "2006-01-02"

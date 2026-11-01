@@ -1,4 +1,4 @@
-package marketstore
+package store
 
 import (
 	"path/filepath"

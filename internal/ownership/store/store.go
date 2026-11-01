@@ -1,5 +1,5 @@
-// Package ownershipstore persists normalized SEC ownership filings.
-package ownershipstore
+// Package store persists normalized SEC ownership filings.
+package store
 
 import (
 	"context"

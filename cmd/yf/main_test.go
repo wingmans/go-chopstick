@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/marketstore"
+	marketstore "wingman.com/chopstick/internal/market/store"
 )
 
 func TestParseConfigBoundsFetchWork(t *testing.T) {

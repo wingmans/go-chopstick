@@ -1,6 +1,4 @@
-// Package applock prevents multiple application owners from using one data
-// root concurrently.
-package applock
+package appdata
 
 import (
 	"errors"
@@ -19,8 +17,8 @@ type Lock struct {
 	file *os.File
 }
 
-// Acquire obtains an exclusive, non-blocking lock for path.
-func Acquire(path string) (*Lock, error) {
+// AcquireLock obtains an exclusive, non-blocking lock for path.
+func AcquireLock(path string) (*Lock, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, fmt.Errorf("create lock directory: %w", err)
 	}

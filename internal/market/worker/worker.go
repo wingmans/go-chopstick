@@ -1,5 +1,5 @@
-// Package marketworker runs bounded and continuous market-data synchronization.
-package marketworker
+// Package worker runs bounded and continuous market-data synchronization.
+package worker
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/marketstore"
+	marketstore "wingman.com/chopstick/internal/market/store"
 )
 
 const defaultLeaseDuration = 15 * time.Minute

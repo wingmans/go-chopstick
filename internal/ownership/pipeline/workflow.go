@@ -1,6 +1,6 @@
-// Package ownershippipeline coordinates ownership downloads, parsing, and
+// Package pipeline coordinates ownership downloads, parsing, and
 // completion accounting.
-package ownershippipeline
+package pipeline
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/ownership"
-	"wingman.com/chopstick/internal/ownershipstore"
+	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 )
 
 // Config controls one streaming ownership import and completion pass.

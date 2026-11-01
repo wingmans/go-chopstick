@@ -18,7 +18,6 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"wingman.com/chopstick/internal/appdata"
-	"wingman.com/chopstick/internal/applock"
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
@@ -183,7 +182,7 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 		return err
 	}
 
-	lock, err := applock.Acquire(appdata.Path("chopd.lock"))
+	lock, err := appdata.AcquireLock(appdata.Path("chopd.lock"))
 	if err != nil {
 		return err
 	}

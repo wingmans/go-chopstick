@@ -10,7 +10,7 @@ import (
 	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
 	"wingman.com/chopstick/internal/news"
-	"wingman.com/chopstick/internal/ownershipstore"
+	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 	filingstore "wingman.com/chopstick/internal/web/store"
 )
 

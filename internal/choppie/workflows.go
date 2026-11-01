@@ -17,8 +17,8 @@ import (
 	filingview "wingman.com/chopstick/internal/filing"
 	"wingman.com/chopstick/internal/indeximport"
 	"wingman.com/chopstick/internal/ownership"
-	"wingman.com/chopstick/internal/ownershippipeline"
-	"wingman.com/chopstick/internal/ownershipstore"
+	ownershippipeline "wingman.com/chopstick/internal/ownership/pipeline"
+	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 	filingworkflow "wingman.com/chopstick/internal/pipeline"
 	"wingman.com/chopstick/internal/transport"
 )

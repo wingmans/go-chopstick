@@ -13,7 +13,7 @@ import (
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/ownership"
-	"wingman.com/chopstick/internal/ownershippipeline"
+	ownershippipeline "wingman.com/chopstick/internal/ownership/pipeline"
 )
 
 type ownershipCommandConfig struct {

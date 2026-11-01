@@ -1,4 +1,4 @@
-package marketworker
+package worker
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/marketstore"
+	marketstore "wingman.com/chopstick/internal/market/store"
 )
 
 type testFetcher struct {

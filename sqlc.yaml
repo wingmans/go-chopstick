@@ -18,12 +18,12 @@ sql:
           feed_url: FeedURL
   - name: market
     engine: sqlite
-    schema: internal/marketstore/sql/schema.sql
-    queries: internal/marketstore/sql/queries.sql
+    schema: internal/market/store/sql/schema.sql
+    queries: internal/market/store/sql/queries.sql
     gen:
       go:
         package: dbgen
-        out: internal/marketstore/dbgen
+        out: internal/market/store/dbgen
         sql_package: database/sql
         emit_empty_slices: true
         emit_prepared_queries: true

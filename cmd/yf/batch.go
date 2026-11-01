@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/marketstore"
-	"wingman.com/chopstick/internal/marketworker"
+	marketstore "wingman.com/chopstick/internal/market/store"
+	marketworker "wingman.com/chopstick/internal/market/worker"
 )
 
 const (

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/appdata"
-	"wingman.com/chopstick/internal/applock"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
 	"wingman.com/chopstick/internal/eventworker"
@@ -21,7 +20,7 @@ import (
 // Backfill downloads the historical index, publishes discoveries, and drains
 // the finite selection, download, and processing workload.
 func Backfill(ctx context.Context, config Config, logger *slog.Logger) error {
-	lock, err := applock.Acquire(appdata.Path("chopd.lock"))
+	lock, err := appdata.AcquireLock(appdata.Path("chopd.lock"))
 	if err != nil {
 		return fmt.Errorf("backfill requires chopd to be stopped: %w", err)
 	}
@@ -129,7 +128,7 @@ func Rebuild(ctx context.Context, config Config, logger *slog.Logger) error {
 		return errors.New("a constituent set is required")
 	}
 
-	lock, err := applock.Acquire(appdata.Path("chopd.lock"))
+	lock, err := appdata.AcquireLock(appdata.Path("chopd.lock"))
 	if err != nil {
 		return fmt.Errorf("rebuild requires chopd to be stopped: %w", err)
 	}
