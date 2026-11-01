@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const (
@@ -120,7 +120,7 @@ func Save(parsedDir string, view View) (string, error) {
 // Extract extracts dividend information from one parsed filing. It reads only
 // the source path recorded by that filing and never discovers other files.
 func Extract(ctx context.Context, parsedDir, filingsDir string,
-	filing *edgar.ParsedFiling,
+	filing *parser.ParsedFiling,
 ) ([]Event, []Observation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
@@ -133,7 +133,7 @@ func Extract(ctx context.Context, parsedDir, filingsDir string,
 // This makes reprocessing one accession idempotent without scanning a company
 // directory.
 func Merge(ctx context.Context, current View, parsedDir, filingsDir string,
-	filing *edgar.ParsedFiling,
+	filing *parser.ParsedFiling,
 ) (View, error) {
 	if filing == nil {
 		return View{}, errors.New("dividend view requires a filing")
@@ -211,14 +211,14 @@ func Load(path string) (View, error) {
 	return view, nil
 }
 
-func filingData(parsedDir, filingsDir string, filing *edgar.ParsedFiling) ([]Event, []Observation, error) {
+func filingData(parsedDir, filingsDir string, filing *parser.ParsedFiling) ([]Event, []Observation, error) {
 	var (
 		events       []Event
 		observations []Observation
 	)
 
 	for _, instance := range filing.Instances {
-		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
+		contexts := make(map[string]parser.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			contexts[context.ID] = context
 		}
@@ -310,7 +310,7 @@ func filingData(parsedDir, filingsDir string, filing *edgar.ParsedFiling) ([]Eve
 	return events, observations, nil
 }
 
-func eventFromText(filing *edgar.ParsedFiling, document int, text, amount string) Event {
+func eventFromText(filing *parser.ParsedFiling, document int, text, amount string) Event {
 	source := Source{
 		Accession: filing.Metadata.Accession,
 		FormType:  filing.Metadata.FormType, FilingDate: filing.Metadata.FilingDate,
@@ -406,7 +406,7 @@ func dedupeObservations(view *View) {
 	view.Observations = observations
 }
 
-func sourcePath(parsedDir, filingsDir string, filing *edgar.ParsedFiling) (string, error) {
+func sourcePath(parsedDir, filingsDir string, filing *parser.ParsedFiling) (string, error) {
 	switch filing.SourceBase {
 	case "absolute":
 		resolved, err := filepath.Abs(filing.SourcePath)

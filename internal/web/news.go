@@ -12,8 +12,8 @@ import (
 
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
+	filingwork "wingman.com/chopstick/internal/filing/work"
 	"wingman.com/chopstick/internal/news"
-	"wingman.com/chopstick/internal/pollingworker"
 )
 
 // NewsServer serves the small, stream-backed EDGAR news page.
@@ -130,7 +130,7 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	selected := true
-	event := pollingworker.FilingEvent{
+	event := filingwork.Event{
 		SchemaVersion: 1, EventID: "filing.requested:" + item.AccessionNumber,
 		AccessionNumber: item.AccessionNumber, CIK: item.CIK,
 		CompanyName: item.CompanyName, FormType: item.FormType,

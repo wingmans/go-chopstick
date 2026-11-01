@@ -3,19 +3,19 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestNormalizeUnits(t *testing.T) {
 	tests := []struct {
 		name string
-		unit edgar.FactUnit
+		unit parser.FactUnit
 		want string
 	}{
 		{
 			name: "usd",
-			unit: edgar.FactUnit{
-				ID: "u1", Measures: []edgar.QName{{
+			unit: parser.FactUnit{
+				ID: "u1", Measures: []parser.QName{{
 					Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD",
 				}},
 				Numerator: nil, Denominator: nil, Source: emptyXMLNode(),
@@ -24,8 +24,8 @@ func TestNormalizeUnits(t *testing.T) {
 		},
 		{
 			name: "shares",
-			unit: edgar.FactUnit{
-				ID: "u2", Measures: []edgar.QName{{
+			unit: parser.FactUnit{
+				ID: "u2", Measures: []parser.QName{{
 					Namespace: "http://www.xbrl.org/2003/instance", Local: "shares",
 				}},
 				Numerator: nil, Denominator: nil, Source: emptyXMLNode(),
@@ -34,8 +34,8 @@ func TestNormalizeUnits(t *testing.T) {
 		},
 		{
 			name: "pure",
-			unit: edgar.FactUnit{
-				ID: "u3", Measures: []edgar.QName{{
+			unit: parser.FactUnit{
+				ID: "u3", Measures: []parser.QName{{
 					Namespace: "http://www.xbrl.org/2003/instance", Local: "pure",
 				}},
 				Numerator: nil, Denominator: nil, Source: emptyXMLNode(),
@@ -44,12 +44,12 @@ func TestNormalizeUnits(t *testing.T) {
 		},
 		{
 			name: "usd per share",
-			unit: edgar.FactUnit{
+			unit: parser.FactUnit{
 				ID: "u4", Measures: nil,
-				Numerator: []edgar.QName{{
+				Numerator: []parser.QName{{
 					Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD",
 				}},
-				Denominator: []edgar.QName{{
+				Denominator: []parser.QName{{
 					Namespace: "http://www.xbrl.org/2003/instance", Local: "shares",
 				}},
 				Source: emptyXMLNode(),
@@ -68,9 +68,9 @@ func TestNormalizeUnits(t *testing.T) {
 }
 
 func TestNormalizedUnitPreservesUnknownUnitRef(t *testing.T) {
-	got := normalizedUnit(edgar.Fact{
+	got := normalizedUnit(parser.Fact{
 		Namespaces: nil,
-		Concept:    edgar.QName{Namespace: "", Local: ""},
+		Concept:    parser.QName{Namespace: "", Local: ""},
 		Value:      "",
 		ContextRef: "",
 		UnitRef:    "missing",

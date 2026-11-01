@@ -19,7 +19,7 @@ import (
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
-	"wingman.com/chopstick/internal/pollingworker"
+	filingwork "wingman.com/chopstick/internal/filing/work"
 )
 
 var quarterlyFilePattern = regexp.MustCompile(`^(\d{4})-QTR([1-4])\.tsv$`)
@@ -103,7 +103,7 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	}
 	defer func() { _ = lock.Close() }()
 
-	store, err := pollingworker.NewDedupeServiceContext(ctx, config.PollingDB)
+	store, err := filingwork.Open(ctx, config.PollingDB)
 	if err != nil {
 		return err
 	}
@@ -174,8 +174,8 @@ func selectFiles(config Config) ([]string, error) {
 
 func readEvents(ctx context.Context,
 	files []string,
-) ([]pollingworker.FilingEvent, error) {
-	events := make([]pollingworker.FilingEvent, 0)
+) ([]filingwork.Event, error) {
+	events := make([]filingwork.Event, 0)
 
 	for _, path := range files {
 		file, err := os.Open(path)
@@ -208,7 +208,7 @@ func readEvents(ctx context.Context,
 			}
 
 			accession := accessionFromPath(record.FilingPath)
-			events = append(events, pollingworker.FilingEvent{
+			events = append(events, filingwork.Event{
 				SchemaVersion: 1, EventID: "filing.discovered:" + accession,
 				AccessionNumber: accession, CIK: record.CIK,
 				CompanyName: record.CompanyName, FormType: record.FormType,

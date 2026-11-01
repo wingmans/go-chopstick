@@ -3,19 +3,19 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const testUSGAAPNamespace = "http://fasb.org/us-gaap/2024-01-31"
 
 func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
-	filing := &edgar.ParsedFiling{
-		SchemaVersion: edgar.ParsedSchemaVersion,
+	filing := &parser.ParsedFiling{
+		SchemaVersion: parser.ParsedSchemaVersion,
 		ParserVersion: "test",
 		SourcePath:    "",
 		SourceBase:    "",
 		SourceSHA256:  "",
-		Metadata: edgar.FilingMetadata{
+		Metadata: parser.FilingMetadata{
 			Accession:  "0000000000-26-000001",
 			CIK:        "0000789019",
 			FormType:   "10-K",
@@ -26,14 +26,14 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 			Header:     nil,
 		},
 		Documents: nil,
-		Instances: []edgar.XBRLInstance{{
+		Instances: []parser.XBRLInstance{{
 			Root:          emptyXMLNode(),
 			DocumentIndex: 0,
 			Document:      "",
-			Facts: []edgar.Fact{
+			Facts: []parser.Fact{
 				{
 					Namespaces: nil,
-					Concept: edgar.QName{
+					Concept: parser.QName{
 						Namespace: testUSGAAPNamespace,
 						Local:     "RevenueFromContractWithCustomerExcludingAssessedTax",
 					},
@@ -42,7 +42,7 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 				},
 				{
 					Namespaces: nil,
-					Concept: edgar.QName{
+					Concept: parser.QName{
 						Namespace: testUSGAAPNamespace,
 						Local:     "Revenues",
 					},
@@ -51,7 +51,7 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 				},
 				{
 					Namespaces: nil,
-					Concept: edgar.QName{
+					Concept: parser.QName{
 						Namespace: testUSGAAPNamespace,
 						Local:     "RevenueFromContractWithCustomerExcludingAssessedTax",
 					},
@@ -59,7 +59,7 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 					Precision: "", Language: "", Nil: false, Attributes: nil, Structured: nil,
 				},
 			},
-			Contexts: []edgar.FactContext{
+			Contexts: []parser.FactContext{
 				{
 					ID: "fy", Entity: "", Scheme: "", Instant: "",
 					StartDate: "2025-07-01", EndDate: "2026-06-30",
@@ -69,9 +69,9 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 					ID: "segment", Entity: "", Scheme: "", Instant: "",
 					StartDate: "2025-07-01", EndDate: "2026-06-30",
 					Forever: false,
-					Dimensions: []edgar.FactDimension{{
-						Axis: edgar.QName{Namespace: "urn:test", Local: "SegmentAxis"},
-						Member: &edgar.QName{
+					Dimensions: []parser.FactDimension{{
+						Axis: parser.QName{Namespace: "urn:test", Local: "SegmentAxis"},
+						Member: &parser.QName{
 							Namespace: "urn:test", Local: "CloudMember",
 						},
 						Typed: nil,
@@ -79,9 +79,9 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 					Source: emptyXMLNode(),
 				},
 			},
-			Units: []edgar.FactUnit{{
+			Units: []parser.FactUnit{{
 				ID: "usd",
-				Measures: []edgar.QName{{
+				Measures: []parser.QName{{
 					Namespace: "http://www.xbrl.org/2003/iso4217", Local: "USD",
 				}},
 				Numerator: nil, Denominator: nil, Source: emptyXMLNode(),
@@ -90,7 +90,7 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 			Footnotes:   nil,
 			Unsupported: nil,
 		}},
-		Status:      edgar.ParseComplete,
+		Status:      parser.ParseComplete,
 		Diagnostics: nil,
 	}
 
@@ -113,23 +113,23 @@ func TestBuildSelectsDeterministicDuplicateFact(t *testing.T) {
 func TestBuildSelectsDuplicateFactIndependentOfEncounterOrder(t *testing.T) {
 	first := FactValue{
 		Value: "", Nil: false, ContextRef: "", Decimals: "", UnitRef: "",
-		priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+		priority: 0, concept: parser.QName{Namespace: "", Local: ""},
 		id: "", precision: "",
 	}
-	second := selectedFact{Fact: edgar.Fact{
+	second := selectedFact{Fact: parser.Fact{
 		Namespaces: nil,
-		Concept:    edgar.QName{Namespace: testUSGAAPNamespace, Local: "Revenues"},
+		Concept:    parser.QName{Namespace: testUSGAAPNamespace, Local: "Revenues"},
 		Value:      "nil-loses", ContextRef: "c2", UnitRef: "usd", Nil: true, ID: "b",
 		Decimals: "", Precision: "", Language: "", Attributes: nil, Structured: nil,
 	}, Priority: 1}
-	third := selectedFact{Fact: edgar.Fact{
+	third := selectedFact{Fact: parser.Fact{
 		Namespaces: nil,
-		Concept:    edgar.QName{Namespace: testUSGAAPNamespace, Local: "Revenues"},
+		Concept:    parser.QName{Namespace: testUSGAAPNamespace, Local: "Revenues"},
 		Value:      "exact-wins", ContextRef: "c1", UnitRef: "usd", Decimals: "INF", ID: "a",
 		Precision: "", Language: "", Nil: false, Attributes: nil, Structured: nil,
 	}, Priority: 1}
 
-	selected, concept := selectFact(first, edgar.QName{Namespace: "", Local: ""}, second)
+	selected, concept := selectFact(first, parser.QName{Namespace: "", Local: ""}, second)
 	selected, _ = selectFact(selected, concept, third)
 
 	if selected.Value != "exact-wins" || selected.ContextRef != "c1" {
@@ -159,9 +159,9 @@ func onlyRow(t *testing.T, groups []SummaryGroup, title string) FactSeries {
 	}
 }
 
-func emptyXMLNode() edgar.XMLNode {
-	return edgar.XMLNode{
-		Name:       edgar.QName{Namespace: "", Local: ""},
+func emptyXMLNode() parser.XMLNode {
+	return parser.XMLNode{
+		Name:       parser.QName{Namespace: "", Local: ""},
 		Language:   "",
 		Attributes: nil,
 		Namespaces: nil,

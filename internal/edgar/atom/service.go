@@ -1,4 +1,4 @@
-package pollingworker
+package atom
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/eventbus"
+	"wingman.com/chopstick/internal/filing/work"
 )
 
 type ServiceConfig struct {
@@ -23,11 +24,11 @@ func Run(ctx context.Context, cfg ServiceConfig) error {
 	}
 
 	logger := ctxlog.FromContext(ctx)
-	out := make(chan FilingEvent, 256)
+	out := make(chan work.Event, 256)
 
 	go emitLogs(ctx, logger, out)
 
-	store, err := NewDedupeServiceContext(ctx, cfg.DBPath)
+	store, err := work.Open(ctx, cfg.DBPath)
 	if err != nil {
 		return err
 	}
@@ -57,7 +58,7 @@ func Run(ctx context.Context, cfg ServiceConfig) error {
 	}
 }
 
-func runCycle(ctx context.Context, worker *Worker, store *DedupeService,
+func runCycle(ctx context.Context, worker *Worker, store *work.Store,
 	publisher eventbus.Publisher,
 ) error {
 	if err := store.PublishPending(ctx, publisher); err != nil {
@@ -71,7 +72,7 @@ func runCycle(ctx context.Context, worker *Worker, store *DedupeService,
 	return store.PublishPending(ctx, publisher)
 }
 
-func emitLogs(ctx context.Context, logger *slog.Logger, out <-chan FilingEvent) {
+func emitLogs(ctx context.Context, logger *slog.Logger, out <-chan work.Event) {
 	for {
 		select {
 		case <-ctx.Done():

@@ -3,19 +3,15 @@ package choppie
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/artifacts"
-	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 type artifactCommandConfig struct {
@@ -26,102 +22,9 @@ type artifactCommandConfig struct {
 	filingsDir   string
 	artifactsDir string
 	address      string
-	types        stringList
-	filenames    stringList
+	types        []string
+	filenames    []string
 	all          bool
-}
-
-func parseArtifactCommand(args []string) (appConfig, error) {
-	cfg := appConfig{
-		command: "artifacts",
-		artifacts: artifactCommandConfig{
-			parsedDir:    appdata.Path("parsed"),
-			filingsDir:   appdata.Path("cache", "filings"),
-			artifactsDir: appdata.Path("tmp", "artifacts"),
-			address:      "127.0.0.1:8090",
-		},
-	}
-	flags := flag.NewFlagSet("artifacts", flag.ContinueOnError)
-	flags.SetOutput(os.Stdout)
-
-	flags.Usage = func() {
-		printSubcommandHelp("artifacts <list|extract|serve|clean>",
-			"Inspect disposable documents from one parsed SEC filing.",
-			[]helpOption{
-				{"--cik <cik>", "Required filing CIK."},
-				{"--accession <number>", "Required accession number."},
-				{"--type <type>", "Extract a document type; repeatable."},
-				{"--document <name>", "Extract one filename; repeatable."},
-				{"--all", "Extract every document."},
-				{"--address <host:port>", "Viewer address; loopback only."},
-				{"--artifacts-dir <path>", "Disposable artifact root."},
-				{"--parsed-dir <path>", "Parsed filing directory."},
-				{"--filings-dir <path>", "Raw filing cache directory."},
-			})
-	}
-	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
-		flags.Usage()
-
-		return appConfig{}, flag.ErrHelp
-	}
-
-	if len(args) == 0 {
-		return subcommandError(flags,
-			errors.New("use 'chop artifacts <list|extract|serve|clean>'"))
-	}
-
-	cfg.artifacts.operation = args[0]
-	if cfg.artifacts.operation != "list" &&
-		cfg.artifacts.operation != "extract" &&
-		cfg.artifacts.operation != "serve" &&
-		cfg.artifacts.operation != "clean" {
-		return subcommandError(flags, errors.New("use 'chop artifacts <list|extract|serve|clean>'"))
-	}
-
-	flags.StringVar(&cfg.artifacts.cik, "cik", "", "filing CIK")
-	flags.StringVar(&cfg.artifacts.accession, "accession", "", "filing accession number")
-	flags.StringVar(&cfg.artifacts.parsedDir, "parsed-dir", cfg.artifacts.parsedDir, "parsed filing directory")
-	flags.StringVar(&cfg.artifacts.filingsDir, "filings-dir", cfg.artifacts.filingsDir, "raw filing cache directory")
-	flags.StringVar(&cfg.artifacts.artifactsDir, "artifacts-dir", cfg.artifacts.artifactsDir, "disposable artifact root")
-	flags.StringVar(&cfg.artifacts.address, "address", cfg.artifacts.address, "viewer listen address")
-	flags.Var(&cfg.artifacts.types, "type", "document type to extract")
-	flags.Var(&cfg.artifacts.filenames, "document", "document filename to extract")
-	flags.BoolVar(&cfg.artifacts.all, "all", false, "extract every document")
-
-	if err := flags.Parse(args[1:]); err != nil {
-		return appConfig{}, flag.ErrHelp
-	}
-
-	if flags.NArg() != 0 {
-		return subcommandError(flags, errors.New("unexpected positional argument"))
-	}
-
-	normalizedCIK, err := constituents.NormalizeCIK(cfg.artifacts.cik)
-	if err != nil {
-		return subcommandError(flags, fmt.Errorf("--cik: %w", err))
-	}
-
-	cfg.artifacts.cik = normalizedCIK
-
-	cfg.artifacts.accession = strings.TrimSpace(cfg.artifacts.accession)
-	if cfg.artifacts.accession == "" ||
-		filepath.Base(cfg.artifacts.accession) != cfg.artifacts.accession {
-		return subcommandError(flags, errors.New("--accession must be a safe accession number"))
-	}
-
-	if cfg.artifacts.operation == "extract" && !cfg.artifacts.all &&
-		len(cfg.artifacts.types) == 0 && len(cfg.artifacts.filenames) == 0 {
-		return subcommandError(flags, errors.New(
-			"extract requires --type, --document, or --all"))
-	}
-
-	if cfg.artifacts.operation == "serve" {
-		if err := validateViewerAddress(cfg.artifacts.address); err != nil {
-			return subcommandError(flags, err)
-		}
-	}
-
-	return cfg, nil
 }
 
 func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
@@ -143,7 +46,7 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 	parsedPath := filepath.Join(cfg.parsedDir, cfg.cik, cfg.accession,
 		"filing.json")
 
-	filing, err := edgar.LoadParsedFiling(parsedPath)
+	filing, err := parser.LoadParsedFiling(parsedPath)
 	if err != nil {
 		return err
 	}
@@ -165,7 +68,7 @@ func runArtifacts(ctx context.Context, cfg artifactCommandConfig) error {
 		return err
 	}
 
-	matches, err := edgar.SourceFingerprintMatches(ctx, source)
+	matches, err := parser.SourceFingerprintMatches(ctx, source)
 	if err != nil {
 		return err
 	}
@@ -251,7 +154,7 @@ func serveArtifacts(ctx context.Context, cfg artifactCommandConfig,
 	return nil
 }
 
-func artifactSourcePath(filingsDir string, filing *edgar.ParsedFiling,
+func artifactSourcePath(filingsDir string, filing *parser.ParsedFiling,
 ) (string, error) {
 	switch filing.SourceBase {
 	case "absolute":

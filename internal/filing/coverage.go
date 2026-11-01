@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const coverageTextLimit = 25
@@ -25,7 +25,7 @@ type CoverageReport struct {
 
 // Coverage inspects source-level facts before compact projection. It reports
 // findings without changing the parsed filing or taxonomy.
-func Coverage(filing *edgar.ParsedFiling, taxonomy Taxonomy) CoverageReport {
+func Coverage(filing *parser.ParsedFiling, taxonomy Taxonomy) CoverageReport {
 	report := CoverageReport{
 		TaxonomyVersion: taxonomy.TaxonomyVersion,
 		Facts:           0, Mapped: 0, Unmapped: nil, Extensions: nil,
@@ -37,7 +37,7 @@ func Coverage(filing *edgar.ParsedFiling, taxonomy Taxonomy) CoverageReport {
 	seen := map[string]struct{}{}
 
 	for _, instance := range filing.Instances {
-		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
+		contexts := make(map[string]parser.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			contexts[context.ID] = context
 		}
@@ -118,7 +118,7 @@ func sortedLintTerms(terms map[string]*LintTerm) []LintTerm {
 	return result
 }
 
-func validContextPeriod(context edgar.FactContext) bool {
+func validContextPeriod(context parser.FactContext) bool {
 	if context.Instant != "" {
 		_, err := parseDate(context.Instant)
 

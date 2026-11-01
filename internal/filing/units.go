@@ -3,11 +3,11 @@ package filing
 import (
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 // unitMap creates a mapping from unit IDs to their normalized string representations.
-func unitMap(instance edgar.XBRLInstance) map[string]string {
+func unitMap(instance parser.XBRLInstance) map[string]string {
 	result := make(map[string]string, len(instance.Units))
 	for _, unit := range instance.Units {
 		result[unit.ID] = normalizeUnit(unit)
@@ -17,7 +17,7 @@ func unitMap(instance edgar.XBRLInstance) map[string]string {
 }
 
 // normalizedUnit retrieves the normalized string representation of the unit associated with a fact.
-func normalizedUnit(fact edgar.Fact, units map[string]string) string {
+func normalizedUnit(fact parser.Fact, units map[string]string) string {
 	if strings.TrimSpace(fact.UnitRef) == "" {
 		return ""
 	}
@@ -30,7 +30,7 @@ func normalizedUnit(fact edgar.Fact, units map[string]string) string {
 }
 
 // normalizeUnit converts a FactUnit into its normalized string representation.
-func normalizeUnit(unit edgar.FactUnit) string {
+func normalizeUnit(unit parser.FactUnit) string {
 	if len(unit.Measures) > 0 {
 		return normalizeMeasures(unit.Measures)
 	}
@@ -49,7 +49,7 @@ func normalizeUnit(unit edgar.FactUnit) string {
 	return "unknown:" + unit.ID
 }
 
-func normalizeMeasures(measures []edgar.QName) string {
+func normalizeMeasures(measures []parser.QName) string {
 	parts := make([]string, 0, len(measures))
 	for _, measure := range measures {
 		parts = append(parts, normalizeMeasure(measure))
@@ -59,7 +59,7 @@ func normalizeMeasures(measures []edgar.QName) string {
 }
 
 // normalizeMeasure converts an individual measure to a standardized string representation.
-func normalizeMeasure(measure edgar.QName) string {
+func normalizeMeasure(measure parser.QName) string {
 	switch strings.ToLower(measure.Local) {
 	case "usd":
 		return "USD"

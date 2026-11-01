@@ -3,7 +3,7 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestClassifyQuarterlyPeriods(t *testing.T) {
@@ -18,7 +18,7 @@ func TestClassifyQuarterlyPeriods(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			context := edgar.FactContext{StartDate: test.start, EndDate: test.end}
+			context := parser.FactContext{StartDate: test.start, EndDate: test.end}
 			if test.name == "instant" {
 				context.Instant = test.end
 			}
@@ -32,7 +32,7 @@ func TestClassifyQuarterlyPeriods(t *testing.T) {
 }
 
 func TestClassifyQuarterlyPeriodUsesReportYear(t *testing.T) {
-	context := edgar.FactContext{StartDate: "2023-07-01", EndDate: "2023-09-30"}
+	context := parser.FactContext{StartDate: "2023-07-01", EndDate: "2023-09-30"}
 
 	group, key, _ := classifyPeriod(context, "2024-06-30")
 	if group != "Quarterly" || key != "Q1 FY2024" {

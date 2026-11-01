@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const (
@@ -52,7 +52,7 @@ type ManifestDocument struct {
 
 // Extract creates a new disposable directory. It never overwrites an existing
 // bundle or modifies the source submission.
-func Extract(ctx context.Context, filing *edgar.ParsedFiling, source,
+func Extract(ctx context.Context, filing *parser.ParsedFiling, source,
 	destination string, selection Selection,
 ) (Manifest, error) {
 	if filing == nil {
@@ -165,9 +165,9 @@ func Clean(destination, cik, accession string) error {
 	return nil
 }
 
-func selectDocuments(documents []edgar.SubmissionDocument,
+func selectDocuments(documents []parser.SubmissionDocument,
 	selection Selection,
-) []edgar.SubmissionDocument {
+) []parser.SubmissionDocument {
 	types := make(map[string]struct{}, len(selection.Types))
 	for _, value := range selection.Types {
 		types[strings.ToUpper(strings.TrimSpace(value))] = struct{}{}
@@ -178,7 +178,7 @@ func selectDocuments(documents []edgar.SubmissionDocument,
 		filenames[strings.TrimSpace(value)] = struct{}{}
 	}
 
-	result := make([]edgar.SubmissionDocument, 0)
+	result := make([]parser.SubmissionDocument, 0)
 
 	for _, document := range documents {
 		_, typeMatch := types[strings.ToUpper(document.Type)]
@@ -192,7 +192,7 @@ func selectDocuments(documents []edgar.SubmissionDocument,
 	return result
 }
 
-func extractDocument(source *os.File, document edgar.SubmissionDocument,
+func extractDocument(source *os.File, document parser.SubmissionDocument,
 	destination string, remaining int64,
 ) (int64, bool, error) {
 	if remaining <= 0 || document.ContentLength < 0 ||

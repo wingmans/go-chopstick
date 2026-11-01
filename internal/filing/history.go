@@ -143,6 +143,7 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 	return result, nil
 }
 
+// historyCIK normalizes a CIK value by trimming leading zeros and whitespace.
 func historyCIK(value string) string {
 	value = strings.TrimLeft(strings.TrimSpace(value), "0")
 	if value == "" {
@@ -152,6 +153,7 @@ func historyCIK(value string) string {
 	return value
 }
 
+// historyMetricLabel returns the human-readable label for a given metric key.
 func historyMetricLabel(key string) string {
 	for _, metric := range defaultTaxonomy().Metrics {
 		if metric.Key == key {
@@ -162,10 +164,12 @@ func historyMetricLabel(key string) string {
 	return key
 }
 
+// historyGroupAllowed checks if a group title is allowed in the history.
 func historyGroupAllowed(title string) bool {
 	return title == "Fiscal year" || title == "Instant"
 }
 
+// historyYear extracts the year from a period string, handling both fiscal year and instant periods.
 func historyYear(period string) string {
 	if !strings.HasPrefix(period, "FY") || len(period) != 6 {
 		if len(period) >= 4 && period[0] >= '0' && period[0] <= '9' {
@@ -178,6 +182,7 @@ func historyYear(period string) string {
 	return period[2:]
 }
 
+// historyYears collects all unique years from the given rows and returns them sorted in descending order.
 func historyYears(rows map[string]historyRows) []string {
 	seen := map[string]struct{}{}
 
@@ -199,6 +204,7 @@ func historyYears(rows map[string]historyRows) []string {
 	return years
 }
 
+// newerHistoryCandidate determines if the candidate is newer than the current history candidate.
 func newerHistoryCandidate(candidate, current *historyCandidate) bool {
 	if candidate.FilingDate != current.FilingDate {
 		return candidate.FilingDate > current.FilingDate

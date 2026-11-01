@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
+	"time"
 
 	"github.com/alecthomas/kong"
 
@@ -17,61 +18,6 @@ import (
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/envfile"
 )
-
-type leafCommand struct {
-	Args []string `arg:"" optional:"" passthrough:""`
-}
-
-type cli struct {
-	Version kong.VersionFlag `group:"diag" help:"Print version."                              name:"version" short:"v"`
-	Verbose bool             `group:"diag" help:"Print verbose output and use debug logging."`
-
-	Log *string `enum:"critical,error,warn,info,debug,trace,off" group:"diag" help:"Log level (default: info)." placeholder:"level"`
-
-	Backfill  leafCommand  `cmd:"" group:"data"       help:"Run a finite historical pipeline."     passthrough:""`
-	Doctor    leafCommand  `cmd:"" group:"operations" help:"Validate local dependencies."          passthrough:""`
-	Status    leafCommand  `cmd:"" group:"operations" help:"Show live application status."         passthrough:""`
-	Filings   leafCommand  `cmd:"" group:"data"       help:"Download and process filings."         passthrough:""`
-	Parse     leafCommand  `cmd:"" group:"data"       help:"Parse local submissions."              passthrough:""`
-	Coverage  leafCommand  `cmd:"" group:"data"       help:"Report local filing coverage."         passthrough:""`
-	Rebuild   rebuildCLI   `cmd:"" group:"operations" help:"Rebuild disposable state."`
-	Index     indexCLI     `cmd:"" group:"data"       help:"Manage SEC indexes."`
-	Ownership ownershipCLI `cmd:"" group:"data"       help:"Import and inspect ownership filings."`
-	Failures  failuresCLI  `cmd:"" group:"operations" help:"Inspect and retry failures."`
-	Artifacts artifactsCLI `cmd:"" group:"data"       help:"Inspect filing artifacts."`
-	Taxonomy  taxonomyCLI  `cmd:"" group:"data"       help:"Inspect taxonomy coverage."`
-}
-
-type rebuildCLI struct {
-	Edgar leafCommand `cmd:"" help:"Rebuild EDGAR state." passthrough:""`
-}
-
-type indexCLI struct {
-	Download leafCommand `cmd:"" default:"withargs"           help:"Download SEC indexes." passthrough:""`
-	Import   leafCommand `cmd:"" help:"Import local indexes." passthrough:""`
-}
-
-type ownershipCLI struct {
-	Import leafCommand `cmd:"" default:"withargs"            help:"Import ownership filings." passthrough:""`
-	Status leafCommand `cmd:"" help:"Show ownership status." passthrough:""`
-}
-
-type failuresCLI struct {
-	List  leafCommand `cmd:"" help:"List unresolved failures."  passthrough:""`
-	Retry leafCommand `cmd:"" help:"Retry unresolved failures." passthrough:""`
-}
-
-type artifactsCLI struct {
-	List    leafCommand `cmd:"" help:"List source documents."     passthrough:""`
-	Extract leafCommand `cmd:"" help:"Extract source documents."  passthrough:""`
-	Serve   leafCommand `cmd:"" help:"Serve extracted documents." passthrough:""`
-	Clean   leafCommand `cmd:"" help:"Clean extracted documents." passthrough:""`
-}
-
-type taxonomyCLI struct {
-	Lint     leafCommand `cmd:"" help:"Lint compact filing views." passthrough:""`
-	Coverage leafCommand `cmd:"" help:"Report taxonomy coverage."  passthrough:""`
-}
 
 func main() {
 	os.Exit(runMain(os.Args[1:]))
@@ -84,34 +30,23 @@ func runMain(args []string) int {
 		return 1
 	}
 
-	var model cli
-
-	parser, err := kong.New(&model,
-		kong.Name("chop"),
-		kong.Description("Operate the local Chop application and SEC EDGAR data."),
-		kong.Writers(os.Stdout, os.Stderr),
-		kong.Vars{"version": buildinfo.Version},
-		kong.Groups{
-			"operations": "Operations",
-			"data":       "EDGAR data",
-			"diag":       "Troubleshooting",
-		},
-		kong.ConfigureHelp(kong.HelpOptions{
-			Compact:             true,
-			Summary:             true,
-			NoExpandSubcommands: true,
-			WrapUpperBound:      100,
-		}),
-	)
+	defaults, err := commandDefaultsFromEnvironment()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 
 		return 1
 	}
 
-	if len(args) == 0 {
-		args = []string{"--help"}
+	var model cli
+
+	parser, err := newParser(&model, defaults)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+
+		return 1
 	}
+
+	args = commandArgs(args)
 
 	parsed, err := parser.Parse(args)
 	if err != nil {
@@ -139,8 +74,16 @@ func runMain(args []string) int {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	commandArgs := selectedArgs(parsed.Command(), &model)
-	if err := choppie.Execute(ctx, commandArgs); err != nil {
+	runtime := &commandRuntime{
+		Client:  &http.Client{Timeout: 30 * time.Second},
+		Logger:  logger,
+		Verbose: model.Verbose,
+	}
+
+	started := time.Now()
+
+	if err := parsed.Run(ctx, runtime); err != nil {
+		err = choppie.ClassifyError(ctx, err)
 		if errors.Is(err, context.Canceled) {
 			logger.Info("shutdown requested")
 
@@ -152,51 +95,35 @@ func runMain(args []string) int {
 		return 1
 	}
 
+	logger.Debug("finished Chop command", "command", parsed.Command(),
+		"duration_ms", time.Since(started).Milliseconds())
+
 	return 0
 }
 
-// selectedArgs returns the arguments for the selected command based on the parsed command string and the CLI model.
-func selectedArgs(command string, model *cli) []string {
-	switch {
-	case strings.HasPrefix(command, "backfill"):
-		return append([]string{"backfill"}, model.Backfill.Args...)
-	case strings.HasPrefix(command, "doctor"):
-		return append([]string{"doctor"}, model.Doctor.Args...)
-	case strings.HasPrefix(command, "status"):
-		return append([]string{"status"}, model.Status.Args...)
-	case strings.HasPrefix(command, "filings"):
-		return append([]string{"filings"}, model.Filings.Args...)
-	case strings.HasPrefix(command, "parse"):
-		return append([]string{"parse"}, model.Parse.Args...)
-	case strings.HasPrefix(command, "coverage"):
-		return append([]string{"coverage"}, model.Coverage.Args...)
-	case strings.HasPrefix(command, "rebuild edgar"):
-		return append([]string{"rebuild", "edgar"}, model.Rebuild.Edgar.Args...)
-	case strings.HasPrefix(command, "index import"):
-		return append([]string{"index", "import"}, model.Index.Import.Args...)
-	case strings.HasPrefix(command, "index"):
-		return append([]string{"index"}, model.Index.Download.Args...)
-	case strings.HasPrefix(command, "ownership status"):
-		return append([]string{"ownership", "status"}, model.Ownership.Status.Args...)
-	case strings.HasPrefix(command, "ownership"):
-		return append([]string{"ownership", "import"}, model.Ownership.Import.Args...)
-	case strings.HasPrefix(command, "failures list"):
-		return append([]string{"failures", "list"}, model.Failures.List.Args...)
-	case strings.HasPrefix(command, "failures retry"):
-		return append([]string{"failures", "retry"}, model.Failures.Retry.Args...)
-	case strings.HasPrefix(command, "artifacts list"):
-		return append([]string{"artifacts", "list"}, model.Artifacts.List.Args...)
-	case strings.HasPrefix(command, "artifacts extract"):
-		return append([]string{"artifacts", "extract"}, model.Artifacts.Extract.Args...)
-	case strings.HasPrefix(command, "artifacts serve"):
-		return append([]string{"artifacts", "serve"}, model.Artifacts.Serve.Args...)
-	case strings.HasPrefix(command, "artifacts clean"):
-		return append([]string{"artifacts", "clean"}, model.Artifacts.Clean.Args...)
-	case strings.HasPrefix(command, "taxonomy lint"):
-		return append([]string{"taxonomy", "lint"}, model.Taxonomy.Lint.Args...)
-	case strings.HasPrefix(command, "taxonomy coverage"):
-		return append([]string{"taxonomy", "coverage"}, model.Taxonomy.Coverage.Args...)
-	default:
-		return nil
+func commandArgs(args []string) []string {
+	if len(args) == 0 {
+		return []string{"--help"}
 	}
+
+	return args
+}
+
+func newParser(model *cli, defaults commandDefaults) (*kong.Kong, error) {
+	return kong.New(model,
+		kong.Name("chop"),
+		kong.Description(
+			"Operate the local Chop application and SEC EDGAR data."),
+		kong.Writers(os.Stdout, os.Stderr),
+		kong.Vars(defaults.vars(buildinfo.Version)),
+		kong.Groups{
+			"operations": "Operations",
+			"data":       "EDGAR data",
+			"diag":       "Troubleshooting",
+		},
+		kong.ConfigureHelp(kong.HelpOptions{
+			Compact: true, Summary: true, NoExpandSubcommands: true,
+			WrapUpperBound: 100,
+		}),
+	)
 }

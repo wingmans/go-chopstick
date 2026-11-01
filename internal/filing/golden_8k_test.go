@@ -4,20 +4,20 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestGolden8KBuildsCurrentView(t *testing.T) {
 	path := filepath.Join("..", "..", "golden", "formtypes",
 		"sample_8-K.txt")
 
-	filing, err := edgar.ParseSubmission(t.Context(), path)
+	filing, err := parser.ParseSubmission(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if filing.Status != edgar.ParseComplete {
-		t.Fatalf("status = %q, want %q", filing.Status, edgar.ParseComplete)
+	if filing.Status != parser.ParseComplete {
+		t.Fatalf("status = %q, want %q", filing.Status, parser.ParseComplete)
 	}
 
 	if filing.Metadata.Accession != "0001193125-26-191457" ||
@@ -56,7 +56,7 @@ func TestGolden8KBuildsCurrentView(t *testing.T) {
 
 	if view.Counts.Documents != 10 || view.Counts.Instances != 1 ||
 		view.Counts.Facts != 28 || view.Counts.Contexts != 4 ||
-		view.Counts.Status != edgar.ParseComplete {
+		view.Counts.Status != parser.ParseComplete {
 		t.Fatalf("unexpected view counts: %+v", view.Counts)
 	}
 

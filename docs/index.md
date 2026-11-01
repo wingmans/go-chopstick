@@ -6,12 +6,13 @@ The repository builds two Chop executables for SEC EDGAR data:
   the HTTP application in one foreground process.
 - `chop` is the operator and offline-data command-line interface.
 
-`cmd/chop` contains one Kong entry point and the command hierarchy.
-`internal/choppie` contains command validation, rendering, and application
-workflows. The former command fragments and their tests live together there.
+`cmd/chop` contains the Kong command hierarchy and adapts parsed options to
+typed use cases. `internal/choppie` contains command workflows and operator
+rendering, but no command-line parser. See the
+[architecture guide](architecture.md) for the package boundaries.
 
-NATS remains a separate local service. It carries durable filing events and
-live control requests between the CLI and the running application.
+NATS remains a separate local service and carries durable filing events. Live
+control requests use the local TCP transport between `chop` and `chopd`.
 
 ## Development
 

@@ -12,7 +12,7 @@ import (
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
-	"wingman.com/chopstick/internal/pollingworker"
+	filingwork "wingman.com/chopstick/internal/filing/work"
 )
 
 const SelectionDurable = "edgar-selection-v1"
@@ -52,7 +52,7 @@ func Select(ctx context.Context, bus *eventbus.NATS, cfg SelectionConfig,
 	}
 
 	return consume(ctx, subscription, logger, "selection", cfg.Drain, 1, nil,
-		func(message *nats.Msg, event pollingworker.FilingEvent) error {
+		func(message *nats.Msg, event filingwork.Event) error {
 			selected, reason := selectionDecision(event, cfg.SetName, ciks,
 				forms)
 			event.Selected = &selected
@@ -87,7 +87,7 @@ func Select(ctx context.Context, bus *eventbus.NATS, cfg SelectionConfig,
 		})
 }
 
-func selectionDecision(event pollingworker.FilingEvent, setName string,
+func selectionDecision(event filingwork.Event, setName string,
 	ciks, forms map[string]struct{},
 ) (bool, string) {
 	form := strings.ToUpper(strings.TrimSpace(event.FormType))

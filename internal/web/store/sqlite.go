@@ -6,8 +6,8 @@ import (
 
 	"wingman.com/chopstick/internal/analysisstore"
 	dividendview "wingman.com/chopstick/internal/dividend"
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/parser"
 )
 
 // SQLiteStore reads normalized views from SQLite and keeps raw inspection
@@ -63,7 +63,7 @@ func (s *SQLiteStore) LoadView(ctx context.Context, cik, accession string) (fili
 	return s.views.LoadFilingView(ctx, cik, accession)
 }
 
-func (s *SQLiteStore) LoadFiling(ctx context.Context, cik, accession string) (*edgar.ParsedFiling, error) {
+func (s *SQLiteStore) LoadFiling(ctx context.Context, cik, accession string) (*parser.ParsedFiling, error) {
 	return s.files.LoadFiling(ctx, cik, accession)
 }
 
@@ -101,6 +101,6 @@ func (s *SQLiteStore) LoadDividendView(ctx context.Context, cik string) (dividen
 	return s.views.LoadDividendView(ctx, cik)
 }
 
-func (s *SQLiteStore) SourcePath(ctx context.Context, filing *edgar.ParsedFiling) (string, error) {
+func (s *SQLiteStore) SourcePath(ctx context.Context, filing *parser.ParsedFiling) (string, error) {
 	return s.files.SourcePath(ctx, filing)
 }

@@ -3,7 +3,7 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestDeriveMissingLiabilitiesUsesSameContextAndUnit(t *testing.T) {
@@ -120,6 +120,6 @@ func TestFallbackMissingEquityKeepsPlainEquity(t *testing.T) {
 func testFactValue(value, context string) FactValue {
 	return FactValue{
 		Value: value, Nil: false, ContextRef: context, Decimals: "", UnitRef: "usd",
-		priority: 0, concept: edgar.QName{Namespace: "", Local: ""}, id: "", precision: "",
+		priority: 0, concept: parser.QName{Namespace: "", Local: ""}, id: "", precision: "",
 	}
 }

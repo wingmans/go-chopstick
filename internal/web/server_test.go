@@ -14,9 +14,9 @@ import (
 	"wingman.com/chopstick/internal/analysisstore"
 	"wingman.com/chopstick/internal/constituents"
 	dividendview "wingman.com/chopstick/internal/dividend"
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
 	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/parser"
 )
 
 type goldenDetailResults struct {
@@ -29,7 +29,7 @@ type goldenDetailResults struct {
 func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 	filingPath := filepath.Join("..", "..", "golden", "formtypes", "sample_10-K.txt")
 
-	filing, err := edgar.ParseSubmission(t.Context(), filingPath)
+	filing, err := parser.ParseSubmission(t.Context(), filingPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 	requireGoldenGroups(t, view, expected.Groups)
 
 	parsedDir := t.TempDir()
-	if _, err := edgar.SaveParsedFiling(parsedDir, filing); err != nil {
+	if _, err := parser.SaveParsedFiling(parsedDir, filing); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,7 +167,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 	)
 }
 
-func requireGoldenIdentity(t *testing.T, filing *edgar.ParsedFiling,
+func requireGoldenIdentity(t *testing.T, filing *parser.ParsedFiling,
 	expected goldenDetailResults,
 ) {
 	t.Helper()
@@ -259,6 +259,55 @@ func TestIndexPageIncludesSearchBreadcrumb(t *testing.T) {
 			t.Errorf("index page is missing %q", marker)
 		}
 	}
+}
+
+func TestPublicModulesArePrimaryNavigation(t *testing.T) {
+	t.Parallel()
+
+	record := requestServer(t, NewServer(t.TempDir(), nil), "/")
+	body := record.Body.String()
+
+	for _, route := range publicModuleRoutes() {
+		if !strings.Contains(body, `href="`+route+`"`) {
+			t.Errorf("public module %q is not linked", route)
+		}
+	}
+
+	start := strings.Index(body, `<aside class="module-sidebar"`)
+	if start < 0 {
+		t.Fatal("page has no module sidebar")
+	}
+
+	end := strings.Index(body[start:], `</aside>`)
+	if end < 0 {
+		t.Fatal("page has no module sidebar")
+	}
+
+	sidebar := body[start : start+end]
+	for _, route := range []string{"/api/", "/debug/"} {
+		if strings.Contains(sidebar, route) {
+			t.Errorf("non-navigation route %q appears in sidebar", route)
+		}
+	}
+}
+
+func TestContextualPagesAreLinkedFromParents(t *testing.T) {
+	server := newCIKTestServer(t)
+
+	dashboard := requestServer(t, server, "/?q=MSFT").Body.String()
+	requireMarkers(t, dashboard,
+		`href="/companies/0000789019"`,
+		`href="/filings/0000789019/0001193125-26-027207`,
+	)
+
+	ownership := requestServer(t, server, "/ownership").Body.String()
+	requireMarkers(t, ownership,
+		`href="/ownership/companies/0000789019"`)
+
+	detail := requestServer(t, server,
+		"/filings/789019/0001193125-26-027207").Body.String()
+	requireMarkers(t, detail,
+		`href="/debug/raw/filings/0000789019/0001193125-26-027207"`)
 }
 
 func TestApplicationRoutesModulesOnOneHandler(t *testing.T) {
@@ -425,23 +474,23 @@ func newCIKTestServer(t *testing.T) *Server {
 
 	parsedDir := t.TempDir()
 
-	filing := &edgar.ParsedFiling{
-		SchemaVersion: edgar.ParsedSchemaVersion,
-		ParserVersion: edgar.ParserVersion,
-		Metadata: edgar.FilingMetadata{
+	filing := &parser.ParsedFiling{
+		SchemaVersion: parser.ParsedSchemaVersion,
+		ParserVersion: parser.ParserVersion,
+		Metadata: parser.FilingMetadata{
 			CIK: "789019", Accession: "0001193125-26-027207", FormType: "10-Q", FilingDate: "20260913",
 			ReportDate: "20260912", Items: []string{}, Header: []string{},
-			Filers: []edgar.SubmissionFiler{
+			Filers: []parser.SubmissionFiler{
 				{CIK: "789019", Name: "Example Corp.", Header: []string{}},
 			},
 		},
 		SourcePath: "", SourceBase: "", SourceSHA256: "",
-		Documents:   []edgar.SubmissionDocument{},
-		Instances:   []edgar.XBRLInstance{},
-		Diagnostics: []edgar.ParseDiagnostic{},
-		Status:      edgar.ParseComplete,
+		Documents:   []parser.SubmissionDocument{},
+		Instances:   []parser.XBRLInstance{},
+		Diagnostics: []parser.ParseDiagnostic{},
+		Status:      parser.ParseComplete,
 	}
-	if _, err := edgar.SaveParsedFiling(parsedDir, filing); err != nil {
+	if _, err := parser.SaveParsedFiling(parsedDir, filing); err != nil {
 		t.Fatalf("SaveParsedFiling returned error: %v", err)
 	}
 

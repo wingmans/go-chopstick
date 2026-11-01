@@ -1,4 +1,5 @@
-package pollingworker
+// Package work persists filing lifecycle events, outbox state, and failures.
+package work
 
 import (
 	"context"
@@ -10,11 +11,11 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/eventbus"
-	"wingman.com/chopstick/internal/pollingworker/dbgen"
+	"wingman.com/chopstick/internal/filing/work/dbgen"
 )
 
-// FilingEvent represents the unified schema for both master.zip and RSS feeds.
-type FilingEvent struct {
+// Event represents the unified schema for both master.zip and RSS feeds.
+type Event struct {
 	SchemaVersion   int       `json:"schema_version"`
 	EventID         string    `json:"event_id"`
 	AccessionNumber string    `json:"accession_number"`
@@ -33,11 +34,12 @@ type FilingEvent struct {
 	SelectionSet    string    `json:"selection_set,omitempty"`
 }
 
-const filingEventSchemaVersion = 1
+// EventSchemaVersion is the serialized filing-event contract version.
+const EventSchemaVersion = 1
 
-func normalizeEvent(event FilingEvent) FilingEvent {
+func normalizeEvent(event Event) Event {
 	if event.SchemaVersion == 0 {
-		event.SchemaVersion = filingEventSchemaVersion
+		event.SchemaVersion = EventSchemaVersion
 	}
 
 	if event.EventID == "" {
@@ -59,7 +61,7 @@ type DeadLetter struct {
 	Reason   string
 }
 
-type DedupeService struct {
+type Store struct {
 	db      *sql.DB
 	queries *dbgen.Queries
 	mu      sync.Mutex
@@ -74,12 +76,13 @@ type Stats struct {
 	Failures        int64 `json:"failures"`
 }
 
-// NewDedupeService initializes SQLite with WAL mode for performance.
-func NewDedupeService(dbPath string) (*DedupeService, error) {
-	return NewDedupeServiceContext(context.Background(), dbPath)
+// NewStore opens the work database with a background context.
+func NewStore(dbPath string) (*Store, error) {
+	return Open(context.Background(), dbPath)
 }
 
-func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService, error) {
+// Open opens the work database and applies its schema.
+func Open(ctx context.Context, dbPath string) (*Store, error) {
 	db, err := sql.Open(
 		"sqlite3",
 		dbPath+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate",
@@ -101,16 +104,16 @@ func NewDedupeServiceContext(ctx context.Context, dbPath string) (*DedupeService
 		return nil, fmt.Errorf("prepare polling queries: %w", err)
 	}
 
-	return &DedupeService{db: db, queries: queries}, nil
+	return &Store{db: db, queries: queries}, nil
 }
 
-// NewSQLiteStore is the name used by the polling command.
-func NewSQLiteStore(dbPath string) (*DedupeService, error) {
-	return NewDedupeService(dbPath)
+// OpenBackground is retained for callers that do not have a context.
+func OpenBackground(dbPath string) (*Store, error) {
+	return NewStore(dbPath)
 }
 
 // Stats returns the current durable pipeline counts.
-func (s *DedupeService) Stats(ctx context.Context) (Stats, error) {
+func (s *Store) Stats(ctx context.Context) (Stats, error) {
 	var result Stats
 
 	queries := []struct {
@@ -136,7 +139,7 @@ func (s *DedupeService) Stats(ctx context.Context) (Stats, error) {
 }
 
 // SaveDeadLetter persists a dead letter entry into the database.
-func (s *DedupeService) SaveDeadLetter(ctx context.Context, letter DeadLetter) error {
+func (s *Store) SaveDeadLetter(ctx context.Context, letter DeadLetter) error {
 	return s.queries.SaveDeadLetter(ctx, dbgen.SaveDeadLetterParams{
 		FeedURL:  letter.FeedURL,
 		Title:    letter.Title,
@@ -147,47 +150,101 @@ func (s *DedupeService) SaveDeadLetter(ctx context.Context, letter DeadLetter) e
 }
 
 // IsDuplicate performs a fast check against the index.
-func (s *DedupeService) IsDuplicate(accessionNumber string) (bool, error) {
+func (s *Store) IsDuplicate(accessionNumber string) (bool, error) {
 	return s.IsDuplicateContext(context.Background(), accessionNumber)
 }
 
 // IsDuplicate checks if the given accession number has already been processed.
-func (s *DedupeService) IsDuplicateContext(ctx context.Context, accessionNumber string) (bool, error) {
+func (s *Store) IsDuplicateContext(ctx context.Context, accessionNumber string) (bool, error) {
 	return s.queries.IsDuplicate(ctx, accessionNumber)
 }
 
 // SaveAccession records a newly emitted accession number atomically.
 // It ensures that the accession number is only saved if it hasn't been processed before.
-func (s *DedupeService) SaveAccession(event FilingEvent) error {
+func (s *Store) SaveAccession(event Event) error {
 	return s.SaveAccessionContext(context.Background(), event)
 }
 
-func (s *DedupeService) SaveAccessionContext(ctx context.Context, event FilingEvent) error {
+func (s *Store) SaveAccessionContext(ctx context.Context, event Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.saveBatchContext(ctx, []FilingEvent{event})
+	_, err := s.saveBatchContext(ctx, []Event{event})
 
 	return err
 }
 
 // SaveBatch performs bulk insertions inside a single transaction (essential for nightly master.zip).
-func (s *DedupeService) SaveBatch(events []FilingEvent) ([]FilingEvent, error) {
+func (s *Store) SaveBatch(events []Event) ([]Event, error) {
 	return s.SaveBatchContext(context.Background(), events)
 }
 
 // SaveBatchContext performs bulk insertions inside a single transaction (essential for nightly master.zip).
-func (s *DedupeService) SaveBatchContext(ctx context.Context, events []FilingEvent) ([]FilingEvent, error) {
+func (s *Store) SaveBatchContext(ctx context.Context, events []Event) ([]Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	return s.saveBatchContext(ctx, events)
 }
 
-//nolint:funcorder // Kept beside the exported batch methods it implements.
-func (s *DedupeService) saveBatchContext(ctx context.Context,
-	events []FilingEvent,
-) ([]FilingEvent, error) {
+// PublishPending publishes every pending row and marks it only after PubAck.
+func (s *Store) PublishPending(ctx context.Context,
+	publisher eventbus.Publisher,
+) error {
+	if publisher == nil {
+		return nil
+	}
+
+	messages, err := s.queries.PendingOutboxMessages(ctx)
+	if err != nil {
+		return fmt.Errorf("read polling outbox: %w", err)
+	}
+
+	for _, message := range messages {
+		if err := publisher.Publish(ctx, message.Subject, message.EventID,
+			message.Payload); err != nil {
+			_ = s.queries.RecordOutboxPublishFailure(
+				ctx,
+				dbgen.RecordOutboxPublishFailureParams{
+					LastError: err.Error(),
+					ID:        message.ID,
+				},
+			)
+
+			return err
+		}
+
+		if err := s.queries.MarkOutboxPublished(ctx, message.ID); err != nil {
+			return fmt.Errorf("mark polling outbox published: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// PendingOutbox returns the number of discovery events awaiting publication.
+func (s *Store) PendingOutbox(ctx context.Context) (int, error) {
+	count, err := s.queries.PendingOutboxCount(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return int(count), nil
+}
+
+// FilterNew persists the batch and returns only events inserted this time.
+func (s *Store) FilterNew(ctx context.Context, events []Event) ([]Event, error) {
+	return s.SaveBatchContext(ctx, events)
+}
+
+// Close terminates the database connection associated with the work store.
+func (s *Store) Close() error {
+	return errors.Join(s.queries.Close(), s.db.Close())
+}
+
+func (s *Store) saveBatchContext(ctx context.Context,
+	events []Event,
+) ([]Event, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -196,7 +253,7 @@ func (s *DedupeService) saveBatchContext(ctx context.Context,
 
 	queries := s.queries.WithTx(tx)
 
-	var newEvents []FilingEvent
+	var newEvents []Event
 
 	for _, event := range events {
 		event = normalizeEvent(event)
@@ -248,59 +305,4 @@ func (s *DedupeService) saveBatchContext(ctx context.Context,
 	}
 
 	return newEvents, nil
-}
-
-// PublishPending publishes every pending row and marks it only after PubAck.
-func (s *DedupeService) PublishPending(ctx context.Context,
-	publisher eventbus.Publisher,
-) error {
-	if publisher == nil {
-		return nil
-	}
-
-	messages, err := s.queries.PendingOutboxMessages(ctx)
-	if err != nil {
-		return fmt.Errorf("read polling outbox: %w", err)
-	}
-
-	for _, message := range messages {
-		if err := publisher.Publish(ctx, message.Subject, message.EventID,
-			message.Payload); err != nil {
-			_ = s.queries.RecordOutboxPublishFailure(
-				ctx,
-				dbgen.RecordOutboxPublishFailureParams{
-					LastError: err.Error(),
-					ID:        message.ID,
-				},
-			)
-
-			return err
-		}
-
-		if err := s.queries.MarkOutboxPublished(ctx, message.ID); err != nil {
-			return fmt.Errorf("mark polling outbox published: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// PendingOutbox returns the number of discovery events awaiting publication.
-func (s *DedupeService) PendingOutbox(ctx context.Context) (int, error) {
-	count, err := s.queries.PendingOutboxCount(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	return int(count), nil
-}
-
-// FilterNew persists the batch and returns only events inserted this time.
-func (s *DedupeService) FilterNew(ctx context.Context, events []FilingEvent) ([]FilingEvent, error) {
-	return s.SaveBatchContext(ctx, events)
-}
-
-// Close terminates the database connection associated with the deduplication service.
-func (s *DedupeService) Close() error {
-	return errors.Join(s.queries.Close(), s.db.Close())
 }

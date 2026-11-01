@@ -1,4 +1,4 @@
-package pollingworker
+package work
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/eventbus"
-	"wingman.com/chopstick/internal/pollingworker/dbgen"
+	"wingman.com/chopstick/internal/filing/work/dbgen"
 )
 
 // WorkFailure is the current failure state for one pipeline item.
@@ -22,7 +22,7 @@ type WorkFailure struct {
 
 // RecordWorkFailure records one failed delivery and returns the consecutive
 // attempt count. A failure after a resolved item starts at one again.
-func (s *DedupeService) RecordWorkFailure(ctx context.Context, stage,
+func (s *Store) RecordWorkFailure(ctx context.Context, stage,
 	accession, subject string, payload []byte, workErr error,
 ) (int, error) {
 	if err := s.queries.RecordWorkFailure(
@@ -53,7 +53,7 @@ func (s *DedupeService) RecordWorkFailure(ctx context.Context, stage,
 }
 
 // ResolveWorkFailure marks any previous failure for an item as resolved.
-func (s *DedupeService) ResolveWorkFailure(ctx context.Context, stage, accession string) error {
+func (s *Store) ResolveWorkFailure(ctx context.Context, stage, accession string) error {
 	err := s.queries.ResolveWorkFailure(ctx, dbgen.ResolveWorkFailureParams{
 		Stage:           stage,
 		AccessionNumber: accession,
@@ -66,7 +66,7 @@ func (s *DedupeService) ResolveWorkFailure(ctx context.Context, stage, accession
 }
 
 // WorkFailures returns unresolved failures, optionally for one stage.
-func (s *DedupeService) WorkFailures(ctx context.Context, stage string) ([]WorkFailure, error) {
+func (s *Store) WorkFailures(ctx context.Context, stage string) ([]WorkFailure, error) {
 	rows, err := s.queries.WorkFailures(ctx, stage)
 	if err != nil {
 		return nil, fmt.Errorf("read work failures: %w", err)
@@ -91,7 +91,7 @@ func (s *DedupeService) WorkFailures(ctx context.Context, stage string) ([]WorkF
 
 // RetryWorkFailures republishes unresolved items and resets their consecutive
 // attempt count. The failure remains visible until the worker succeeds.
-func (s *DedupeService) RetryWorkFailures(ctx context.Context, stage string, publisher eventbus.Publisher) (int, error) {
+func (s *Store) RetryWorkFailures(ctx context.Context, stage string, publisher eventbus.Publisher) (int, error) {
 	failures, err := s.WorkFailures(ctx, stage)
 	if err != nil {
 		return 0, err

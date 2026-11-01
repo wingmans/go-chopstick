@@ -1,39 +1,40 @@
-package pollingworker
+package atom
 
 import (
 	"context"
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/filing/work"
 )
 
 type Fetcher interface {
-	FetchLatest(ctx context.Context) ([]FilingEvent, error)
+	FetchLatest(ctx context.Context) ([]work.Event, error)
 }
 
 type Deduper interface {
-	FilterNew(ctx context.Context, events []FilingEvent) ([]FilingEvent, error)
+	FilterNew(ctx context.Context, events []work.Event) ([]work.Event, error)
 }
 
 type DeadLetterSink interface {
-	SaveDeadLetter(ctx context.Context, letter DeadLetter) error
+	SaveDeadLetter(ctx context.Context, letter work.DeadLetter) error
 }
 
 type DeadLetterProvider interface {
-	DeadLetters() []DeadLetter
+	DeadLetters() []work.DeadLetter
 }
 
 type Worker struct {
 	fetcher  Fetcher
 	deduper  Deduper
-	out      chan<- FilingEvent
+	out      chan<- work.Event
 	interval time.Duration
 }
 
 func NewWorker(
 	fetcher Fetcher,
 	deduper Deduper,
-	out chan<- FilingEvent,
+	out chan<- work.Event,
 	interval time.Duration,
 ) *Worker {
 	if interval <= 0 {

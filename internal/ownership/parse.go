@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 var ErrUnsupported = errors.New("ownership form parser is not implemented")
@@ -17,7 +17,7 @@ var ErrUnsupported = errors.New("ownership form parser is not implemented")
 // Parse reads one cached SEC submission and dispatches its structured
 // documents to the appropriate ownership parser.
 func Parse(ctx context.Context, path string) (Filing, error) {
-	parsed, err := edgar.ParseSubmission(ctx, path)
+	parsed, err := parser.ParseSubmission(ctx, path)
 	if err != nil {
 		return Filing{}, err
 	}
@@ -64,7 +64,7 @@ func Parse(ctx context.Context, path string) (Filing, error) {
 }
 
 func parseDocument(ctx context.Context, path string,
-	document edgar.SubmissionDocument,
+	document parser.SubmissionDocument,
 ) (*xmlElement, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -86,23 +86,23 @@ func parseDocument(ctx context.Context, path string,
 	return root, nil
 }
 
-func primaryDocument(documents []edgar.SubmissionDocument,
+func primaryDocument(documents []parser.SubmissionDocument,
 	form string,
-) (edgar.SubmissionDocument, error) {
+) (parser.SubmissionDocument, error) {
 	for _, document := range documents {
 		if NormalizeFormType(document.Type) == form {
 			return document, nil
 		}
 	}
 
-	return edgar.SubmissionDocument{}, fmt.Errorf(
+	return parser.SubmissionDocument{}, fmt.Errorf(
 		"submission has no %s primary XML document", form)
 }
 
-func documentsOfType(documents []edgar.SubmissionDocument,
+func documentsOfType(documents []parser.SubmissionDocument,
 	documentType string,
-) []edgar.SubmissionDocument {
-	var result []edgar.SubmissionDocument
+) []parser.SubmissionDocument {
+	var result []parser.SubmissionDocument
 
 	for _, document := range documents {
 		if strings.EqualFold(strings.TrimSpace(document.Type), documentType) {

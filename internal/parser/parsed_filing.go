@@ -1,4 +1,4 @@
-// Package edgar downloads and parses SEC EDGAR source data into durable parsed
+// Package parser parses SEC EDGAR source data into durable parsed
 // filing artifacts.
 package parser
 

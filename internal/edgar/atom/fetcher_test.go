@@ -1,4 +1,4 @@
-package pollingworker
+package atom
 
 import (
 	"database/sql"
@@ -6,11 +6,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"wingman.com/chopstick/internal/filing/work"
 )
 
 func TestParseAtomEntryAcceptsNumericAccessionPath(t *testing.T) {
@@ -29,20 +30,10 @@ func TestParseAtomEntryAcceptsNumericAccessionPath(t *testing.T) {
 	}
 }
 
-// testDatabasePath returns a unique file path for a test SQLite database.
 func testDatabasePath(t *testing.T) string {
 	t.Helper()
 
-	if err := os.MkdirAll("./testoutput", 0o750); err != nil {
-		t.Fatal(err)
-	}
-
-	name := strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
-	path := filepath.Join("./testoutput", name+"-"+
-		time.Now().Format("20060102-150405.000")+".db")
-	t.Logf("test database: %s", path)
-
-	return path
+	return filepath.Join(t.TempDir(), "polling.db")
 }
 
 func TestParseAtomEntryExtractsSECMetadata(t *testing.T) {
@@ -120,13 +111,13 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 
 	fetcher := NewSECFetcherWithURL("test-agent", server.URL)
 
-	store, err := NewSQLiteStore(testDatabasePath(t))
+	store, err := work.OpenBackground(testDatabasePath(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = store.Close() }()
 
-	out := make(chan FilingEvent, 2)
+	out := make(chan work.Event, 2)
 	worker := NewWorker(fetcher, store, out, 0)
 
 	if err := worker.RunOnce(t.Context()); err != nil {
@@ -154,7 +145,8 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 }
 
 func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
-	feed, err := os.ReadFile(filepath.Join("..", "..", "golden", "sec-current.atom.xml"))
+	feed, err := os.ReadFile(filepath.Join("..", "..", "..", "golden",
+		"sec-current.atom.xml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +159,7 @@ func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 
 	dbPath := testDatabasePath(t)
 
-	store, err := NewSQLiteStore(dbPath)
+	store, err := work.OpenBackground(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +169,7 @@ func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 	worker := NewWorker(
 		NewSECFetcherWithURL("test-agent", server.URL),
 		store,
-		make(chan FilingEvent, 32),
+		make(chan work.Event, 32),
 		time.Minute,
 	)
 	if err := worker.RunOnce(t.Context()); err != nil {
@@ -209,7 +201,8 @@ func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 }
 
 func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
-	feed, err := os.ReadFile(filepath.Join("..", "..", "golden", "sec-current-dead-letter.atom.xml"))
+	feed, err := os.ReadFile(filepath.Join("..", "..", "..", "golden",
+		"sec-current-dead-letter.atom.xml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +215,7 @@ func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
 
 	dbPath := testDatabasePath(t)
 
-	store, err := NewSQLiteStore(dbPath)
+	store, err := work.OpenBackground(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +223,7 @@ func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	worker := NewWorker(NewSECFetcherWithURL("test-agent", server.URL), store,
-		make(chan FilingEvent, 2), time.Minute)
+		make(chan work.Event, 2), time.Minute)
 	if err := worker.RunOnce(t.Context()); err != nil {
 		t.Fatal(err)
 	}

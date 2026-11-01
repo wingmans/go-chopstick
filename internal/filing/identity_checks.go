@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const (
@@ -312,7 +312,7 @@ func identityValue(row *FactSeries, period string) (FactValue, bool) {
 	if row == nil {
 		return FactValue{
 			Value: "", Nil: false, ContextRef: "", Decimals: "", UnitRef: "",
-			priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+			priority: 0, concept: parser.QName{Namespace: "", Local: ""},
 			id: "", precision: "",
 		}, false
 	}
@@ -321,7 +321,7 @@ func identityValue(row *FactSeries, period string) (FactValue, bool) {
 	if !ok || value.Nil {
 		return FactValue{
 			Value: "", Nil: false, ContextRef: "", Decimals: "", UnitRef: "",
-			priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+			priority: 0, concept: parser.QName{Namespace: "", Local: ""},
 			id: "", precision: "",
 		}, false
 	}

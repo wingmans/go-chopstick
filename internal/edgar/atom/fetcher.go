@@ -1,4 +1,5 @@
-package pollingworker
+// Package atom discovers filing events from the SEC current-filings feed.
+package atom
 
 import (
 	"bytes"
@@ -17,6 +18,7 @@ import (
 	"golang.org/x/net/html/charset"
 
 	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/filing/work"
 )
 
 // Atom Feed XML Schema Mapping.
@@ -44,7 +46,7 @@ type SECFetcher struct {
 	client      *http.Client
 	userAgent   string
 	feedURL     string
-	deadLetters []DeadLetter
+	deadLetters []work.DeadLetter
 }
 
 func NewSECFetcher(userHeader string) *SECFetcher {
@@ -77,7 +79,7 @@ var (
 	atomTagRegex         = regexp.MustCompile(`<[^>]+>`)
 )
 
-func (f *SECFetcher) FetchLatest(ctx context.Context) ([]FilingEvent, error) {
+func (f *SECFetcher) FetchLatest(ctx context.Context) ([]work.Event, error) {
 	f.deadLetters = nil
 	ctxlog.FromContext(ctx).Debug("fetching SEC Atom feed", "url", f.feedURL)
 
@@ -112,7 +114,7 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]FilingEvent, error) {
 		return nil, fmt.Errorf("xml unmarshal error: %w", err)
 	}
 
-	var events []FilingEvent
+	var events []work.Event
 
 	skipped := 0
 
@@ -123,7 +125,7 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]FilingEvent, error) {
 		} else {
 			skipped++
 
-			f.deadLetters = append(f.deadLetters, DeadLetter{
+			f.deadLetters = append(f.deadLetters, work.DeadLetter{
 				FeedURL: f.feedURL,
 				Title:   entry.Title,
 				Link:    entry.Link.Href,
@@ -138,12 +140,12 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]FilingEvent, error) {
 	return events, nil
 }
 
-func (f *SECFetcher) DeadLetters() []DeadLetter {
-	return append([]DeadLetter(nil), f.deadLetters...)
+func (f *SECFetcher) DeadLetters() []work.DeadLetter {
+	return append([]work.DeadLetter(nil), f.deadLetters...)
 }
 
 // Extracts metadata fields out of raw Atom HTML summary string.
-func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
+func parseAtomEntry(entry AtomEntry) (work.Event, bool) {
 	accMatch := accessionRegex.FindStringSubmatch(entry.Link.Href)
 
 	var accessionNo string
@@ -153,7 +155,7 @@ func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
 		digits := digitsMatch[1]
 		accessionNo = digits[:10] + "-" + digits[10:12] + "-" + digits[12:]
 	} else {
-		return FilingEvent{}, false
+		return work.Event{}, false
 	}
 
 	summary := atomTagRegex.ReplaceAllString(html.UnescapeString(entry.Summary.Text), " ")
@@ -183,8 +185,8 @@ func parseAtomEntry(entry AtomEntry) (FilingEvent, bool) {
 
 	filingPath := atomFilingPath(entry.Link.Href, cik, accessionNo)
 
-	return FilingEvent{
-		SchemaVersion:   filingEventSchemaVersion,
+	return work.Event{
+		SchemaVersion:   work.EventSchemaVersion,
 		EventID:         "filing.discovered:" + accessionNo,
 		AccessionNumber: accessionNo,
 		CIK:             cik,

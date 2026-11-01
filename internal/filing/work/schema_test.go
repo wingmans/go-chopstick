@@ -1,4 +1,4 @@
-package pollingworker
+package work
 
 import (
 	"database/sql"
@@ -12,7 +12,7 @@ func TestPollingSchemaRecordsCurrentVersion(t *testing.T) {
 
 	databasePath := filepath.Join(t.TempDir(), "polling.db")
 
-	store, err := NewDedupeServiceContext(t.Context(), databasePath)
+	store, err := Open(t.Context(), databasePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,9 +61,9 @@ func TestPollingSchemaRejectsUnversionedDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = NewDedupeServiceContext(t.Context(), databasePath)
+	_, err = Open(t.Context(), databasePath)
 	if err == nil {
-		t.Fatal("NewDedupeServiceContext() succeeded for old schema")
+		t.Fatal("Open() succeeded for old schema")
 	}
 
 	if !strings.Contains(err.Error(), "chop rebuild edgar --confirm") {

@@ -3,7 +3,7 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestBuildCompanyHistorySelectsNewestAnnualFact(t *testing.T) {
@@ -50,7 +50,7 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 		SourcePath: "", SourceSHA256: "", Metadata: Metadata{
 			Accession: accession, CIK: cik, FormType: "10-K", FilingDate: filingDate,
 			ReportDate: year + "-06-30", Company: "Microsoft Corporation",
-		}, Documents: []edgar.SubmissionDocument{}, Summary: []SummaryGroup{},
+		}, Documents: []parser.SubmissionDocument{}, Summary: []SummaryGroup{},
 		Statements: Statements{
 			Income: StatementView{Title: "Income statement", Groups: []SummaryGroup{{
 				Title: "Fiscal year", Periods: []string{"FY" + year}, Rows: []FactSeries{{
@@ -59,7 +59,7 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 						"FY" + year: {
 							Value: value, Nil: false, ContextRef: "c1",
 							Decimals: "-3", UnitRef: "",
-							priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+							priority: 0, concept: parser.QName{Namespace: "", Local: ""},
 							id: "", precision: "",
 						},
 					},
@@ -72,7 +72,7 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 						year + "-06-30": {
 							Value: value, Nil: false, ContextRef: "c2",
 							Decimals: "-3", UnitRef: "",
-							priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+							priority: 0, concept: parser.QName{Namespace: "", Local: ""},
 							id: "", precision: "",
 						},
 					},
@@ -83,10 +83,11 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 		Counts: Counts{
 			Documents: 0, Instances: 0, Facts: 1, Contexts: 1,
 			DimensionalFactsExcluded: 0, Status: "complete",
-		}, Diagnostics: []edgar.ParseDiagnostic{},
+		}, Diagnostics: []parser.ParseDiagnostic{},
 	}
 }
 
+// equalStrings checks if two string slices are equal.
 func equalStrings(left, right []string) bool {
 	if len(left) != len(right) {
 		return false

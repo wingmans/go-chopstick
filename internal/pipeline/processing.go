@@ -17,8 +17,8 @@ import (
 	"wingman.com/chopstick/internal/analysisstore"
 	"wingman.com/chopstick/internal/ctxlog"
 	dividendview "wingman.com/chopstick/internal/dividend"
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const (
@@ -44,7 +44,7 @@ type ProcessingConfig struct {
 type ProcessingResult struct {
 	Action string
 	Path   string
-	Filing *edgar.ParsedFiling
+	Filing *parser.ParsedFiling
 }
 
 // ProcessSubmission parses one SEC submission and writes filing.json plus
@@ -57,12 +57,12 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 	started := time.Now()
 
-	metadata, err := edgar.ReadSubmissionMetadata(ctx, path)
+	metadata, err := parser.ReadSubmissionMetadata(ctx, path)
 	if err != nil {
 		return result, err
 	}
 
-	var identity edgar.ParsedFiling
+	var identity parser.ParsedFiling
 
 	identity.Metadata = metadata
 	if err := setSourceReference(&identity, path, cfg.FilingsDirectory); err != nil {
@@ -76,7 +76,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 
 	if !cfg.Reprocess {
 		if !cfg.Noop {
-			matches, err := edgar.SourceFingerprintMatches(ctx, path)
+			matches, err := parser.SourceFingerprintMatches(ctx, path)
 			if err != nil {
 				return result, err
 			}
@@ -146,7 +146,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 		return result, nil
 	}
 
-	result.Filing, err = edgar.ParseSubmission(ctx, path)
+	result.Filing, err = parser.ParseSubmission(ctx, path)
 	if err != nil {
 		return result, err
 	}
@@ -159,12 +159,12 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 		return result, err
 	}
 
-	result.Path, err = edgar.SaveParsedFiling(cfg.Directory, result.Filing)
+	result.Path, err = parser.SaveParsedFiling(cfg.Directory, result.Filing)
 	if err != nil {
 		return result, err
 	}
 
-	if err := edgar.WriteSourceFingerprint(path); err != nil {
+	if err := parser.WriteSourceFingerprint(path); err != nil {
 		return result, err
 	}
 
@@ -188,7 +188,7 @@ func ProcessSubmission(ctx context.Context, path string, cfg ProcessingConfig) (
 	return result, extractionFailure(result.Filing)
 }
 
-func updateDividendView(ctx context.Context, cfg ProcessingConfig, filing *edgar.ParsedFiling) error {
+func updateDividendView(ctx context.Context, cfg ProcessingConfig, filing *parser.ParsedFiling) error {
 	store, closeStore, err := storeForConfig(ctx, cfg)
 	if err != nil {
 		return err
@@ -219,7 +219,7 @@ func updateDividendView(ctx context.Context, cfg ProcessingConfig, filing *edgar
 	return nil
 }
 
-func saveFilingView(ctx context.Context, cfg ProcessingConfig, filing *edgar.ParsedFiling) error {
+func saveFilingView(ctx context.Context, cfg ProcessingConfig, filing *parser.ParsedFiling) error {
 	view, err := filingview.Build(filing)
 	if err != nil {
 		return fmt.Errorf("build filing view: %w", err)
@@ -239,7 +239,7 @@ func saveFilingView(ctx context.Context, cfg ProcessingConfig, filing *edgar.Par
 }
 
 func filingMaterialized(ctx context.Context, cfg ProcessingConfig,
-	filing *edgar.ParsedFiling,
+	filing *parser.ParsedFiling,
 ) (bool, error) {
 	return filingMaterializedFor(ctx, cfg, filing.Metadata.CIK,
 		filing.Metadata.Accession)
@@ -296,11 +296,11 @@ func attachAnalysisStore(ctx context.Context, cfg ProcessingConfig) (ProcessingC
 }
 
 func reusableFiling(ctx context.Context, destination, source string,
-	identity edgar.ParsedFiling,
-) (edgar.ParsedFiling, bool, error) {
-	var missing edgar.ParsedFiling
+	identity parser.ParsedFiling,
+) (parser.ParsedFiling, bool, error) {
+	var missing parser.ParsedFiling
 
-	matches, err := edgar.SourceFingerprintMatches(ctx, source)
+	matches, err := parser.SourceFingerprintMatches(ctx, source)
 	if err != nil {
 		return missing, false, err
 	}
@@ -309,7 +309,7 @@ func reusableFiling(ctx context.Context, destination, source string,
 		return missing, false, nil
 	}
 
-	filing, err := edgar.LoadParsedFiling(destination)
+	filing, err := parser.LoadParsedFiling(destination)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			return missing, false, err
@@ -328,7 +328,7 @@ func reusableFiling(ctx context.Context, destination, source string,
 	}
 
 	switch filing.Status {
-	case edgar.ParseComplete, edgar.ParseNoXBRL, edgar.ParsePartial, edgar.ParseUnsupported:
+	case parser.ParseComplete, parser.ParseNoXBRL, parser.ParsePartial, parser.ParseUnsupported:
 	default:
 		return missing, false, nil
 	}
@@ -336,7 +336,7 @@ func reusableFiling(ctx context.Context, destination, source string,
 	return *filing, true, nil
 }
 
-func setSourceReference(filing *edgar.ParsedFiling, path, root string) error {
+func setSourceReference(filing *parser.ParsedFiling, path, root string) error {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return err
@@ -367,7 +367,7 @@ func setSourceReference(filing *edgar.ParsedFiling, path, root string) error {
 
 // Unsupported features are limitations, while malformed XML and broken
 // references are processing failures even when their diagnostics are persisted.
-func extractionFailure(filing *edgar.ParsedFiling) error {
+func extractionFailure(filing *parser.ParsedFiling) error {
 	for _, diagnostic := range filing.Diagnostics {
 		if diagnostic.Code == "xbrl_error" || diagnostic.Code == "xbrl_reference" {
 			return fmt.Errorf("filing %s has extraction errors; inspect diagnostics", filing.AccessionNumber())

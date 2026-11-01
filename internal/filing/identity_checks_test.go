@@ -3,7 +3,7 @@ package filing
 import (
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestCheckAccountingIdentitiesReportsFailure(t *testing.T) {
@@ -218,7 +218,7 @@ func identityRowWithContext(key, value, decimals, context string) FactSeries {
 			period: {
 				Value: value, Nil: false, ContextRef: context,
 				Decimals: decimals, UnitRef: "",
-				priority: 0, concept: edgar.QName{Namespace: "", Local: ""},
+				priority: 0, concept: parser.QName{Namespace: "", Local: ""},
 				id: "", precision: "",
 			},
 		},

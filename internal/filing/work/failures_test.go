@@ -1,4 +1,4 @@
-package pollingworker
+package work
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 func TestWorkFailureLifecycle(t *testing.T) {
 	t.Parallel()
 
-	store, err := NewDedupeServiceContext(t.Context(),
+	store, err := Open(t.Context(),
 		t.TempDir()+"/polling.db")
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestWorkFailureLifecycle(t *testing.T) {
 func TestRetryWorkFailuresPublishesUnresolvedItems(t *testing.T) {
 	t.Parallel()
 
-	store, err := NewDedupeServiceContext(t.Context(),
+	store, err := Open(t.Context(),
 		t.TempDir()+"/polling.db")
 	if err != nil {
 		t.Fatal(err)

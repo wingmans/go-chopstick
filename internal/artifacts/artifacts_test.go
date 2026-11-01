@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {
@@ -24,9 +24,9 @@ func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	filing := &edgar.ParsedFiling{
-		Metadata: edgar.FilingMetadata{CIK: "0000000001", Accession: "test"},
-		Documents: []edgar.SubmissionDocument{{
+	filing := &parser.ParsedFiling{
+		Metadata: parser.FilingMetadata{CIK: "0000000001", Accession: "test"},
+		Documents: []parser.SubmissionDocument{{
 			Type: "GRAPHIC", Filename: "pixel.jpg", ContentOffset: 5,
 			ContentLength: int64(len(content) - 5),
 		}},

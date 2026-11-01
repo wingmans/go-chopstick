@@ -12,7 +12,7 @@ import (
 
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
-	"wingman.com/chopstick/internal/pollingworker"
+	filingwork "wingman.com/chopstick/internal/filing/work"
 )
 
 const DurableName = "edgar-news-v2"
@@ -55,7 +55,7 @@ func Consume(ctx context.Context, bus *eventbus.NATS, store *Store,
 		}
 
 		for _, message := range messages {
-			var event pollingworker.FilingEvent
+			var event filingwork.Event
 			if err := json.Unmarshal(message.Data, &event); err != nil {
 				_ = message.Term()
 

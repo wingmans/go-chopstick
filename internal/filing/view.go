@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const SchemaVersion = 1
@@ -19,19 +19,19 @@ const SchemaVersion = 1
 // View is the useful filing read model produced from namespace-heavy parsed
 // XBRL data. It is generated data, but it is not a web cache.
 type View struct {
-	SchemaVersion   int                        `json:"schema_version"`
-	ParserVersion   string                     `json:"parser_version"`
-	TaxonomyVersion string                     `json:"taxonomy_version"`
-	SourcePath      string                     `json:"source_path"`
-	SourceSHA256    string                     `json:"source_sha256"`
-	Metadata        Metadata                   `json:"metadata"`
-	Documents       []edgar.SubmissionDocument `json:"documents"`
-	Summary         []SummaryGroup             `json:"summary"`
-	Statements      Statements                 `json:"statements"`
-	Ratios          []RatioSeries              `json:"ratios"`
-	Quality         Quality                    `json:"quality"`
-	Counts          Counts                     `json:"counts"`
-	Diagnostics     []edgar.ParseDiagnostic    `json:"diagnostics"`
+	SchemaVersion   int                         `json:"schema_version"`
+	ParserVersion   string                      `json:"parser_version"`
+	TaxonomyVersion string                      `json:"taxonomy_version"`
+	SourcePath      string                      `json:"source_path"`
+	SourceSHA256    string                      `json:"source_sha256"`
+	Metadata        Metadata                    `json:"metadata"`
+	Documents       []parser.SubmissionDocument `json:"documents"`
+	Summary         []SummaryGroup              `json:"summary"`
+	Statements      Statements                  `json:"statements"`
+	Ratios          []RatioSeries               `json:"ratios"`
+	Quality         Quality                     `json:"quality"`
+	Counts          Counts                      `json:"counts"`
+	Diagnostics     []parser.ParseDiagnostic    `json:"diagnostics"`
 }
 
 type Metadata struct {
@@ -103,7 +103,7 @@ type FactValue struct {
 	Decimals   string `json:"decimals,omitempty"`
 	UnitRef    string `json:"unit_ref,omitempty"`
 	priority   int
-	concept    edgar.QName
+	concept    parser.QName
 	id         string
 	precision  string
 }
@@ -127,7 +127,7 @@ type RatioSeries struct {
 	Values  map[string]string `json:"values"`
 }
 
-func Build(filing *edgar.ParsedFiling) (View, error) {
+func Build(filing *parser.ParsedFiling) (View, error) {
 	if filing == nil {
 		return View{}, errors.New("parsed filing is nil")
 	}
@@ -179,8 +179,8 @@ func Build(filing *edgar.ParsedFiling) (View, error) {
 	return view, nil
 }
 
-func countDimensionalFacts(instance edgar.XBRLInstance) int {
-	contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
+func countDimensionalFacts(instance parser.XBRLInstance) int {
+	contexts := make(map[string]parser.FactContext, len(instance.Contexts))
 	for _, context := range instance.Contexts {
 		contexts[context.ID] = context
 	}
@@ -197,7 +197,7 @@ func countDimensionalFacts(instance edgar.XBRLInstance) int {
 	return count
 }
 
-func Path(directory string, filing *edgar.ParsedFiling) (string, error) {
+func Path(directory string, filing *parser.ParsedFiling) (string, error) {
 	if filing == nil || directory == "" {
 		return "", errors.New("filing view requires a filing and directory")
 	}
@@ -210,7 +210,7 @@ func Path(directory string, filing *edgar.ParsedFiling) (string, error) {
 	return filepath.Join(filepath.Dir(parsedPath), "filing-view.json"), nil
 }
 
-func Save(directory string, filing *edgar.ParsedFiling) (string, error) {
+func Save(directory string, filing *parser.ParsedFiling) (string, error) {
 	view, err := Build(filing)
 	if err != nil {
 		return "", err
@@ -274,7 +274,7 @@ func Load(path string) (View, error) {
 	return view, nil
 }
 
-func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
+func financialSummary(filing *parser.ParsedFiling) []SummaryGroup {
 	taxonomy := defaultTaxonomy()
 	periodsByGroup := map[string]map[string]string{}
 	seriesByGroup := map[string]map[string]*FactSeries{}
@@ -282,7 +282,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 	for _, instance := range filing.Instances {
 		units := unitMap(instance)
 
-		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
+		contexts := make(map[string]parser.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			if len(context.Dimensions) == 0 {
 				contexts[context.ID] = context
@@ -325,7 +325,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 
 			periodsByGroup[group][periodKey] = periodLabel
 			selectedValue, selectedConcept := selectFact(row.Values[periodKey],
-				edgar.QName{Namespace: row.Namespace, Local: row.Concept},
+				parser.QName{Namespace: row.Namespace, Local: row.Concept},
 				selectedFact{Fact: fact, Priority: reference.Priority})
 			row.Values[periodKey] = selectedValue
 			row.Namespace = selectedConcept.Namespace
@@ -365,7 +365,7 @@ func financialSummary(filing *edgar.ParsedFiling) []SummaryGroup {
 	return groups
 }
 
-func classifyPeriod(context edgar.FactContext, reportDate string) (string, string, string) {
+func classifyPeriod(context parser.FactContext, reportDate string) (string, string, string) {
 	if context.Instant != "" {
 		return "Instant", displayDate(context.Instant), displayDate(context.Instant)
 	}

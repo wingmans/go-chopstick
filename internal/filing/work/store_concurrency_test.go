@@ -1,4 +1,4 @@
-package pollingworker
+package work
 
 import (
 	"path/filepath"
@@ -16,7 +16,7 @@ func TestConcurrentDedupeServiceInitialization(t *testing.T) {
 
 	for range workers {
 		group.Go(func() {
-			store, err := NewDedupeServiceContext(t.Context(), dbPath)
+			store, err := Open(t.Context(), dbPath)
 			if err == nil {
 				err = store.Close()
 			}

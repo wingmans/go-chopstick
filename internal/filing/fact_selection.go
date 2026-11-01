@@ -5,22 +5,22 @@ import (
 	"strconv"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 type selectedFact struct {
-	Fact     edgar.Fact
+	Fact     parser.Fact
 	Priority int
 }
 
-func selectFact(existing FactValue, existingConcept edgar.QName, candidate selectedFact) (FactValue, edgar.QName) {
+func selectFact(existing FactValue, existingConcept parser.QName, candidate selectedFact) (FactValue, parser.QName) {
 	value := factValue(candidate)
 	if existing.ContextRef == "" {
 		return value, candidate.Fact.Concept
 	}
 
 	current := selectedFact{
-		Fact: edgar.Fact{
+		Fact: parser.Fact{
 			Namespaces: nil,
 			Concept:    existingConcept,
 			Value:      existing.Value,
@@ -92,7 +92,7 @@ func factValue(candidate selectedFact) FactValue {
 	}
 }
 
-func candidatePrecisionScore(fact edgar.Fact) int {
+func candidatePrecisionScore(fact parser.Fact) int {
 	if strings.EqualFold(fact.Decimals, "INF") || strings.EqualFold(fact.Precision, "INF") {
 		return math.MaxInt
 	}

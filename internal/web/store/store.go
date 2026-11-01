@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	dividendview "wingman.com/chopstick/internal/dividend"
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/parser"
 )
 
 // Store defines the read operations needed by the analytical web application.
@@ -28,8 +28,8 @@ type Store interface {
 // It deliberately remains separate from Store so normal pages can work after
 // raw SEC files and parser artifacts have been archived or removed.
 type RawStore interface {
-	SourcePath(ctx context.Context, filing *edgar.ParsedFiling) (string, error)
-	LoadFiling(ctx context.Context, cik, accession string) (*edgar.ParsedFiling, error)
+	SourcePath(ctx context.Context, filing *parser.ParsedFiling) (string, error)
+	LoadFiling(ctx context.Context, cik, accession string) (*parser.ParsedFiling, error)
 }
 
 // Summary is filing-view metadata for list screens and API responses.
@@ -152,7 +152,7 @@ func (s *JSONDirectory) LoadFiling(
 	ctx context.Context,
 	cik string,
 	accession string,
-) (*edgar.ParsedFiling, error) {
+) (*parser.ParsedFiling, error) {
 	if err := checkContext(ctx); err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (s *JSONDirectory) LoadFiling(
 		return nil, os.ErrNotExist
 	}
 
-	filing, err := edgar.LoadParsedFiling(path)
+	filing, err := parser.LoadParsedFiling(path)
 
 	return filing, err
 }
@@ -228,7 +228,7 @@ func (s *JSONDirectory) ListSummaries(ctx context.Context) ([]Summary, error) {
 }
 
 // SourcePath resolves the original filing source path for parsed document bytes.
-func (s *JSONDirectory) SourcePath(ctx context.Context, filing *edgar.ParsedFiling) (string, error) {
+func (s *JSONDirectory) SourcePath(ctx context.Context, filing *parser.ParsedFiling) (string, error) {
 	if err := checkContext(ctx); err != nil {
 		return "", err
 	}

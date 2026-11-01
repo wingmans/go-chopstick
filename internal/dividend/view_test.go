@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestRebuildExtractsAnnouncementAndEvidence(t *testing.T) {
@@ -19,24 +19,24 @@ func TestRebuildExtractsAnnouncementAndEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	filing := &edgar.ParsedFiling{
-		SchemaVersion: edgar.ParsedSchemaVersion,
-		ParserVersion: edgar.ParserVersion,
+	filing := &parser.ParsedFiling{
+		SchemaVersion: parser.ParsedSchemaVersion,
+		ParserVersion: parser.ParserVersion,
 		SourceBase:    "absolute",
 		SourcePath:    sourcePath,
-		Metadata: edgar.FilingMetadata{
+		Metadata: parser.FilingMetadata{
 			Accession:  "0000789019-26-000001",
 			CIK:        "789019",
 			FormType:   "8-K",
 			FilingDate: "20260401",
-			Filers:     []edgar.SubmissionFiler{{Name: "MICROSOFT CORP"}},
+			Filers:     []parser.SubmissionFiler{{Name: "MICROSOFT CORP"}},
 		},
-		Documents: []edgar.SubmissionDocument{{
+		Documents: []parser.SubmissionDocument{{
 			Filename: "release.htm", ContentOffset: 0,
 			ContentLength: int64(len(source)),
 		}},
 	}
-	if _, err := edgar.SaveParsedFiling(root, filing); err != nil {
+	if _, err := parser.SaveParsedFiling(root, filing); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,7 +81,7 @@ func TestRebuildExtractsGolden10QReconciliation(t *testing.T) {
 	path := filepath.Join("..", "..", "golden", "formtypes",
 		"sample_10-Q.txt")
 
-	filing, err := edgar.ParseSubmission(t.Context(), path)
+	filing, err := parser.ParseSubmission(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestRebuildExtractsGolden10QReconciliation(t *testing.T) {
 	}
 
 	filing.SourceBase, filing.SourcePath = "absolute", absolute
-	if _, err := edgar.SaveParsedFiling(root, filing); err != nil {
+	if _, err := parser.SaveParsedFiling(root, filing); err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,19 +130,19 @@ func TestRebuildExtractsGolden10QReconciliation(t *testing.T) {
 func TestRebuildSkipsUnavailableAnnouncementSource(t *testing.T) {
 	root := t.TempDir()
 
-	filing := &edgar.ParsedFiling{
-		SchemaVersion: edgar.ParsedSchemaVersion,
-		ParserVersion: edgar.ParserVersion,
+	filing := &parser.ParsedFiling{
+		SchemaVersion: parser.ParsedSchemaVersion,
+		ParserVersion: parser.ParserVersion,
 		SourceBase:    "absolute",
 		SourcePath:    filepath.Join(root, "missing.txt"),
-		Metadata: edgar.FilingMetadata{
+		Metadata: parser.FilingMetadata{
 			Accession:  "0000789019-26-000002",
 			CIK:        "789019",
 			FormType:   "8-K",
 			FilingDate: "20260402",
 		},
 	}
-	if _, err := edgar.SaveParsedFiling(root, filing); err != nil {
+	if _, err := parser.SaveParsedFiling(root, filing); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,13 +160,13 @@ func TestMergeReplacesOneFilingContribution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	filing := &edgar.ParsedFiling{
-		Metadata: edgar.FilingMetadata{
+	filing := &parser.ParsedFiling{
+		Metadata: parser.FilingMetadata{
 			CIK: "789019", Accession: "0000789019-26-000003",
 			FilingDate: "20260403",
 		},
 		SourceBase: "absolute", SourcePath: sourcePath,
-		Documents: []edgar.SubmissionDocument{{
+		Documents: []parser.SubmissionDocument{{
 			ContentOffset: 0, ContentLength: int64(len(source)),
 		}},
 	}

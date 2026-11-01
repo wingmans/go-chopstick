@@ -1,4 +1,4 @@
-package pollingworker
+package work
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func (p *recordingPublisher) Publish(_ context.Context, _, _ string,
 func TestPublishFailureLeavesOutboxPending(t *testing.T) {
 	t.Parallel()
 
-	store, err := NewDedupeServiceContext(t.Context(),
+	store, err := Open(t.Context(),
 		t.TempDir()+"/polling.db")
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ func TestPublishFailureLeavesOutboxPending(t *testing.T) {
 
 	t.Cleanup(func() { _ = store.Close() })
 
-	if err := store.SaveAccessionContext(t.Context(), FilingEvent{
+	if err := store.SaveAccessionContext(t.Context(), Event{
 		AccessionNumber: "0000000001-26-000002",
 		CIK:             "1",
 		FormType:        "10-Q",
@@ -61,7 +61,7 @@ func TestPublishFailureLeavesOutboxPending(t *testing.T) {
 func TestSaveBatchCreatesOneOutboxMessagePerAccession(t *testing.T) {
 	t.Parallel()
 
-	store, err := NewDedupeServiceContext(t.Context(),
+	store, err := Open(t.Context(),
 		t.TempDir()+"/polling.db")
 	if err != nil {
 		t.Fatal(err)
@@ -69,14 +69,14 @@ func TestSaveBatchCreatesOneOutboxMessagePerAccession(t *testing.T) {
 
 	t.Cleanup(func() { _ = store.Close() })
 
-	event := FilingEvent{
+	event := Event{
 		AccessionNumber: "0000000001-26-000001",
 		CIK:             "1",
 		FormType:        "10-K",
 		SourceFeed:      "ATOM",
 	}
 	if _, err := store.SaveBatchContext(t.Context(),
-		[]FilingEvent{event, event}); err != nil {
+		[]Event{event, event}); err != nil {
 		t.Fatal(err)
 	}
 

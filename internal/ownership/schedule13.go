@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func parseSchedule13(ctx context.Context, path string,
-	documents []edgar.SubmissionDocument, filing *Filing,
+	documents []parser.SubmissionDocument, filing *Filing,
 ) error {
 	document, err := primaryDocument(documents, filing.FormType)
 	if err != nil {

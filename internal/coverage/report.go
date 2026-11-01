@@ -17,6 +17,7 @@ import (
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/parser"
 )
 
 const SchemaVersion = 1
@@ -404,7 +405,7 @@ func metricDimensionalEvidence(path string, missing []string) map[string][]strin
 		return nil
 	}
 
-	source, err := edgar.LoadParsedFiling(path)
+	source, err := parser.LoadParsedFiling(path)
 	if err != nil {
 		// Dimensional evidence is advisory. Coverage should still report the
 		// compact view when the source parse is unavailable or incompatible.
@@ -414,7 +415,7 @@ func metricDimensionalEvidence(path string, missing []string) map[string][]strin
 	return sourceDimensionalEvidence(source, missing)
 }
 
-func sourceDimensionalEvidence(filing *edgar.ParsedFiling, missing []string) map[string][]string {
+func sourceDimensionalEvidence(filing *parser.ParsedFiling, missing []string) map[string][]string {
 	if filing == nil {
 		return nil
 	}
@@ -444,7 +445,7 @@ func sourceDimensionalEvidence(filing *edgar.ParsedFiling, missing []string) map
 	return evidence
 }
 
-func hasDimensionalUSGAAPFact(filing *edgar.ParsedFiling, concept string) bool {
+func hasDimensionalUSGAAPFact(filing *parser.ParsedFiling, concept string) bool {
 	for _, instance := range filing.Instances {
 		dimensionalContexts := make(map[string]struct{}, len(instance.Contexts))
 		for _, context := range instance.Contexts {

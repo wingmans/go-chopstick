@@ -14,7 +14,7 @@ import (
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
 	"wingman.com/chopstick/internal/eventworker"
-	"wingman.com/chopstick/internal/pollingworker"
+	filingwork "wingman.com/chopstick/internal/filing/work"
 )
 
 // Backfill downloads the historical index, publishes discoveries, and drains
@@ -76,7 +76,7 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 		return fmt.Errorf("select stage: %w", err)
 	}
 
-	failures, err := pollingworker.NewDedupeServiceContext(
+	failures, err := filingwork.Open(
 		ctx, config.PollingDB,
 	)
 	if err != nil {

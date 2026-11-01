@@ -7,10 +7,10 @@ import (
 	"time"
 
 	dividendview "wingman.com/chopstick/internal/dividend"
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
 	"wingman.com/chopstick/internal/news"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
+	"wingman.com/chopstick/internal/parser"
 	filingstore "wingman.com/chopstick/internal/web/store"
 )
 
@@ -100,7 +100,7 @@ type companyDividendRow struct {
 
 type detailData struct {
 	Page          pageChrome
-	Filing        *edgar.ParsedFiling
+	Filing        *parser.ParsedFiling
 	BackURL       string
 	Summary       []filingview.SummaryGroup
 	Statements    []filingview.StatementView
@@ -116,7 +116,7 @@ type detailData struct {
 
 type rawInspectorData struct {
 	Page   pageChrome
-	Filing *edgar.ParsedFiling
+	Filing *parser.ParsedFiling
 }
 
 func buildCompanyDividendTable(view dividendview.View, years []string) companyDividendTable {

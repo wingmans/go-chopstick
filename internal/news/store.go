@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	filingwork "wingman.com/chopstick/internal/filing/work"
 	"wingman.com/chopstick/internal/news/dbgen"
-	"wingman.com/chopstick/internal/pollingworker"
 )
 
 const maxSQLiteInteger = uint64(1<<63 - 1)
@@ -78,7 +78,7 @@ func Open(ctx context.Context, path string) (*Store, bool, error) {
 
 // Apply stores an event after it has been durably received from JetStream.
 func (s *Store) Apply(ctx context.Context, sequence uint64, eventID string,
-	event pollingworker.FilingEvent,
+	event filingwork.Event,
 ) error {
 	if sequence > maxSQLiteInteger {
 		return fmt.Errorf("store news item: sequence %d exceeds SQLite integer",

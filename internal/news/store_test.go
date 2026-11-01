@@ -3,7 +3,7 @@ package news
 import (
 	"testing"
 
-	"wingman.com/chopstick/internal/pollingworker"
+	filingwork "wingman.com/chopstick/internal/filing/work"
 )
 
 func TestStoreOrdersByStreamSequenceAndFilters(t *testing.T) {
@@ -22,7 +22,7 @@ func TestStoreOrdersByStreamSequenceAndFilters(t *testing.T) {
 		t.Fatal("new database was not reported as created")
 	}
 
-	for sequence, event := range map[uint64]pollingworker.FilingEvent{
+	for sequence, event := range map[uint64]filingwork.Event{
 		4: {
 			AccessionNumber: "first", CIK: "1", FormType: "10-Q",
 			FilingDate: "2026-01-01", SourceFeed: "ATOM",

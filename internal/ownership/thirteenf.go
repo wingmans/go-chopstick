@@ -9,11 +9,11 @@ import (
 	"os"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func parse13F(ctx context.Context, path string,
-	documents []edgar.SubmissionDocument, filing *Filing,
+	documents []parser.SubmissionDocument, filing *Filing,
 ) error {
 	document, err := primaryDocument(documents, filing.FormType)
 	if err != nil {
@@ -163,7 +163,7 @@ func parse13F(ctx context.Context, path string,
 }
 
 func parse13FInformationTable(ctx context.Context, path string,
-	document edgar.SubmissionDocument, rowOffset int, reportPeriod string,
+	document parser.SubmissionDocument, rowOffset int, reportPeriod string,
 ) ([]InstitutionalPosition, error) {
 	file, err := os.Open(path)
 	if err != nil {

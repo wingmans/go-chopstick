@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestJSONDirectoryListsViewSummaries(t *testing.T) {
@@ -35,7 +35,7 @@ func TestJSONDirectoryListsViewSummaries(t *testing.T) {
 	if summaries[0].Accession != "0001193125-26-000001" ||
 		summaries[0].Company != "Alpha Corp." ||
 		summaries[0].Facts != 1 ||
-		summaries[0].Status != edgar.ParseComplete {
+		summaries[0].Status != parser.ParseComplete {
 		t.Fatalf("first summary=%+v", summaries[0])
 	}
 
@@ -180,39 +180,39 @@ func parsedFiling(
 	filingDate string,
 	company string,
 	facts int,
-) *edgar.ParsedFiling {
-	instance := edgar.XBRLInstance{}
+) *parser.ParsedFiling {
+	instance := parser.XBRLInstance{}
 	for range facts {
-		instance.Facts = append(instance.Facts, edgar.Fact{})
+		instance.Facts = append(instance.Facts, parser.Fact{})
 	}
 
-	return &edgar.ParsedFiling{
-		SchemaVersion: edgar.ParsedSchemaVersion,
-		ParserVersion: edgar.ParserVersion,
+	return &parser.ParsedFiling{
+		SchemaVersion: parser.ParsedSchemaVersion,
+		ParserVersion: parser.ParserVersion,
 		SourcePath:    "",
 		SourceBase:    "",
 		SourceSHA256:  "",
-		Metadata: edgar.FilingMetadata{
+		Metadata: parser.FilingMetadata{
 			Accession:  accession,
 			CIK:        cik,
 			FormType:   formType,
 			FilingDate: filingDate,
-			Filers: []edgar.SubmissionFiler{{
+			Filers: []parser.SubmissionFiler{{
 				CIK: cik, Name: company, Header: []string{},
 			}},
 			Items: []string{},
 		},
-		Documents:   []edgar.SubmissionDocument{},
-		Instances:   []edgar.XBRLInstance{instance},
-		Status:      edgar.ParseComplete,
-		Diagnostics: []edgar.ParseDiagnostic{},
+		Documents:   []parser.SubmissionDocument{},
+		Instances:   []parser.XBRLInstance{instance},
+		Status:      parser.ParseComplete,
+		Diagnostics: []parser.ParseDiagnostic{},
 	}
 }
 
-func saveParsedAndView(t *testing.T, parsedDir string, filing *edgar.ParsedFiling) {
+func saveParsedAndView(t *testing.T, parsedDir string, filing *parser.ParsedFiling) {
 	t.Helper()
 
-	if _, err := edgar.SaveParsedFiling(parsedDir, filing); err != nil {
+	if _, err := parser.SaveParsedFiling(parsedDir, filing); err != nil {
 		t.Fatal(err)
 	}
 

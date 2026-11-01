@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestGolden10Q2026ParsedCorpus(t *testing.T) {
@@ -39,7 +39,7 @@ func TestGolden10Q2026ParsedCorpus(t *testing.T) {
 			matched := 0
 
 			for _, path := range paths {
-				filing, err := edgar.ParseSubmission(t.Context(), path)
+				filing, err := parser.ParseSubmission(t.Context(), path)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -105,7 +105,7 @@ func TestGolden10Q2026SubmissionPath(t *testing.T) {
 	seen := map[string]int{}
 
 	for _, path := range paths {
-		filing, err := edgar.ParseSubmission(t.Context(), path)
+		filing, err := parser.ParseSubmission(t.Context(), path)
 		if err != nil {
 			t.Fatal(err)
 		}

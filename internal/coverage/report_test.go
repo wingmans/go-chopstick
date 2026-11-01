@@ -13,6 +13,7 @@ import (
 	"wingman.com/chopstick/internal/analysisstore"
 	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {
@@ -412,7 +413,7 @@ func writeParsedFixture(t *testing.T, root string, testCase expectedCoverageCase
 	t.Helper()
 
 	filing := parsedCoverageFixture(testCase)
-	if _, err := edgar.SaveParsedFiling(filepath.Join(root, "parsed"), filing); err != nil {
+	if _, err := parser.SaveParsedFiling(filepath.Join(root, "parsed"), filing); err != nil {
 		t.Fatalf("save parsed filing: %v", err)
 	}
 
@@ -449,31 +450,31 @@ func writeParsedFixture(t *testing.T, root string, testCase expectedCoverageCase
 	}
 }
 
-func parsedCoverageFixture(testCase expectedCoverageCase) *edgar.ParsedFiling {
-	return &edgar.ParsedFiling{
-		SchemaVersion: edgar.ParsedSchemaVersion, ParserVersion: edgar.ParserVersion,
+func parsedCoverageFixture(testCase expectedCoverageCase) *parser.ParsedFiling {
+	return &parser.ParsedFiling{
+		SchemaVersion: parser.ParsedSchemaVersion, ParserVersion: parser.ParserVersion,
 		SourcePath: "", SourceBase: "", SourceSHA256: "",
-		Metadata: edgar.FilingMetadata{
+		Metadata: parser.FilingMetadata{
 			Accession: testCase.Accession, CIK: testCase.CIK,
 			FormType: "10-K", FilingDate: testCase.DateFiled, ReportDate: "",
 			Filers: nil, Items: nil, Header: nil,
 		},
 		Documents: nil,
 		Instances: dimensionalEPSInstances(testCase),
-		Status:    edgar.ParseComplete, Diagnostics: nil,
+		Status:    parser.ParseComplete, Diagnostics: nil,
 	}
 }
 
-func dimensionalEPSInstances(testCase expectedCoverageCase) []edgar.XBRLInstance {
+func dimensionalEPSInstances(testCase expectedCoverageCase) []parser.XBRLInstance {
 	if _, ok := testCase.DimensionalEvidence["eps_diluted"]; !ok {
 		return nil
 	}
 
-	return []edgar.XBRLInstance{{
+	return []parser.XBRLInstance{{
 		Root: emptyXMLNode(), DocumentIndex: 0, Document: "",
-		Facts: []edgar.Fact{{
+		Facts: []parser.Fact{{
 			Namespaces: nil,
-			Concept: edgar.QName{
+			Concept: parser.QName{
 				Namespace: "http://fasb.org/us-gaap/2024-01-31",
 				Local:     "EarningsPerShareBasic",
 			},
@@ -481,15 +482,15 @@ func dimensionalEPSInstances(testCase expectedCoverageCase) []edgar.XBRLInstance
 			Decimals: "", Precision: "", Language: "", Nil: false, ID: "",
 			Attributes: nil, Structured: nil,
 		}},
-		Contexts: []edgar.FactContext{{
+		Contexts: []parser.FactContext{{
 			ID: "class-b", Entity: "", Scheme: "", Instant: "",
 			StartDate: "2024-01-01", EndDate: "2024-12-31", Forever: false,
-			Dimensions: []edgar.FactDimension{{
-				Axis: edgar.QName{
+			Dimensions: []parser.FactDimension{{
+				Axis: parser.QName{
 					Namespace: "http://fasb.org/us-gaap/2024-01-31",
 					Local:     "StatementClassOfStockAxis",
 				},
-				Member: &edgar.QName{Namespace: "urn:test", Local: "ClassBMember"},
+				Member: &parser.QName{Namespace: "urn:test", Local: "ClassBMember"},
 				Typed:  nil,
 			}},
 			Source: emptyXMLNode(),
@@ -505,7 +506,7 @@ func filingViewFixture(testCase expectedCoverageCase) filingview.View {
 	}
 
 	return filingview.View{
-		SchemaVersion: filingview.SchemaVersion, ParserVersion: edgar.ParserVersion,
+		SchemaVersion: filingview.SchemaVersion, ParserVersion: parser.ParserVersion,
 		TaxonomyVersion: "test", SourcePath: "", SourceSHA256: "",
 		Metadata: filingview.Metadata{
 			Accession: testCase.Accession, CIK: testCase.CIK,
@@ -524,7 +525,7 @@ func filingViewFixture(testCase expectedCoverageCase) filingview.View {
 		Ratios: nil, Quality: filingview.Quality{IdentityChecks: nil},
 		Counts: filingview.Counts{
 			Documents: 0, Instances: 0, Facts: len(rows), Contexts: 0,
-			DimensionalFactsExcluded: 0, Status: edgar.ParseComplete,
+			DimensionalFactsExcluded: 0, Status: parser.ParseComplete,
 		},
 		Diagnostics: nil,
 	}
@@ -598,9 +599,9 @@ func TestSourceDimensionalEvidenceReportsBasicEPSForMissingDilutedEPS(t *testing
 	}
 }
 
-func emptyXMLNode() edgar.XMLNode {
-	return edgar.XMLNode{
-		Name:       edgar.QName{Namespace: "", Local: ""},
+func emptyXMLNode() parser.XMLNode {
+	return parser.XMLNode{
+		Name:       parser.QName{Namespace: "", Local: ""},
 		Language:   "",
 		Attributes: nil,
 		Namespaces: nil,

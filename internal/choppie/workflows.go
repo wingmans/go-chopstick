@@ -33,9 +33,16 @@ type BackfillConfig struct {
 	NATSURL  string
 }
 
+// RebuildConfig selects the retained inputs used to rebuild EDGAR state.
+type RebuildConfig struct {
+	SetName  string
+	FromYear int
+	NATSURL  string
+}
+
 // Backfill runs the finite historical pipeline.
 func Backfill(ctx context.Context, cfg BackfillConfig, logger *slog.Logger) error {
-	config, err := applicationConfig(cfg)
+	config, err := applicationConfig(cfg.SetName, cfg.FromYear, cfg.NATSURL)
 	if err != nil {
 		return err
 	}
@@ -44,8 +51,8 @@ func Backfill(ctx context.Context, cfg BackfillConfig, logger *slog.Logger) erro
 }
 
 // Rebuild restores disposable EDGAR state from retained inputs.
-func Rebuild(ctx context.Context, cfg BackfillConfig, logger *slog.Logger) error {
-	config, err := applicationConfig(cfg)
+func Rebuild(ctx context.Context, cfg RebuildConfig, logger *slog.Logger) error {
+	config, err := applicationConfig(cfg.SetName, cfg.FromYear, cfg.NATSURL)
 	if err != nil {
 		return err
 	}
@@ -53,16 +60,18 @@ func Rebuild(ctx context.Context, cfg BackfillConfig, logger *slog.Logger) error
 	return edgarapp.Rebuild(ctx, config, logger)
 }
 
-func applicationConfig(cfg BackfillConfig) (edgarapp.Config, error) {
+func applicationConfig(setName string, fromYear int,
+	natsURL string,
+) (edgarapp.Config, error) {
 	config, err := edgarapp.ConfigFromEnvironment()
 	if err != nil {
 		return edgarapp.Config{}, err
 	}
 
-	config.NATSURL = cfg.NATSURL
-	config.FromYear = cfg.FromYear
+	config.NATSURL = natsURL
+	config.FromYear = fromYear
 
-	if err := config.SetConstituentSet(cfg.SetName); err != nil {
+	if err := config.SetConstituentSet(setName); err != nil {
 		return edgarapp.Config{}, err
 	}
 

@@ -5,14 +5,14 @@ import (
 	"sort"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 type statementAccumulator struct {
 	Rows map[string]map[string]*FactSeries
 }
 
-func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
+func buildStatements(filing *parser.ParsedFiling) (Statements, []RatioSeries) {
 	taxonomy := defaultTaxonomy()
 	accumulators := map[string]*statementAccumulator{
 		"income":    {Rows: map[string]map[string]*FactSeries{}},
@@ -23,7 +23,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 	for _, instance := range filing.Instances {
 		units := unitMap(instance)
 
-		contexts := make(map[string]edgar.FactContext, len(instance.Contexts))
+		contexts := make(map[string]parser.FactContext, len(instance.Contexts))
 		for _, context := range instance.Contexts {
 			if len(context.Dimensions) == 0 {
 				contexts[context.ID] = context
@@ -65,7 +65,7 @@ func buildStatements(filing *edgar.ParsedFiling) (Statements, []RatioSeries) {
 			}
 
 			selectedValue, selectedConcept := selectFact(row.Values[periodKey],
-				edgar.QName{Namespace: row.Namespace, Local: row.Concept},
+				parser.QName{Namespace: row.Namespace, Local: row.Concept},
 				selectedFact{Fact: fact, Priority: reference.Priority})
 			row.Values[periodKey] = selectedValue
 			row.Namespace = selectedConcept.Namespace
@@ -127,7 +127,7 @@ func fallbackMissingEquity(accumulator *statementAccumulator) {
 			fallback.Values[period] = FactValue{
 				Value: value.Value, Nil: false, ContextRef: value.ContextRef,
 				Decimals: value.Decimals, UnitRef: value.UnitRef,
-				priority: 0, concept: edgar.QName{
+				priority: 0, concept: parser.QName{
 					Namespace: "derived", Local: "EquityIncludingNoncontrollingInterestFallback",
 				},
 				id: "", precision: "",
@@ -190,7 +190,7 @@ func deriveMissingLiabilities(accumulator *statementAccumulator) {
 				Value: totalRat.Sub(totalRat, equityRat).RatString(),
 				Nil:   false, ContextRef: totalValue.ContextRef,
 				Decimals: "", UnitRef: totalValue.UnitRef,
-				priority: 0, concept: edgar.QName{Namespace: "derived", Local: "DerivedLiabilities"},
+				priority: 0, concept: parser.QName{Namespace: "derived", Local: "DerivedLiabilities"},
 				id: "", precision: "",
 			}
 		}

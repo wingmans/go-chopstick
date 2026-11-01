@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/parser"
 )
 
 func TestGolden10QBuildsQuarterlyView(t *testing.T) {
 	path := filepath.Join("..", "..", "golden", "formtypes", "sample_10-Q.txt")
 
-	filing, err := edgar.ParseSubmission(t.Context(), path)
+	filing, err := parser.ParseSubmission(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
