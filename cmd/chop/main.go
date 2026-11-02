@@ -82,7 +82,7 @@ func runMain(args []string) int {
 
 	started := time.Now()
 
-	if err := parsed.Run(ctx, runtime); err != nil {
+	if err := runCommand(parsed, ctx, runtime); err != nil {
 		err = choppie.ClassifyError(ctx, err)
 		if errors.Is(err, context.Canceled) {
 			logger.Info("shutdown requested")
@@ -99,6 +99,14 @@ func runMain(args []string) int {
 		"duration_ms", time.Since(started).Milliseconds())
 
 	return 0
+}
+
+func runCommand(parsed *kong.Context, ctx context.Context,
+	runtime *commandRuntime,
+) error {
+	parsed.BindTo(ctx, (*context.Context)(nil))
+
+	return parsed.Run(runtime)
 }
 
 func commandArgs(args []string) []string {

@@ -44,14 +44,14 @@ func Ownership(ctx context.Context, bus *eventbus.NATS, cfg OwnershipConfig,
 	return consume(ctx, subscription, logger, "ownership", cfg.Drain,
 		cfg.MaxAttempts, cfg.Failures, func(message *nats.Msg,
 			event filingwork.Event,
-		) error {
+		) (string, error) {
 			if !ownership.RecognizesForm(event.FormType) {
-				return message.Ack()
+				return "ignored", message.Ack()
 			}
 
 			filed, err := time.Parse("2006-01-02", event.FilingDate)
 			if err != nil {
-				return err
+				return "", err
 			}
 
 			record := edgar.EdgarIndex{
@@ -63,14 +63,14 @@ func Ownership(ctx context.Context, bus *eventbus.NATS, cfg OwnershipConfig,
 			decision, err := ownershippipeline.ProcessOne(ctx, store,
 				downloader, ownershippipeline.Config{}, record)
 			if err != nil {
-				return err
+				return "", err
 			}
 
 			logger.Info("ownership filing handled",
 				"accession", event.AccessionNumber,
 				"decision", decision.String())
 
-			return message.Ack()
+			return "recognized", message.Ack()
 		})
 }
 

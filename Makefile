@@ -52,19 +52,17 @@ check-generated: generate
 		internal/filing/work/dbgen \
 		internal/market/store/dbgen \
 		internal/analysisstore/dbgen \
-		internal/news/dbgen \
-		internal/web/templates_templ.go)" || { \
+		internal/news/dbgen)" || { \
 		echo 'generated database code is out of date' >&2; \
 		git status --short --untracked-files=all -- \
 			internal/filing/work/dbgen \
 			internal/market/store/dbgen \
 			internal/analysisstore/dbgen \
-			internal/news/dbgen \
-			internal/web/templates_templ.go; \
+			internal/news/dbgen; \
 		exit 1; \
 	}
 
-build:
+build: generate
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/ecb-fx ./cmd/ecb
 	go build -o $(BIN_DIR)/chop ./cmd/chop
@@ -72,20 +70,21 @@ build:
 	go build -o $(BIN_DIR)/constituents ./cmd/constituents
 	go build -o $(BIN_DIR)/yahoo-prices ./cmd/yf
 
-run:
+run: generate
 	go run ./cmd/chopd
 
-lint:
+lint: generate
 	golangci-lint run --fix ./cmd/... ./internal/...
 
 docs-pdf:
 	bash scripts/docs-pdf.sh
 
-test:
+test: generate
 	go test ./...
 
 clean:
 	rm -rf $(BIN_DIR) dist
+	find internal/web -type f -name '*_templ.go' -delete
 
 nats-start:
 	bash scripts/nats-dev.sh start

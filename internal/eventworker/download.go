@@ -36,7 +36,7 @@ func Download(ctx context.Context, bus *eventbus.NATS, cfg DownloadConfig,
 	return consume(ctx, subscription, logger, "download", cfg.Drain,
 		cfg.MaxAttempts, cfg.Failures, func(message *nats.Msg,
 			event filingwork.Event,
-		) error {
+		) (string, error) {
 			record := edgar.EdgarIndex{
 				CIK:         event.CIK,
 				CompanyName: event.CompanyName,
@@ -45,14 +45,14 @@ func Download(ctx context.Context, bus *eventbus.NATS, cfg DownloadConfig,
 				IndexPath:   "",
 			}
 			if err := downloader.Download(ctx, record); err != nil {
-				return err
+				return "", err
 			}
 
 			event.IndexPath = ""
 
 			payload, err := json.Marshal(event)
 			if err != nil {
-				return err
+				return "", err
 			}
 
 			subject := eventbus.SubjectFor(eventbus.DownloadedSubject,
@@ -60,12 +60,12 @@ func Download(ctx context.Context, bus *eventbus.NATS, cfg DownloadConfig,
 
 			messageID := "filing.downloaded:" + event.AccessionNumber
 			if err := bus.Publish(ctx, subject, messageID, payload); err != nil {
-				return err
+				return "", err
 			}
 
 			logger.Info("filing ready", "accession", event.AccessionNumber)
 
-			return message.Ack()
+			return "", message.Ack()
 		})
 }
 

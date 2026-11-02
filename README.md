@@ -196,6 +196,10 @@ make lint     # Run golangci-lint
 make clean    # Remove build artifacts
 ```
 
+The build, test, lint, and run targets generate compiled Templ Go files before
+loading Go packages. These `*_templ.go` files are build artifacts and are not
+kept in source control.
+
 Run the Chop application in the foreground during development:
 
 ```bash
