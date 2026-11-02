@@ -45,8 +45,9 @@ type rebuildEdgarCLI struct {
 }
 
 type indexCLI struct {
-	Download indexDownloadCLI `cmd:"" default:"withargs"           help:"Download SEC indexes."`
+	Download indexDownloadCLI `cmd:"" default:"withargs"                               help:"Download SEC indexes."`
 	Import   indexImportCLI   `cmd:"" help:"Import local indexes."`
+	Status   indexStatusCLI   `cmd:"" help:"Show index inventory and import coverage."`
 }
 
 type indexDownloadCLI struct {
@@ -57,15 +58,17 @@ type indexDownloadCLI struct {
 }
 
 type indexImportCLI struct {
-	IndexesDir string `default:"${indexes_dir}"                      help:"Quarterly index directory." placeholder:"path"`
-	PollingDB  string `default:"${polling_db}"                       help:"Pipeline state database."   placeholder:"path"`
-	NATSURL    string `default:"${nats_url}"                         help:"NATS server URL."           name:"nats-url"    placeholder:"url"`
-	File       string `help:"Import one quarterly TSV file."         placeholder:"path"`
-	Latest     bool   `help:"Import the newest local quarterly TSV."`
-	Year       int    `help:"Import all quarters for one year."      placeholder:"year"`
-	FromYear   int    `help:"First year to import."                  placeholder:"year"`
-	ToYear     int    `help:"Last year to import."                   placeholder:"year"`
-	DryRun     bool   `help:"Read and report without writing."`
+	CommandAddress string `default:"${command_address}"                  help:"chopd command address." placeholder:"host:port"`
+	File           string `help:"Import one quarterly TSV file."         placeholder:"path"`
+	Latest         bool   `help:"Import the newest local quarterly TSV."`
+	Year           int    `help:"Import all quarters for one year."      placeholder:"year"`
+	FromYear       int    `help:"First year to import."                  placeholder:"year"`
+	ToYear         int    `help:"Last year to import."                   placeholder:"year"`
+	DryRun         bool   `help:"Read and report without writing."`
+}
+
+type indexStatusCLI struct {
+	CommandAddress string `default:"${command_address}" help:"chopd command address." placeholder:"host:port"`
 }
 
 type selectionCLI struct {

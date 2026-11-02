@@ -10,6 +10,8 @@ The repository builds two Chop executables for SEC EDGAR data:
 typed use cases. `internal/choppie` contains command workflows and operator
 rendering, but no command-line parser. See the
 [architecture guide](architecture.md) for the package boundaries.
+The current index-first daemon work is described in the
+[daemon pipeline plan](daemon-pipeline-plan.md).
 
 NATS remains a separate local service and carries durable filing events. Live
 control requests use the local TCP transport between `chop` and `chopd`.
@@ -65,17 +67,39 @@ constituent sets, ownership data, and market data. It removes rebuildable
 filing-analysis state, resets the EDGAR JetStream stream, and runs a finite
 backfill. NATS must be running, but `chopd` must be stopped.
 
-The former standalone polling commands are application operations now. The
-continuous Atom poller belongs to `chopd`; local quarterly-index recovery is
-available through the control CLI:
+Atom and quarterly-index ingestion are application operations. The continuous
+Atom poller belongs to `chopd`. A quarterly-index import is submitted to the
+running daemon through the control CLI:
 
 ```bash
 go run ./cmd/chop index import --latest --dry-run
 go run ./cmd/chop index import --year 2025
+go run ./cmd/chop index status
 ```
 
-A mutating import also acquires the data-root lock and therefore requires
-`chopd` to be stopped.
+The command returns after `chopd` accepts the import. Import, deduplication,
+outbox publication, and workflow logs remain in the daemon. Use `chop status`
+to inspect the active import and pipeline backlog. `--latest` selects the
+latest local quarterly file; it does not fetch from SEC.
+
+`chop index status` is the operator view of index storage. It reports the
+quarterly cache and master paths, locally available quarters, gaps, master
+freshness, durably imported quarters, the last committed import, and an active
+import. Inspecting files directly is a troubleshooting technique, not the
+normal management interface.
+
+The full local master contains every quarterly TSV currently present in the
+local cache. It does not require the complete SEC history. A development
+instance can deliberately retain only three or four years:
+
+```bash
+go run ./cmd/chop index download --from-year 2023
+go run ./cmd/chop index import --from-year 2023 --to-year 2026
+```
+
+Year selectors bound source history. `EDGAR_SET` and `EDGAR_FORM_TYPES` remain
+downstream selection policy, so changing a constituent set does not require
+downloading the source indexes again.
 
 `Ctrl-C` stops `chopd` cleanly. Development does not require systemd or a
 daemon mode. A future systemd unit will run the same foreground executable.
@@ -92,8 +116,10 @@ NATS remains separate and carries pipeline events. It is not the CLI command
 transport.
 
 `doctor` performs direct dependency checks so it remains useful when NATS or
-`chopd` is unavailable. Backfill, rebuild, and index import remain offline
-operations and require the application lock instead of contacting `chopd`.
+`chopd` is unavailable. Backfill and rebuild remain offline operations and
+require the application lock instead of contacting `chopd`. Index import uses
+the local command transport and daemon-owned storage paths. Index status uses
+the same transport and does not inspect daemon storage from the CLI process.
 
 The application remains a monolith. Its Atom, selection, download, processing,
 ownership, news, and web roles share one process while retaining their NATS

@@ -171,7 +171,10 @@ func resetDerivedState() error {
 		}
 	}
 
-	files := []string{filepath.Join(root, "cache", "indexes", "master.tsv")}
+	files := []string{
+		filepath.Join(root, "cache", "indexes", "master.tsv"),
+		filepath.Join(root, "cache", "indexes", "import-state.json"),
+	}
 
 	for _, name := range []string{"polling.db", "analysis.db", "feed.db"} {
 		for _, suffix := range []string{"", "-shm", "-wal", "-journal"} {

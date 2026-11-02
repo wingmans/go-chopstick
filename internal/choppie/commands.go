@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -16,8 +15,8 @@ import (
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
-	"wingman.com/chopstick/internal/indeximport"
 	"wingman.com/chopstick/internal/ownership"
+	"wingman.com/chopstick/internal/transport"
 	"wingman.com/chopstick/internal/xerr"
 )
 
@@ -381,15 +380,61 @@ func applyYears(filter *edgar.IndexFilter, year string,
 	return nil
 }
 
-// ImportIndex validates and runs an index import.
-func ImportIndex(ctx context.Context, cfg indeximport.Config,
-	logger *slog.Logger,
-) error {
-	if err := cfg.Validate(); err != nil {
+// IndexImportConfig selects an index import handled by chopd.
+type IndexImportConfig struct {
+	Address  string
+	File     string
+	Latest   bool
+	Year     int
+	FromYear int
+	ToYear   int
+	DryRun   bool
+}
+
+// SubmitIndexImport asks chopd to ingest local quarterly indexes.
+func SubmitIndexImport(ctx context.Context, cfg IndexImportConfig) error {
+	response, err := transport.Send(ctx, cfg.Address, transport.Request{
+		Command: transport.CommandImportIndex,
+		IndexImport: &transport.IndexImportRequest{
+			File: cfg.File, Latest: cfg.Latest, Year: cfg.Year,
+			FromYear: cfg.FromYear, ToYear: cfg.ToYear, DryRun: cfg.DryRun,
+		},
+	})
+	if err != nil {
 		return err
 	}
 
-	return ImportIndexes(ctx, cfg, logger)
+	if response.IndexImport == nil || !response.IndexImport.Accepted {
+		return errors.New("chopd did not accept the index import")
+	}
+
+	fmt.Println("Index import accepted by chopd.")
+	fmt.Println("Use 'chop status' to inspect pipeline progress.")
+
+	return nil
+}
+
+// IndexStatusConfig identifies the running application's command endpoint.
+type IndexStatusConfig struct {
+	Address string
+}
+
+// PrintIndexStatus prints local index inventory reported by chopd.
+func PrintIndexStatus(ctx context.Context, cfg IndexStatusConfig) error {
+	response, err := transport.Send(ctx, cfg.Address, transport.Request{
+		Command: transport.CommandIndexStatus,
+	})
+	if err != nil {
+		return err
+	}
+
+	if response.IndexStatus == nil {
+		return errors.New("chopd returned an empty index status")
+	}
+
+	renderIndexStatus(*response.IndexStatus)
+
+	return nil
 }
 
 // ClassifyError maps command failures onto the stable CLI error vocabulary.

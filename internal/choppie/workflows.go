@@ -15,7 +15,6 @@ import (
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/edgarapp"
 	filingview "wingman.com/chopstick/internal/filing"
-	"wingman.com/chopstick/internal/indeximport"
 	"wingman.com/chopstick/internal/ownership"
 	ownershippipeline "wingman.com/chopstick/internal/ownership/pipeline"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
@@ -76,15 +75,6 @@ func applicationConfig(setName string, fromYear int,
 	}
 
 	return config, nil
-}
-
-// ImportIndexes imports local quarterly indexes into the event pipeline.
-func ImportIndexes(
-	ctx context.Context,
-	config indeximport.Config,
-	logger *slog.Logger,
-) error {
-	return indeximport.Run(ctx, config, logger)
 }
 
 // ParseConfig selects local filing submissions for parsing.

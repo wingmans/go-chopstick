@@ -355,6 +355,15 @@ func runStatus(ctx context.Context, cfg operationsConfig) error {
 	fmt.Printf("  stream messages   %d\n", status.StreamMessages)
 	fmt.Printf("  stream bytes      %d\n", status.StreamBytes)
 
+	if status.IndexImport != nil {
+		fmt.Printf("  index import      %s (%s)\n",
+			status.IndexImport.State, status.IndexImport.Phase)
+		fmt.Printf("  import progress   files=%d examined=%d queued=%d "+
+			"duplicates=%d\n",
+			status.IndexImport.Files, status.IndexImport.Examined,
+			status.IndexImport.Queued, status.IndexImport.Duplicates)
+	}
+
 	for _, consumer := range status.Consumers {
 		fmt.Printf("  %-17s remaining=%d pending=%d in_flight=%d\n",
 			consumer.Name, consumer.Pending+uint64(max(consumer.InFlight, 0)),

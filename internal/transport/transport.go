@@ -20,21 +20,63 @@ const (
 	CommandStatus        = "status"
 	CommandListFailures  = "failures.list"
 	CommandRetryFailures = "failures.retry"
+	CommandImportIndex   = "index.import"
+	CommandIndexStatus   = "index.status"
 )
 
 // Request is one command sent from chop to chopd.
 type Request struct {
-	Command string `json:"command"`
-	Stage   string `json:"stage,omitempty"`
-	Limit   int    `json:"limit,omitempty"`
+	Command     string              `json:"command"`
+	Stage       string              `json:"stage,omitempty"`
+	Limit       int                 `json:"limit,omitempty"`
+	IndexImport *IndexImportRequest `json:"index_import,omitempty"`
 }
 
 // Response is one command result returned by chopd.
 type Response struct {
-	Status   *Status   `json:"status,omitempty"`
-	Failures []Failure `json:"failures,omitempty"`
-	Retried  int       `json:"retried,omitempty"`
-	Error    string    `json:"error,omitempty"`
+	Status      *Status              `json:"status,omitempty"`
+	IndexImport *IndexImportResponse `json:"index_import,omitempty"`
+	IndexStatus *IndexStatusResponse `json:"index_status,omitempty"`
+	Failures    []Failure            `json:"failures,omitempty"`
+	Retried     int                  `json:"retried,omitempty"`
+	Error       string               `json:"error,omitempty"`
+}
+
+// IndexImportRequest selects local quarterly index files for ingestion.
+type IndexImportRequest struct {
+	File     string `json:"file,omitempty"`
+	Latest   bool   `json:"latest,omitempty"`
+	Year     int    `json:"year,omitempty"`
+	FromYear int    `json:"from_year,omitempty"`
+	ToYear   int    `json:"to_year,omitempty"`
+	DryRun   bool   `json:"dry_run,omitempty"`
+}
+
+// IndexImportResponse acknowledges a daemon-owned import.
+type IndexImportResponse struct {
+	Accepted bool `json:"accepted"`
+}
+
+// IndexStatusResponse describes local index inventory and import coverage.
+type IndexStatusResponse struct {
+	Directory        string              `json:"directory"`
+	MasterPath       string              `json:"master_path"`
+	MasterState      string              `json:"master_state"`
+	AvailablePeriods []string            `json:"available_periods"`
+	MissingPeriods   []string            `json:"missing_periods"`
+	ImportedPeriods  []string            `json:"imported_periods"`
+	LastImport       *IndexImportSummary `json:"last_import,omitempty"`
+	ActiveImport     *IndexImportStatus  `json:"active_import,omitempty"`
+}
+
+// IndexImportSummary describes the last selection committed to the work store.
+type IndexImportSummary struct {
+	CommittedAt time.Time `json:"committed_at"`
+	Files       []string  `json:"files"`
+	Periods     []string  `json:"periods"`
+	Examined    int       `json:"examined"`
+	Queued      int       `json:"queued"`
+	Duplicates  int       `json:"duplicates"`
 }
 
 // PipelineStats contains durable ingestion and failure counts.
@@ -53,14 +95,27 @@ type ConsumerStatus struct {
 	Redelivered int    `json:"redelivered"`
 }
 
+// IndexImportStatus is the currently running index import, when present.
+type IndexImportStatus struct {
+	State      string    `json:"state"`
+	Phase      string    `json:"phase"`
+	StartedAt  time.Time `json:"started_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	Files      int       `json:"files"`
+	Examined   int       `json:"examined"`
+	Queued     int       `json:"queued"`
+	Duplicates int       `json:"duplicates"`
+}
+
 // Status is the live state reported by chopd.
 type Status struct {
-	StartedAt      time.Time        `json:"started_at"`
-	HTTPAddress    string           `json:"http_address"`
-	Pipeline       PipelineStats    `json:"pipeline"`
-	StreamMessages uint64           `json:"stream_messages"`
-	StreamBytes    uint64           `json:"stream_bytes"`
-	Consumers      []ConsumerStatus `json:"consumers"`
+	StartedAt      time.Time          `json:"started_at"`
+	HTTPAddress    string             `json:"http_address"`
+	Pipeline       PipelineStats      `json:"pipeline"`
+	StreamMessages uint64             `json:"stream_messages"`
+	StreamBytes    uint64             `json:"stream_bytes"`
+	Consumers      []ConsumerStatus   `json:"consumers"`
+	IndexImport    *IndexImportStatus `json:"index_import,omitempty"`
 }
 
 // Failure is the operator-facing view of an unresolved pipeline failure.

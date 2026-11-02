@@ -89,6 +89,11 @@ func TestKongParsesCommandHierarchy(t *testing.T) {
 			command: "index import",
 		},
 		{
+			name:    "index status",
+			args:    []string{"index", "status"},
+			command: "index status",
+		},
+		{
 			name:    "default ownership import",
 			args:    []string{"ownership", "-f", "4", "--noop"},
 			command: "ownership import",

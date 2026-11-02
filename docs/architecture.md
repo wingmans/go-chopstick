@@ -20,7 +20,10 @@ process.
 
 `internal/edgar` accesses SEC indexes and filing sources. The
 `internal/edgar/atom` package discovers current filings from the SEC Atom
-feed.
+feed. `internal/indeximport` reads local quarterly indexes as a finite,
+daemon-owned discovery source. Both sources enter the same filing work store
+and outbox. The package also reports the local quarterly inventory and keeps a
+small import-provenance file beside the derived master index.
 
 `internal/filing/work` owns the durable filing event, deduplication, outbox,
 and failure state. `internal/eventbus` transports those events through NATS,

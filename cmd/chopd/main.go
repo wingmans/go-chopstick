@@ -105,10 +105,6 @@ func runMain(args []string) int {
 		return 1
 	}
 
-	if len(args) == 0 {
-		args = []string{"--help"}
-	}
-
 	if _, err := parser.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 
