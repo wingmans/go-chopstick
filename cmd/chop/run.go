@@ -15,7 +15,6 @@ import (
 	"wingman.com/chopstick/internal/choppie"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/eventbus"
-	"wingman.com/chopstick/internal/indeximport"
 	"wingman.com/chopstick/internal/transport"
 )
 
@@ -164,13 +163,28 @@ func (c *indexDownloadCLI) Run(ctx context.Context, runtime *commandRuntime) err
 	})
 }
 
-func (c *indexImportCLI) Run(ctx context.Context, runtime *commandRuntime) error {
-	return choppie.ImportIndex(ctx, indeximport.Config{
-		IndexesDirectory: c.IndexesDir, PollingDB: c.PollingDB,
-		NATSURL: c.NATSURL, File: c.File, Latest: c.Latest,
+func (c *indexImportCLI) Run(ctx context.Context) error {
+	file := c.File
+	if file != "" {
+		absolute, err := filepath.Abs(file)
+		if err != nil {
+			return fmt.Errorf("resolve index file: %w", err)
+		}
+
+		file = absolute
+	}
+
+	return choppie.SubmitIndexImport(ctx, choppie.IndexImportConfig{
+		Address: c.CommandAddress, File: file, Latest: c.Latest,
 		Year: c.Year, FromYear: c.FromYear, ToYear: c.ToYear,
 		DryRun: c.DryRun,
-	}, runtime.Logger)
+	})
+}
+
+func (c *indexStatusCLI) Run(ctx context.Context) error {
+	return choppie.PrintIndexStatus(ctx, choppie.IndexStatusConfig{
+		Address: c.CommandAddress,
+	})
 }
 
 func (s selectionCLI) filter() (edgar.IndexFilter, error) {

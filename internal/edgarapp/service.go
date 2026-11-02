@@ -45,7 +45,9 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	defer cancel()
 
 	startedAt := time.Now().UTC()
-	admin := &adminHandler{config: config, startedAt: startedAt}
+	admin := &adminHandler{
+		config: config, startedAt: startedAt, logger: logger,
+	}
 
 	commandServer := transport.NewServer(config.CommandAddress)
 

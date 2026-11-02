@@ -3,12 +3,15 @@ package edgarapp
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/indeximport"
 	"wingman.com/chopstick/internal/transport"
 )
 
@@ -71,6 +74,148 @@ func TestAdminHandlerRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
+func TestAdminHandlerAcceptsOneBackgroundIndexImport(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+
+	handler := &adminHandler{
+		config: validConfig(t),
+		logger: slog.New(slog.DiscardHandler),
+		importer: func(_ context.Context, config indeximport.Config,
+			_ *slog.Logger,
+		) error {
+			config.Progress(indeximport.Progress{
+				Phase: "read", Files: 2, Examined: 10,
+				Queued: 7, Duplicates: 3,
+			})
+			close(started)
+			<-release
+			close(finished)
+
+			return nil
+		},
+	}
+
+	request := transport.Request{
+		Command: transport.CommandImportIndex,
+		IndexImport: &transport.IndexImportRequest{
+			Latest: true,
+		},
+	}
+	encoded := handler.Handle(t.Context(), encodeRequest(t, request))
+
+	response := decodeResponse(t, encoded)
+	if response.IndexImport == nil || !response.IndexImport.Accepted {
+		t.Fatalf("index import was not accepted: %s", response.Error)
+	}
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("background import did not start")
+	}
+
+	if active := handler.activeIndexImport(); active == nil ||
+		active.Phase != "read" ||
+		active.Examined != 10 || active.Queued != 7 ||
+		active.Duplicates != 3 {
+		t.Fatalf("active operation = %+v", active)
+	}
+
+	busy := decodeResponse(t,
+		handler.Handle(t.Context(), encodeRequest(t, request)))
+	if busy.Error != "an index import is already running" {
+		t.Fatalf("second import error = %q", busy.Error)
+	}
+
+	close(release)
+
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("background import did not finish")
+	}
+
+	waitForNoActiveIndexImport(t, handler)
+}
+
+func TestAdminHandlerCancelsIndexImportWithDaemon(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	canceled := make(chan struct{})
+
+	handler := &adminHandler{
+		config: validConfig(t),
+		logger: slog.New(slog.DiscardHandler),
+		importer: func(ctx context.Context, _ indeximport.Config,
+			_ *slog.Logger,
+		) error {
+			<-ctx.Done()
+			close(canceled)
+
+			return ctx.Err()
+		},
+	}
+
+	request := transport.Request{
+		Command: transport.CommandImportIndex,
+		IndexImport: &transport.IndexImportRequest{
+			Latest: true,
+		},
+	}
+
+	response := decodeResponse(t,
+		handler.Handle(ctx, encodeRequest(t, request)))
+	if response.IndexImport == nil || !response.IndexImport.Accepted {
+		t.Fatalf("index import was not accepted: %s", response.Error)
+	}
+
+	cancel()
+
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("background import was not canceled")
+	}
+
+	waitForNoActiveIndexImport(t, handler)
+}
+
+func TestAdminHandlerReportsIndexStatus(t *testing.T) {
+	config := validConfig(t)
+	if err := os.MkdirAll(config.IndexDirectory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	quarterly := filepath.Join(config.IndexDirectory, "2025-QTR1.tsv")
+	if err := os.WriteFile(quarterly, []byte("quarter\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(config.MasterPath, []byte("quarter\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := &adminHandler{config: config}
+	response := decodeResponse(t, handler.Handle(t.Context(),
+		encodeRequest(t, transport.Request{
+			Command: transport.CommandIndexStatus,
+		})))
+
+	if response.Error != "" || response.IndexStatus == nil {
+		t.Fatalf("index status response = %+v", response)
+	}
+
+	status := response.IndexStatus
+	if status.Directory != config.IndexDirectory ||
+		status.MasterPath != config.MasterPath ||
+		status.MasterState != "current" ||
+		len(status.AvailablePeriods) != 1 ||
+		status.AvailablePeriods[0] != "2025-QTR1" {
+		t.Fatalf("index status = %+v", status)
+	}
+}
+
 func TestResetDerivedStatePreservesRetainedInputs(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(appdata.EnvName, root)
@@ -80,6 +225,7 @@ func TestResetDerivedStatePreservesRetainedInputs(t *testing.T) {
 		"validation/report.json",
 		"tmp/artifact.txt",
 		"cache/indexes/master.tsv",
+		"cache/indexes/import-state.json",
 		"polling.db",
 		"analysis.db-wal",
 		"feed.db-shm",
@@ -144,5 +290,40 @@ func validConfig(t *testing.T) Config {
 		FormTypes:         []string{"10-K"},
 		FromYear:          edgar.EarliestPipelineYear,
 		MaxAttempts:       5,
+	}
+}
+
+func encodeRequest(t *testing.T, request transport.Request) []byte {
+	t.Helper()
+
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return payload
+}
+
+func decodeResponse(t *testing.T, payload []byte) transport.Response {
+	t.Helper()
+
+	var response transport.Response
+	if err := json.Unmarshal(payload, &response); err != nil {
+		t.Fatal(err)
+	}
+
+	return response
+}
+
+func waitForNoActiveIndexImport(t *testing.T, handler *adminHandler) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Second)
+	for handler.activeIndexImport() != nil && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+
+	if active := handler.activeIndexImport(); active != nil {
+		t.Fatalf("active operation was not cleared: %+v", active)
 	}
 }
