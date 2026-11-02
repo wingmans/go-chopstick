@@ -52,7 +52,7 @@ func Select(ctx context.Context, bus *eventbus.NATS, cfg SelectionConfig,
 	}
 
 	return consume(ctx, subscription, logger, "selection", cfg.Drain, 1, nil,
-		func(message *nats.Msg, event filingwork.Event) error {
+		func(message *nats.Msg, event filingwork.Event) (string, error) {
 			selected, reason := selectionDecision(event, cfg.SetName, ciks,
 				forms)
 			event.Selected = &selected
@@ -62,7 +62,7 @@ func Select(ctx context.Context, bus *eventbus.NATS, cfg SelectionConfig,
 
 			payload, marshalErr := json.Marshal(event)
 			if marshalErr != nil {
-				return marshalErr
+				return "", marshalErr
 			}
 
 			base := eventbus.SkippedSubject
@@ -76,14 +76,19 @@ func Select(ctx context.Context, bus *eventbus.NATS, cfg SelectionConfig,
 				event.AccessionNumber, selected)
 			if publishErr := bus.Publish(ctx, subject, messageID,
 				payload); publishErr != nil {
-				return publishErr
+				return "", publishErr
 			}
 
 			logger.Debug("filing selection decided",
 				"accession", event.AccessionNumber, "selected", selected,
 				"reason", reason)
 
-			return message.Ack()
+			outcome := "rejected"
+			if selected {
+				outcome = "selected"
+			}
+
+			return outcome, message.Ack()
 		})
 }
 

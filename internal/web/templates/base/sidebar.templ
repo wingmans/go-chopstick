@@ -26,9 +26,7 @@ templ Sidebar(activeSection string) {
 templ sidebarLink(section string, label string, description string, href string,
 	activeSection string) {
 	<a class={ sidebarLinkClass(section, activeSection) }
-		href={ href } aria-current={ ariaCurrent(section, activeSection) }
-		hx-get={ href } hx-target="#workspace" hx-select="#workspace"
-		hx-swap="outerHTML" hx-push-url="true">
+		href={ href } aria-current={ ariaCurrent(section, activeSection) }>
 		<span>{ label }</span>
 		<small>{ description }</small>
 	</a>

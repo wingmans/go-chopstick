@@ -271,8 +271,12 @@ func TestTypedCommandsRejectInvalidCombinations(t *testing.T) {
 			Client: http.DefaultClient,
 			Logger: slog.New(slog.DiscardHandler),
 		}
-		if err := parsed.Run(context.Background(), runtime); err == nil {
+
+		err = runCommand(parsed, context.Background(), runtime)
+		if err == nil {
 			t.Errorf("Run(%v) succeeded", args)
+		} else if strings.Contains(err.Error(), "binding") {
+			t.Errorf("Run(%v) failed to bind context: %v", args, err)
 		}
 	}
 }

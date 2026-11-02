@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -35,14 +36,17 @@ func pullSubscription(bus *eventbus.NATS, subject, durable string) (
 func consume(ctx context.Context, subscription *nats.Subscription,
 	logger *slog.Logger, stage string, drain bool, maxAttempts int,
 	failures FailureStore,
-	handle func(*nats.Msg, filingwork.Event) error,
+	handle func(*nats.Msg, filingwork.Event) (string, error),
 ) error {
 	if maxAttempts <= 0 {
 		maxAttempts = defaultAttempts
 	}
 
-	stats := consumerStats{started: time.Now(), lastReport: time.Now()}
-	if err := reportProgress(subscription, logger, stage, &stats, true); err != nil {
+	stats := consumerStats{
+		lastReport: time.Now(), outcomes: make(map[string]uint64),
+	}
+	if err := reportProgress(ctx, subscription, logger, stage, &stats,
+		true); err != nil {
 		return err
 	}
 
@@ -53,11 +57,6 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 				return ctx.Err()
 			}
 
-			if err := reportProgress(subscription, logger, stage, &stats,
-				false); err != nil {
-				return err
-			}
-
 			if drain {
 				info, infoErr := subscription.ConsumerInfo()
 				if infoErr != nil {
@@ -65,9 +64,14 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 				}
 
 				if info.NumPending == 0 && info.NumAckPending == 0 {
-					return reportProgress(subscription, logger, stage, &stats,
+					return reportProgress(ctx, subscription, logger, stage, &stats,
 						true)
 				}
+			}
+
+			if err := reportProgress(ctx, subscription, logger, stage, &stats,
+				false); err != nil {
+				return err
 			}
 
 			continue
@@ -112,7 +116,8 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			continue
 		}
 
-		if workErr := handle(message, event); workErr != nil {
+		outcome, workErr := handle(message, event)
+		if workErr != nil {
 			stats.failed++
 
 			attempts := 1
@@ -142,6 +147,9 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			}
 		} else {
 			stats.completed++
+			if outcome != "" {
+				stats.outcomes[outcome]++
+			}
 
 			if failures != nil {
 				if err := failures.ResolveWorkFailure(ctx, stage,
@@ -151,7 +159,7 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			}
 		}
 
-		if err := reportProgress(subscription, logger, stage, &stats,
+		if err := reportProgress(ctx, subscription, logger, stage, &stats,
 			false); err != nil {
 			return err
 		}
@@ -159,16 +167,34 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 }
 
 type consumerStats struct {
-	started    time.Time
 	lastReport time.Time
 	scanned    uint64
 	completed  uint64
 	skipped    uint64
 	failed     uint64
+	outcomes   map[string]uint64
+	previous   consumerSnapshot
+	reported   bool
 }
 
-func reportProgress(subscription *nats.Subscription, logger *slog.Logger,
-	stage string, stats *consumerStats, force bool,
+type consumerSnapshot struct {
+	scanned     uint64
+	completed   uint64
+	skipped     uint64
+	failed      uint64
+	pending     uint64
+	ackPending  int
+	redelivered int
+}
+
+type consumerReport struct {
+	level   slog.Level
+	message string
+	rate    float64
+}
+
+func reportProgress(ctx context.Context, subscription *nats.Subscription,
+	logger *slog.Logger, stage string, stats *consumerStats, force bool,
 ) error {
 	if !force && time.Since(stats.lastReport) < progressEvery {
 		return nil
@@ -179,19 +205,76 @@ func reportProgress(subscription *nats.Subscription, logger *slog.Logger,
 		return fmt.Errorf("inspect %s backlog: %w", stage, err)
 	}
 
-	elapsed := time.Since(stats.started)
+	now := time.Now()
+	report := stats.nextReport(consumerSnapshot{
+		scanned: stats.scanned, completed: stats.completed,
+		skipped: stats.skipped, failed: stats.failed,
+		pending: info.NumPending, ackPending: info.NumAckPending,
+		redelivered: info.NumRedelivered,
+	}, now)
 
-	rate := float64(0)
-	if elapsed > 0 {
-		rate = float64(stats.scanned) / elapsed.Seconds()
-	}
-
-	logger.Info("consumer progress",
+	attributes := []any{
 		"scanned", stats.scanned, "completed", stats.completed,
 		"skipped", stats.skipped, "failed", stats.failed,
 		"pending", info.NumPending, "ack_pending", info.NumAckPending,
-		"redelivered", info.NumRedelivered, "rate_per_second", rate)
-	stats.lastReport = time.Now()
+		"redelivered", info.NumRedelivered,
+		"rate_per_second", report.rate,
+	}
+
+	keys := make([]string, 0, len(stats.outcomes))
+	for outcome := range stats.outcomes {
+		keys = append(keys, outcome)
+	}
+
+	sort.Strings(keys)
+
+	for _, outcome := range keys {
+		attributes = append(attributes, outcome, stats.outcomes[outcome])
+	}
+
+	logger.Log(ctx, report.level, report.message, attributes...)
 
 	return nil
+}
+
+func (s *consumerStats) nextReport(current consumerSnapshot,
+	now time.Time,
+) consumerReport {
+	elapsed := now.Sub(s.lastReport)
+	delta := current.scanned - s.previous.scanned
+
+	rate := float64(0)
+	if elapsed > 0 {
+		rate = float64(delta) / elapsed.Seconds()
+	}
+
+	queueChanged := current.pending != s.previous.pending ||
+		current.ackPending != s.previous.ackPending ||
+		current.redelivered != s.previous.redelivered
+	countersChanged := current.scanned != s.previous.scanned ||
+		current.completed != s.previous.completed ||
+		current.skipped != s.previous.skipped ||
+		current.failed != s.previous.failed
+	backlog := current.pending > 0 || current.ackPending > 0
+	previousBacklog := s.previous.pending > 0 || s.previous.ackPending > 0
+	drained := !backlog && (previousBacklog || delta > 0)
+
+	level := slog.LevelDebug
+	message := "consumer heartbeat"
+
+	if countersChanged || queueChanged || (!s.reported && backlog) {
+		level = slog.LevelInfo
+		message = "consumer progress"
+	}
+
+	if drained {
+		level = slog.LevelInfo
+		message = "consumer backlog drained"
+	}
+
+	s.previous = current
+	s.lastReport = now
+	s.reported = true
+
+	return consumerReport{level: level, message: message, rate: rate}
 }

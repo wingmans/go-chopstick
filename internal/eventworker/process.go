@@ -23,11 +23,11 @@ func Process(ctx context.Context, bus *eventbus.NATS, cfg ProcessConfig,
 	return consume(ctx, subscription, logger, "process", cfg.Drain,
 		cfg.MaxAttempts, cfg.Failures, func(message *nats.Msg,
 			event filingwork.Event,
-		) error {
+		) (string, error) {
 			path, err := edgar.LocalFilingPath(cfg.FilingsDirectory,
 				event.FilingPath)
 			if err != nil {
-				return err
+				return "", err
 			}
 
 			result, err := pipeline.ProcessSubmission(ctx, path,
@@ -43,15 +43,15 @@ func Process(ctx context.Context, bus *eventbus.NATS, cfg ProcessConfig,
 						"accession", event.AccessionNumber,
 						"action", result.Action, "error", err)
 
-					return message.Ack()
+					return "", message.Ack()
 				}
 
-				return err
+				return "", err
 			}
 
 			logger.Info("filing processed", "accession", event.AccessionNumber,
 				"action", result.Action)
 
-			return message.Ack()
+			return "", message.Ack()
 		})
 }

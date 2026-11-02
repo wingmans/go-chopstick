@@ -284,6 +284,10 @@ func TestPublicModulesArePrimaryNavigation(t *testing.T) {
 	}
 
 	sidebar := body[start : start+end]
+	if strings.Contains(sidebar, "hx-") {
+		t.Error("top-level module navigation must load complete pages")
+	}
+
 	for _, route := range []string{"/api/", "/debug/"} {
 		if strings.Contains(sidebar, route) {
 			t.Errorf("non-navigation route %q appears in sidebar", route)
