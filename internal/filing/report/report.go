@@ -1,0 +1,626 @@
+// Package report reports expected local EDGAR processing coverage.
+package report
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/edgar"
+	filingview "wingman.com/chopstick/internal/filing"
+	filingstore "wingman.com/chopstick/internal/filing/store"
+	"wingman.com/chopstick/internal/parser"
+)
+
+const SchemaVersion = 1
+
+type Config struct {
+	MasterPath  string
+	IndexesDir  string
+	FilingsDir  string
+	ParsedDir   string
+	AnalysisDB  string
+	Filter      edgar.IndexFilter
+	SetName     string
+	FromYear    int
+	ToYear      int
+	Taxonomy    filingview.Taxonomy
+	GeneratedAt time.Time
+}
+
+type Report struct {
+	SchemaVersion int                  `json:"schema_version"`
+	GeneratedAt   string               `json:"generated_at"`
+	Selection     Selection            `json:"selection"`
+	Summary       Summary              `json:"summary"`
+	Filings       []Filing             `json:"filings"`
+	Acquisition   []AcquisitionRequest `json:"acquisition"`
+}
+
+type Selection struct {
+	SetName   string   `json:"set"`
+	CIK       string   `json:"cik,omitempty"`
+	CIKs      []string `json:"ciks,omitempty"`
+	FormTypes []string `json:"form_types,omitempty"`
+	FromYear  int      `json:"from_year,omitempty"`
+	ToYear    int      `json:"to_year,omitempty"`
+}
+
+type Summary struct {
+	Expected             int            `json:"expected"`
+	Downloaded           int            `json:"downloaded"`
+	Parsed               int            `json:"parsed"`
+	Missing              int            `json:"missing"`
+	Unparsed             int            `json:"unparsed"`
+	MissingMetrics       int            `json:"filings_with_missing_metrics"`
+	MissingMetricsByTier map[string]int `json:"filings_with_missing_metrics_by_tier,omitempty"`
+}
+
+type Filing struct {
+	CIK                        string              `json:"cik"`
+	Company                    string              `json:"company"`
+	Accession                  string              `json:"accession"`
+	FormType                   string              `json:"form_type"`
+	DateFiled                  string              `json:"date_filed"`
+	FilingPath                 string              `json:"filing_path"`
+	SourcePath                 string              `json:"source_path"`
+	ParsedPath                 string              `json:"parsed_path"`
+	RawAvailable               bool                `json:"raw_available"`
+	Status                     string              `json:"status"`
+	MissingMetric              []string            `json:"missing_metrics,omitempty"`
+	MissingByTier              map[string][]string `json:"missing_metrics_by_tier,omitempty"`
+	MissingRelatedEvidence     map[string][]string `json:"missing_metric_related_evidence,omitempty"`
+	MissingDimensionalEvidence map[string][]string `json:"missing_metric_dimensional_evidence,omitempty"`
+	Metrics                    map[string]string   `json:"metrics,omitempty"`
+}
+
+type AcquisitionRequest struct {
+	Kind        string   `json:"kind"`
+	Year        int      `json:"year"`
+	Quarters    []int    `json:"quarters,omitempty"`
+	CIK         string   `json:"cik,omitempty"`
+	FormTypes   []string `json:"form_types,omitempty"`
+	Years       []int    `json:"years,omitempty"`
+	Description string   `json:"description"`
+}
+
+// Build generates a coverage report based on the provided configuration.
+func Build(ctx context.Context, config Config) (Report, error) {
+	if config.MasterPath == "" {
+		return Report{}, errors.New("master index is required")
+	}
+
+	if config.AnalysisDB == "" {
+		return Report{}, errors.New("analysis database is required")
+	}
+
+	if config.Taxonomy.TaxonomyVersion == "" {
+		return Report{}, errors.New("taxonomy is required")
+	}
+
+	if config.FromYear != 0 && config.ToYear != 0 && config.FromYear > config.ToYear {
+		return Report{}, errors.New("from year must not be after to year")
+	}
+
+	file, err := os.Open(config.MasterPath)
+	if err != nil {
+		return Report{}, fmt.Errorf("open master index: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	analysis, err := filingstore.Open(ctx, config.AnalysisDB)
+	if err != nil {
+		return Report{}, fmt.Errorf("open analysis database: %w", err)
+	}
+	defer func() { _ = analysis.Close() }()
+
+	selection := Selection{
+		SetName: config.SetName, CIK: config.Filter.CIK,
+		CIKs:      append([]string(nil), config.Filter.CIKs...),
+		FormTypes: append([]string(nil), config.Filter.FormTypes...),
+		FromYear:  config.FromYear, ToYear: config.ToYear,
+	}
+
+	report := Report{
+		SchemaVersion: SchemaVersion,
+		GeneratedAt:   config.GeneratedAt.UTC().Format(time.RFC3339),
+		Selection:     selection,
+		Summary: Summary{
+			Expected: 0, Downloaded: 0, Parsed: 0, Missing: 0,
+			Unparsed: 0, MissingMetrics: 0, MissingMetricsByTier: nil,
+		},
+		Filings:     nil,
+		Acquisition: nil,
+	}
+	if config.GeneratedAt.IsZero() {
+		report.GeneratedAt = ""
+	}
+
+	reader := edgar.NewIndexReader(file, config.Filter)
+	seen := make(map[string]struct{})
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return Report{}, err
+		}
+
+		record, readErr := reader.Next()
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+
+		if readErr != nil {
+			return Report{}, fmt.Errorf("read master index: %w", readErr)
+		}
+
+		if !inYearRange(record.DateFiled.Year(), config.FromYear, config.ToYear) {
+			continue
+		}
+
+		key := record.CIK + "\x00" + record.FilingPath
+		if _, exists := seen[key]; exists {
+			continue
+		}
+
+		seen[key] = struct{}{}
+
+		filing, inspectErr := inspectFiling(ctx, config, analysis, record)
+		if inspectErr != nil {
+			return Report{}, inspectErr
+		}
+
+		report.Filings = append(report.Filings, filing)
+		report.Summary.Expected++
+
+		if filing.RawAvailable {
+			report.Summary.Downloaded++
+		}
+
+		switch filing.Status {
+		case "parsed":
+			report.Summary.Parsed++
+		case "downloaded":
+			report.Summary.Downloaded++
+			report.Summary.Unparsed++
+		default:
+			report.Summary.Missing++
+		}
+
+		if len(filing.MissingMetric) > 0 {
+			report.Summary.MissingMetrics++
+		}
+
+		for tier := range filing.MissingByTier {
+			if report.Summary.MissingMetricsByTier == nil {
+				report.Summary.MissingMetricsByTier = make(map[string]int)
+			}
+
+			report.Summary.MissingMetricsByTier[tier]++
+		}
+	}
+
+	addMissingIndexRequests(&report, config)
+	addMissingFilingRequests(&report)
+	sortReport(&report)
+
+	return report, nil
+}
+
+// inspectFiling inspects a single filing and returns its status and metrics.
+func inspectFiling(
+	ctx context.Context,
+	config Config,
+	analysis *filingstore.Store,
+	record edgar.EdgarIndex,
+) (Filing, error) {
+	if err := ctx.Err(); err != nil {
+		return Filing{}, err
+	}
+
+	accession := accessionFromPath(record.FilingPath)
+
+	var (
+		sourcePath, parsedPath string
+		sourceErr              error
+	)
+	if config.FilingsDir != "" {
+		sourcePath, sourceErr = edgar.LocalFilingPath(config.FilingsDir, record.FilingPath)
+	}
+
+	if config.ParsedDir != "" {
+		parsedPath = parsedViewPath(config.ParsedDir, record.CIK, accession)
+	}
+
+	result := Filing{
+		CIK: record.CIK, Company: record.CompanyName, Accession: accession,
+		FormType: record.FormType, DateFiled: record.DateFiled.Format("2006-01-02"),
+		FilingPath: record.FilingPath, SourcePath: sourcePath,
+		ParsedPath: parsedPath, Status: "missing", MissingMetric: nil,
+		MissingByTier: nil, MissingRelatedEvidence: nil,
+		MissingDimensionalEvidence: nil, Metrics: nil,
+	}
+
+	if sourceErr != nil {
+		result.Status = "invalid_source_path"
+
+		return result, sourceErr
+	}
+
+	if sourcePath != "" {
+		if _, err := os.Stat(sourcePath); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				result.Status = "source_error"
+			}
+
+			if result.Status == "source_error" {
+				return result, nil
+			}
+		} else {
+			result.RawAvailable = true
+		}
+	}
+
+	view, err := analysis.LoadFilingView(ctx, record.CIK, accession)
+	if err == nil {
+		result.Status = "parsed"
+
+		result.Metrics, result.MissingMetric, result.MissingByTier, result.MissingRelatedEvidence = metricPresence(view, config.Taxonomy)
+		if parsedPath != "" {
+			result.MissingDimensionalEvidence = metricDimensionalEvidence(parsedSourcePath(parsedPath), result.MissingMetric)
+		}
+
+		return result, nil
+	}
+
+	if !errors.Is(err, os.ErrNotExist) {
+		result.Status = "parsed_error"
+
+		return result, nil
+	}
+
+	if result.RawAvailable {
+		result.Status = "downloaded"
+	}
+
+	return result, nil
+}
+
+// metricPresence checks which metrics are present in the filing view and which are missing according to the taxonomy.
+func metricPresence(view filingview.View, taxonomy filingview.Taxonomy) (map[string]string, []string, map[string][]string, map[string][]string) {
+	present := make(map[string]string)
+
+	for _, group := range view.Summary {
+		for _, row := range group.Rows {
+			if row.Key != "" {
+				present[row.Key] = "present"
+			}
+		}
+	}
+
+	for _, statement := range []filingview.StatementView{
+		view.Statements.Income, view.Statements.Balance, view.Statements.CashFlow,
+	} {
+		for _, group := range statement.Groups {
+			for _, row := range group.Rows {
+				if row.Key != "" {
+					present[row.Key] = "present"
+				}
+			}
+		}
+	}
+
+	metrics := make(map[string]string, len(taxonomy.Metrics))
+	missing := make([]string, 0)
+	missingByTier := make(map[string][]string)
+	relatedEvidence := make(map[string][]string)
+
+	for _, metric := range taxonomy.Metrics {
+		if _, ok := present[metric.Key]; ok {
+			metrics[metric.Key] = "present"
+
+			continue
+		}
+
+		tier := metricCoverageTier(metric)
+		if tier == "supplemental" {
+			metrics[metric.Key] = "supplemental_missing"
+
+			continue
+		}
+
+		metrics[metric.Key] = "missing"
+		missing = append(missing, metric.Key)
+		missingByTier[tier] = append(missingByTier[tier], metric.Key)
+
+		if related := presentRelatedMetrics(metric.Key, present); len(related) > 0 {
+			relatedEvidence[metric.Key] = related
+		}
+	}
+
+	sort.Strings(missing)
+
+	for tier := range missingByTier {
+		sort.Strings(missingByTier[tier])
+	}
+
+	if len(missingByTier) == 0 {
+		missingByTier = nil
+	}
+
+	if len(relatedEvidence) == 0 {
+		relatedEvidence = nil
+	}
+
+	return metrics, missing, missingByTier, relatedEvidence
+}
+
+// metricCoverageTier determines the coverage tier of a given metric. If the tier is not specified, it defaults to "core".
+func metricCoverageTier(metric filingview.MetricDefinition) string {
+	tier := strings.TrimSpace(metric.CoverageTier)
+	if tier == "" {
+		return "core"
+	}
+
+	return tier
+}
+
+// presentRelatedMetrics returns a list of related metrics that are present for a given metric.
+func presentRelatedMetrics(metric string, present map[string]string) []string {
+	candidates := relatedCoverageMetrics(metric)
+
+	result := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if _, ok := present[candidate]; ok {
+			result = append(result, candidate)
+		}
+	}
+
+	return result
+}
+
+// relatedCoverageMetrics returns a list of metrics that are related to the given metric for coverage purposes.
+func relatedCoverageMetrics(metric string) []string {
+	switch metric {
+	case "eps_diluted":
+		return []string{"eps_basic"}
+	case "liabilities":
+		return []string{"liabilities_and_equity", "current_liabilities"}
+	case "equity":
+		return []string{"equity_including_noncontrolling_interest", "liabilities_and_equity"}
+	default:
+		return nil
+	}
+}
+
+func metricDimensionalEvidence(path string, missing []string) map[string][]string {
+	if len(missing) == 0 {
+		return nil
+	}
+
+	source, err := parser.LoadParsedFiling(path)
+	if err != nil {
+		// Dimensional evidence is advisory. Coverage should still report the
+		// compact view when the source parse is unavailable or incompatible.
+		return nil
+	}
+
+	return sourceDimensionalEvidence(source, missing)
+}
+
+func sourceDimensionalEvidence(filing *parser.ParsedFiling, missing []string) map[string][]string {
+	if filing == nil {
+		return nil
+	}
+
+	missingSet := make(map[string]struct{}, len(missing))
+	for _, metric := range missing {
+		missingSet[metric] = struct{}{}
+	}
+
+	evidence := make(map[string][]string)
+
+	// Compact filing views intentionally ignore dimensional contexts. This
+	// source-level check preserves a review hint without promoting dimensional
+	// facts into canonical metric presence.
+	if _, ok := missingSet["eps_diluted"]; ok && hasDimensionalUSGAAPFact(filing, "EarningsPerShareBasic") {
+		evidence["eps_diluted"] = append(evidence["eps_diluted"], "eps_basic")
+	}
+
+	if len(evidence) == 0 {
+		return nil
+	}
+
+	for metric := range evidence {
+		sort.Strings(evidence[metric])
+	}
+
+	return evidence
+}
+
+func hasDimensionalUSGAAPFact(filing *parser.ParsedFiling, concept string) bool {
+	for _, instance := range filing.Instances {
+		dimensionalContexts := make(map[string]struct{}, len(instance.Contexts))
+		for _, context := range instance.Contexts {
+			if len(context.Dimensions) > 0 {
+				dimensionalContexts[context.ID] = struct{}{}
+			}
+		}
+
+		for _, fact := range instance.Facts {
+			if fact.Nil || strings.TrimSpace(fact.Value) == "" {
+				continue
+			}
+
+			if fact.Concept.Local != concept || !usGAAPNamespace(fact.Concept.Namespace) {
+				continue
+			}
+
+			if _, ok := dimensionalContexts[fact.ContextRef]; ok {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func usGAAPNamespace(namespace string) bool {
+	return strings.Contains(namespace, "/us-gaap/") ||
+		strings.Contains(namespace, "/us-gaap:")
+}
+
+// addMissingIndexRequests adds acquisition requests for any missing quarterly index files within the specified range of years.
+func addMissingIndexRequests(report *Report, config Config) {
+	if config.IndexesDir == "" || config.FromYear == 0 || config.ToYear == 0 {
+		return
+	}
+
+	for year := config.FromYear; year <= config.ToYear; year++ {
+		missing := make([]int, 0, 4)
+
+		for quarter := 1; quarter <= 4; quarter++ {
+			path := filepath.Join(config.IndexesDir,
+				fmt.Sprintf("%d-QTR%d.tsv", year, quarter))
+			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+				missing = append(missing, quarter)
+			}
+		}
+
+		if len(missing) == 0 {
+			continue
+		}
+
+		report.Acquisition = append(report.Acquisition, AcquisitionRequest{
+			Kind: "index", Year: year, Quarters: missing,
+			CIK: "", FormTypes: nil, Years: nil,
+			Description: "download missing quarterly index files before refreshing master.tsv",
+		})
+	}
+}
+
+// addMissingFilingRequests adds acquisition requests for any missing filings in the report.
+func addMissingFilingRequests(report *Report) {
+	grouped := make(map[string]*AcquisitionRequest)
+
+	for _, filing := range report.Filings {
+		if filing.Status != "missing" {
+			continue
+		}
+
+		key := filing.CIK + "\x00" + filing.FormType + "\x00" + filing.DateFiled[:4]
+		request := grouped[key]
+
+		if request == nil {
+			year := yearFromDate(filing.DateFiled)
+			request = &AcquisitionRequest{
+				Kind: "filings", CIK: filing.CIK,
+				FormTypes: []string{filing.FormType}, Years: []int{year},
+				Year: 0, Quarters: nil,
+				Description: "download missing filing from the local master record",
+			}
+			grouped[key] = request
+		}
+	}
+
+	for _, request := range grouped {
+		report.Acquisition = append(report.Acquisition, *request)
+	}
+}
+
+func sortReport(report *Report) {
+	sort.Slice(report.Filings, func(i, j int) bool {
+		left, right := report.Filings[i], report.Filings[j]
+		if left.CIK != right.CIK {
+			return left.CIK < right.CIK
+		}
+
+		if left.DateFiled != right.DateFiled {
+			return left.DateFiled < right.DateFiled
+		}
+
+		return left.Accession < right.Accession
+	})
+	sort.Slice(report.Acquisition, func(i, j int) bool {
+		left, right := report.Acquisition[i], report.Acquisition[j]
+		if left.Kind != right.Kind {
+			return left.Kind < right.Kind
+		}
+
+		if left.Year != right.Year {
+			return left.Year < right.Year
+		}
+
+		return left.CIK < right.CIK
+	})
+}
+
+func WriteJSON(path string, report Report) error {
+	if path == "" {
+		return errors.New("coverage report path is required")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("create coverage report directory: %w", err)
+	}
+
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create coverage report: %w", err)
+	}
+
+	defer func() { _ = file.Close() }()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(report); err != nil {
+		return fmt.Errorf("write coverage report: %w", err)
+	}
+
+	return nil
+}
+
+func inYearRange(year, from, to int) bool {
+	return (from == 0 || year >= from) && (to == 0 || year <= to)
+}
+
+func accessionFromPath(path string) string {
+	name := filepath.Base(filepath.FromSlash(path))
+
+	return strings.TrimSuffix(name, filepath.Ext(name))
+}
+
+// parsedViewPath constructs the path to the parsed filing view JSON file based on the directory, CIK, and accession.
+func parsedViewPath(directory, cik, accession string) string {
+	normalized, err := constituents.NormalizeCIK(cik)
+	if err != nil {
+		normalized = cik
+	}
+
+	return filepath.Join(directory, normalized, accession, "filing-view.json")
+}
+
+func parsedSourcePath(viewPath string) string {
+	return filepath.Join(filepath.Dir(viewPath), "filing.json")
+}
+
+// yearFromDate extracts the year from a date string in the format "YYYY-MM-DD".
+func yearFromDate(date string) int {
+	if len(date) < 4 {
+		return 0
+	}
+
+	year := 0
+
+	_, _ = fmt.Sscanf(date[:4], "%d", &year)
+
+	return year
+}

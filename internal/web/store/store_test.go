@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	filingview "wingman.com/chopstick/internal/filing"
+	filingnormalize "wingman.com/chopstick/internal/filing/normalize"
 	"wingman.com/chopstick/internal/parser"
 )
 
@@ -216,7 +217,12 @@ func saveParsedAndView(t *testing.T, parsedDir string, filing *parser.ParsedFili
 		t.Fatal(err)
 	}
 
-	if _, err := filingview.Save(parsedDir, filing); err != nil {
+	view, err := filingnormalize.Build(filing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := filingview.Save(parsedDir, view); err != nil {
 		t.Fatal(err)
 	}
 }

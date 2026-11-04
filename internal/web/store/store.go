@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	dividendview "wingman.com/chopstick/internal/dividend"
 	filingview "wingman.com/chopstick/internal/filing"
+	dividendview "wingman.com/chopstick/internal/filing/dividend"
 	"wingman.com/chopstick/internal/parser"
 )
 

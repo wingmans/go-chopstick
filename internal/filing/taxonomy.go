@@ -102,22 +102,18 @@ func (t Taxonomy) Validate() error {
 	return nil
 }
 
-func defaultTaxonomy() Taxonomy {
-	taxonomy, err := LoadTaxonomy("")
-	if err != nil {
-		panic(err)
-	}
-
-	return taxonomy
-}
-
-func (t Taxonomy) metricForConcept(namespace, concept string) (MetricDefinition, bool) {
-	definition, _, ok := t.metricReferenceForConcept(namespace, concept)
+// Metric returns the normalized metric for an XBRL concept.
+func (t Taxonomy) Metric(namespace, concept string) (MetricDefinition, bool) {
+	definition, _, ok := t.MetricReference(namespace, concept)
 
 	return definition, ok
 }
 
-func (t Taxonomy) metricReferenceForConcept(namespace, concept string) (MetricDefinition, ConceptReference, bool) {
+// MetricReference returns the metric and selected concept reference for an
+// XBRL concept.
+func (t Taxonomy) MetricReference(namespace, concept string) (
+	MetricDefinition, ConceptReference, bool,
+) {
 	for _, definition := range t.Metrics {
 		for _, reference := range definition.Concepts {
 			if reference.Name == concept && namespaceMatches(reference.NamespaceFamily, namespace) {
@@ -133,6 +129,7 @@ func (t Taxonomy) metricReferenceForConcept(namespace, concept string) (MetricDe
 	}, false
 }
 
+// namespaceMatches checks if a given namespace matches the expected namespace family.
 func namespaceMatches(family, namespace string) bool {
 	if family == "" || family == "any" {
 		return true
@@ -144,8 +141,4 @@ func namespaceMatches(family, namespace string) bool {
 	}
 
 	return strings.Contains(namespace, family)
-}
-
-func (t Taxonomy) ratioDefinitions() []RatioDefinition {
-	return t.Ratios
 }

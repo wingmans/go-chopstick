@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	dividendview "wingman.com/chopstick/internal/dividend"
 	filingview "wingman.com/chopstick/internal/filing"
+	dividendview "wingman.com/chopstick/internal/filing/dividend"
 	"wingman.com/chopstick/internal/news"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 	"wingman.com/chopstick/internal/parser"
