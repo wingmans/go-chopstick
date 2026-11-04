@@ -139,7 +139,7 @@ func validateFailureStage(stage string, required bool) error {
 	return nil
 }
 
-// OwnershipConfig selects an ownership import or status operation.
+// OwnershipConfig selects an ownership backfill or status operation.
 type OwnershipConfig struct {
 	Operation    string
 	MasterPath   string
@@ -154,7 +154,7 @@ type OwnershipConfig struct {
 	Noop         bool
 }
 
-// Ownership runs an ownership import or prints ownership status.
+// Ownership runs an ownership backfill or prints ownership status.
 func Ownership(ctx context.Context, client *http.Client,
 	cfg OwnershipConfig,
 ) error {
@@ -247,7 +247,7 @@ func DownloadIndex(ctx context.Context, client *http.Client,
 	cfg edgar.Config,
 ) error {
 	logger := ctxlog.FromContext(ctx)
-	logger.Info("starting EDGAR index download",
+	logger.Info("starting SEC index refresh",
 		"from_year", cfg.SinceYear, "directory", cfg.Directory,
 		"stitch", cfg.Stitch, "noop", cfg.Noop)
 

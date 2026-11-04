@@ -15,6 +15,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
+	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/ownership"
 )
 
@@ -89,10 +90,16 @@ func Open(ctx context.Context, path string) (*Store, error) {
 
 	db.SetMaxOpenConns(1)
 
-	if err := createSchema(ctx, db); err != nil {
+	created, err := createSchema(ctx, db)
+	if err != nil {
 		_ = db.Close()
 
 		return nil, err
+	}
+
+	if created {
+		ctxlog.FromContext(ctx).Info("database created", "database", "ownership",
+			"path", path, "schema_version", schemaVersion)
 	}
 
 	if _, err := db.ExecContext(ctx, `CREATE TEMP TABLE ownership_run_seen (
@@ -463,11 +470,13 @@ func saveInstitutional(ctx context.Context, tx *sql.Tx,
 ) error {
 	if filing.InstitutionalSummary != nil {
 		_, err := tx.ExecContext(ctx, `INSERT INTO institutional_summaries (
-			accession, entry_count, total_value, included_manager_count
-		) VALUES (?, ?, ?, ?)`, filing.Accession,
+			accession, entry_count, total_value, included_manager_count,
+			confidential_omitted
+		) VALUES (?, ?, ?, ?, ?)`, filing.Accession,
 			filing.InstitutionalSummary.EntryCount,
 			filing.InstitutionalSummary.TotalValue,
-			filing.InstitutionalSummary.IncludedManagerCount)
+			filing.InstitutionalSummary.IncludedManagerCount,
+			boolInt(filing.InstitutionalSummary.ConfidentialOmitted))
 		if err != nil {
 			return fmt.Errorf("save institutional summary: %w", err)
 		}

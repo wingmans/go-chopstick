@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -42,6 +43,22 @@ func TestConfigFromEnvironment(t *testing.T) {
 
 	if len(config.FormTypes) != 2 {
 		t.Fatalf("form types = %v", config.FormTypes)
+	}
+}
+
+func TestConfigDefaultFinancialFormsIncludeAmendments(t *testing.T) {
+	t.Setenv(appdata.EnvName, t.TempDir())
+	t.Setenv("EDGAR_SET", "")
+	t.Setenv("EDGAR_FORM_TYPES", "")
+
+	config, err := ConfigFromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := edgar.SupportedFormTypes()
+	if !slices.Equal(config.FormTypes, want) {
+		t.Fatalf("form types = %v, want %v", config.FormTypes, want)
 	}
 }
 

@@ -20,12 +20,12 @@ const (
 //go:embed sql/schema.sql
 var analysisSchema string
 
-func createSchema(ctx context.Context, db *sql.DB) error {
+func createSchema(ctx context.Context, db *sql.DB) (bool, error) {
 	for attempt := 0; ; attempt++ {
-		err := applySchema(ctx, db)
+		created, err := applySchema(ctx, db)
 		if err == nil || !analysisSchemaIsLocked(err) ||
 			attempt == analysisSchemaRetryLimit {
-			return err
+			return created, err
 		}
 
 		timer := time.NewTimer(analysisSchemaRetryDelay)
@@ -34,17 +34,17 @@ func createSchema(ctx context.Context, db *sql.DB) error {
 		case <-ctx.Done():
 			timer.Stop()
 
-			return fmt.Errorf("wait to initialize analysis schema: %w",
+			return false, fmt.Errorf("wait to initialize analysis schema: %w",
 				ctx.Err())
 		case <-timer.C:
 		}
 	}
 }
 
-func applySchema(ctx context.Context, db *sql.DB) error {
+func applySchema(ctx context.Context, db *sql.DB) (bool, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin analysis schema transaction: %w", err)
+		return false, fmt.Errorf("begin analysis schema transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -52,15 +52,15 @@ func applySchema(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(
 		&version,
 	); err != nil {
-		return fmt.Errorf("read analysis schema version: %w", err)
+		return false, fmt.Errorf("read analysis schema version: %w", err)
 	}
 
 	if version == analysisSchemaVersion {
-		return tx.Commit()
+		return false, tx.Commit()
 	}
 
 	if version != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	var tables int
@@ -68,26 +68,26 @@ func applySchema(ctx context.Context, db *sql.DB) error {
 		FROM sqlite_master
 		WHERE type = 'table'
 		  AND name NOT LIKE 'sqlite_%'`).Scan(&tables); err != nil {
-		return fmt.Errorf("inspect analysis schema: %w", err)
+		return false, fmt.Errorf("inspect analysis schema: %w", err)
 	}
 
 	if tables != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	if _, err := tx.ExecContext(ctx, analysisSchema); err != nil {
-		return fmt.Errorf("create analysis schema: %w", err)
+		return false, fmt.Errorf("create analysis schema: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 3"); err != nil {
-		return fmt.Errorf("record analysis schema version: %w", err)
+		return false, fmt.Errorf("record analysis schema version: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit analysis schema: %w", err)
+		return false, fmt.Errorf("commit analysis schema: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func analysisSchemaIsLocked(err error) bool {

@@ -52,6 +52,7 @@ type InstitutionalSummary struct {
 	EntryCount           string
 	TotalValue           string
 	IncludedManagerCount string
+	ConfidentialOmitted  bool
 }
 
 // Security is a reported security. Key is local to the parsed filing.

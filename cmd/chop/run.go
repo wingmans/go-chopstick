@@ -147,7 +147,7 @@ func validatePipelineYear(year int) error {
 	return nil
 }
 
-func (c *indexDownloadCLI) Run(ctx context.Context, runtime *commandRuntime) error {
+func (c *indexRefreshCLI) Run(ctx context.Context, runtime *commandRuntime) error {
 	if err := validatePipelineYear(c.FromYear); err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (c *indexDownloadCLI) Run(ctx context.Context, runtime *commandRuntime) err
 		MasterPath:    appdata.Path("cache", "indexes", "master.tsv"),
 		SinceYear:     c.FromYear,
 		UserAgent:     environmentValue("EDGAR_USER_AGENT", defaultUserAgent),
-		RefreshLatest: c.RefreshLatest, Stitch: c.Stitch,
+		RefreshLatest: c.Latest, Stitch: true,
 		BaseURL: environmentValue("EDGAR_BASE_URL", ""), Noop: c.Noop,
 	})
 }
@@ -262,10 +262,12 @@ func (c *coverageCLI) Run(ctx context.Context) error {
 	})
 }
 
-func (c *ownershipImportCLI) Run(ctx context.Context, runtime *commandRuntime) error {
+func (c *ownershipBackfillCLI) Run(ctx context.Context,
+	runtime *commandRuntime,
+) error {
 	return operator.Ownership(ctx, runtime.Client,
 		operator.OwnershipConfig{
-			Operation: "import", MasterPath: c.Master,
+			Operation: "backfill", MasterPath: c.Master,
 			DatabasePath: c.Database, CacheDir: c.CacheDir,
 			UserAgent: environmentValue("EDGAR_USER_AGENT", defaultUserAgent),
 			BaseURL:   environmentValue("EDGAR_BASE_URL", ""),

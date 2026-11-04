@@ -45,6 +45,12 @@ The default instance runs the complete local monolith:
 - Missing-index bootstrap and startup reconciliation from the local master
   index.
 
+The default automatic financial scope is `10-K`, `10-K/A`, `10-Q`,
+`10-Q/A`, `8-K`, and `8-K/A` for the configured constituent set. Ownership
+forms are discovered globally and handled by the separate ownership consumer.
+Legacy `SC 13D/G` submissions are retained but recorded as unsupported. `S-1`
+and `S-1/A` remain on-demand inputs rather than automatic pipeline work.
+
 Use another terminal for application commands:
 
 ```bash
@@ -93,7 +99,7 @@ local cache. It does not require the complete SEC history. A development
 instance can deliberately retain only three or four years:
 
 ```bash
-go run ./cmd/chop index download --from-year 2023
+go run ./cmd/chop index refresh --from-year 2023
 go run ./cmd/chop index import --from-year 2023 --to-year 2026
 ```
 

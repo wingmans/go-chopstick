@@ -79,8 +79,9 @@ func RunSelection(ctx context.Context, bus *NATS, cfg SelectionConfig,
 			}
 
 			logger.Debug("filing selection decided",
-				"accession", event.AccessionNumber, "selected", selected,
-				"reason", reason)
+				"accession", event.AccessionNumber,
+				"form_type", event.FormType,
+				"selected", selected, "reason", reason)
 
 			outcome := "rejected"
 			if selected {
@@ -96,11 +97,15 @@ func selectionDecision(event Event, setName string,
 ) (bool, string) {
 	form := strings.ToUpper(strings.TrimSpace(event.FormType))
 	if !edgar.SupportsFormType(form) {
-		return false, "form is not supported by the parser"
+		return false, fmt.Sprintf(
+			"form type %q is not supported by the financial filing parser",
+			form,
+		)
 	}
 
 	if _, enabled := forms[form]; !enabled {
-		return false, "form is not enabled by EDGAR_FORM_TYPES"
+		return false, fmt.Sprintf(
+			"form type %q is not enabled by EDGAR_FORM_TYPES", form)
 	}
 
 	if strings.TrimSpace(setName) == "" {

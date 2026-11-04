@@ -59,7 +59,8 @@ small parser so a missing holdings report is not interpreted as zero holdings.
 - `SC 13G/A`
 
 These forms remain recognized. The importer records them as unsupported until
-a separate legacy parser is implemented. Raw submissions may still be cached.
+a separate legacy parser is implemented. Their raw submissions are cached
+before the unsupported outcome is recorded.
 
 ## Important semantics
 
@@ -67,6 +68,8 @@ a separate legacy parser is implemented. Raw submissions may still be cached.
 
 All user-facing values must be labelled as reported ownership. Filings can be
 late, amended, incomplete, confidential, or limited by reporting thresholds.
+For Form 13F, retain the public filing's confidential-omission indicator so a
+partial portfolio is not presented as complete.
 
 ### Snapshots and transactions
 

@@ -130,9 +130,7 @@ func identityShouldSkip(definition identityDefinition, period, unit string, rows
 	return false
 }
 
-func checkIdentityPeriod(definition identityDefinition, period, unit string, result *filing.FactSeries,
-	rows map[string]*filing.FactSeries,
-) filing.IdentityCheck {
+func checkIdentityPeriod(definition identityDefinition, period, unit string, result *filing.FactSeries, rows map[string]*filing.FactSeries) filing.IdentityCheck {
 	check := filing.IdentityCheck{
 		Name: definition.Name, Period: period, Unit: unit,
 		Status: identitySkipped, Expected: "", Actual: "", Tolerance: "",

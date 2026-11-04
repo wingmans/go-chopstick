@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/chopstick/pipeline/dbgen"
+	"wingman.com/chopstick/internal/ctxlog"
 )
 
 // Event represents the unified schema for both master.zip and RSS feeds.
@@ -89,10 +90,16 @@ func Open(ctx context.Context, dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("failed to open sqlite db: %w", err)
 	}
 
-	if err := createSchema(ctx, db); err != nil {
+	created, err := createSchema(ctx, db)
+	if err != nil {
 		_ = db.Close()
 
 		return nil, err
+	}
+
+	if created {
+		ctxlog.FromContext(ctx).Info("database created", "database", "polling",
+			"path", dbPath, "schema_version", pollingSchemaVersion)
 	}
 
 	queries, err := dbgen.Prepare(ctx, db)

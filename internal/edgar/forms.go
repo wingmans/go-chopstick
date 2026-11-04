@@ -9,7 +9,9 @@ import (
 // SupportedFormTypes returns the forms deliberately supported by the parser
 // pipeline. Callers receive a copy so this remains the single capability list.
 func SupportedFormTypes() []string {
-	forms := []string{"10-K", "10-Q", "8-K"}
+	forms := []string{
+		"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A",
+	}
 
 	sort.Strings(forms)
 
@@ -19,7 +21,7 @@ func SupportedFormTypes() []string {
 // SupportsFormType reports whether a form is an intentional parser input.
 func SupportsFormType(form string) bool {
 	switch strings.ToUpper(strings.TrimSpace(form)) {
-	case "10-K", "10-Q", "8-K":
+	case "10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A":
 		return true
 	default:
 		return false

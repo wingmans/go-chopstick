@@ -99,9 +99,9 @@ semantics are designed:
 Do not move these commands into a live daemon merely for consistency. Their
 exclusive lock and shutdown requirements are valuable safety boundaries.
 
-`chop index download` remains local during the first implementation. Its name
-and relationship to import, refresh, and stitching must be cleaned up before
-it is wired into `chopd`.
+`chop index refresh` remains local during the first implementation. It fetches
+the requested quarterly indexes and stitches the complete local cache into
+`master.tsv`. It does not import records into the filing pipeline.
 
 ## Index Source Semantics
 
@@ -122,16 +122,20 @@ from the full local quarterly cache. Import selection and master stitching are
 separate concerns: importing one quarter must not produce a master containing
 only that quarter.
 
+Startup reconciliation applies two explicit policies. Financial forms are
+limited to the configured constituent set and financial form list. Ownership
+forms are discovered globally from their independent capability list and sent
+to the ownership consumer; they do not enter the financial materializer.
+
 "Full local" does not mean the complete SEC history. A development cache may
 deliberately contain only three or four years. Year selectors limit source
 history, while the constituent set and form types remain downstream selection
 policy.
 
-Fetching or refreshing the latest SEC index should remain explicit. During
-the later command cleanup, decide whether the public operation should be named
-`index refresh`, `index sync`, or retain `index download`. That command may
-perform a clear sequence of fetch, stitch, and import, but it must run only
-when requested. It is not a scheduler.
+Refreshing the latest SEC index remains explicit. `chop index refresh
+--latest` fetches the latest quarter and stitches the complete local cache. It
+does not import records. The command runs only when requested; it is not a
+scheduler.
 
 ## Minimal Progress Model
 
@@ -293,9 +297,8 @@ Do not claim exact per-import database completion from global queue counts.
 After the first background import is working, stop and clean the remaining
 command model before adding more transport handlers.
 
-- Clarify the difference between index download, refresh, stitch, and import.
-- Decide whether one explicit index command should perform fetch, stitch, and
-  import as a sequence.
+- Keep index refresh and import distinct: refresh fetches and stitches, while
+  import submits local records to the daemon pipeline.
 - Keep dry-run and local inspection behavior clearly named.
 - Remove duplicate validation and path construction from CLI adapters.
 - Keep application use cases typed and independent of Kong.

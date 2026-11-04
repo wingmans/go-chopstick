@@ -14,6 +14,7 @@ import (
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ownership"
 )
 
 func ensureMasterIndex(ctx context.Context, client *http.Client,
@@ -82,9 +83,11 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 	defer func() { _ = store.Close() }()
 
 	reader := edgar.NewIndexReader(file, edgar.IndexFilter{
-		CIKs: config.CIKs, FormTypes: config.FormTypes,
 		FromYear: config.FromYear,
 	})
+	financialFilter := edgar.IndexFilter{
+		CIKs: config.CIKs, FormTypes: config.FormTypes,
+	}
 	batch := make([]pipeline.Event, 0, 1000)
 	selected := 0
 	discovered := 0
@@ -119,6 +122,10 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 			return fmt.Errorf("read master index: %w", readErr)
 		}
 
+		if !shouldDiscover(record, financialFilter) {
+			continue
+		}
+
 		accession := strings.TrimSuffix(filepath.Base(record.FilingPath),
 			filepath.Ext(record.FilingPath))
 		batch = append(batch, pipeline.Event{
@@ -138,4 +145,9 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 			}
 		}
 	}
+}
+
+func shouldDiscover(record edgar.EdgarIndex, financialFilter edgar.IndexFilter) bool {
+	return edgar.MatchesIndexFilter(record, financialFilter) ||
+		ownership.RecognizesForm(record.FormType)
 }

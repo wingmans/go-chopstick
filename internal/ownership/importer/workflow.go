@@ -217,13 +217,6 @@ func ProcessOne(ctx context.Context, store *ownershipstore.Store,
 		}
 	}
 
-	if !ownership.SupportsForm(form) {
-		outcome.Status = "unsupported"
-		outcome.Diagnostic = "legacy ownership format is recognized but not parsed"
-
-		return DecisionUnsupported, store.RecordOutcome(ctx, outcome)
-	}
-
 	if err := downloader.Download(ctx, record); err != nil {
 		return recordFailure(ctx, store, record, outcome, err)
 	}
@@ -240,6 +233,13 @@ func ProcessOne(ctx context.Context, store *ownershipstore.Store,
 	outcome.SourceSHA256 = filing.SourceSHA256
 
 	outcome.ReportDate = filing.ReportDate
+	if errors.Is(err, ownership.ErrUnsupported) {
+		outcome.Status = "unsupported"
+		outcome.Diagnostic = err.Error()
+
+		return DecisionUnsupported, store.RecordOutcome(ctx, outcome)
+	}
+
 	if err != nil {
 		return recordFailure(ctx, store, record, outcome, err)
 	}

@@ -66,22 +66,22 @@ func TestKongParsesCommandHierarchy(t *testing.T) {
 			command: "coverage",
 		},
 		{
-			name:    "default index download",
+			name:    "default index refresh",
 			args:    []string{"index", "-y", "2021", "-r"},
-			command: "index download",
+			command: "index refresh",
 			check: func(t *testing.T, model cli) {
 				t.Helper()
 
-				if model.Index.Download.FromYear != 2021 ||
-					!model.Index.Download.RefreshLatest {
-					t.Fatalf("unexpected index: %+v", model.Index.Download)
+				if model.Index.Refresh.FromYear != 2021 ||
+					!model.Index.Refresh.Latest {
+					t.Fatalf("unexpected index: %+v", model.Index.Refresh)
 				}
 			},
 		},
 		{
-			name:    "explicit index download",
-			args:    []string{"index", "download"},
-			command: "index download",
+			name:    "explicit index refresh",
+			args:    []string{"index", "refresh"},
+			command: "index refresh",
 		},
 		{
 			name:    "index import",
@@ -94,16 +94,16 @@ func TestKongParsesCommandHierarchy(t *testing.T) {
 			command: "index status",
 		},
 		{
-			name:    "default ownership import",
+			name:    "default ownership backfill",
 			args:    []string{"ownership", "-f", "4", "--noop"},
-			command: "ownership import",
+			command: "ownership backfill",
 			check: func(t *testing.T, model cli) {
 				t.Helper()
 
-				if len(model.Ownership.Import.FormTypes) != 1 ||
-					!model.Ownership.Import.Noop {
+				if len(model.Ownership.Backfill.FormTypes) != 1 ||
+					!model.Ownership.Backfill.Noop {
 					t.Fatalf("unexpected ownership: %+v",
-						model.Ownership.Import)
+						model.Ownership.Backfill)
 				}
 			},
 		},

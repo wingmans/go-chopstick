@@ -135,6 +135,7 @@ CREATE TABLE institutional_summaries (
     entry_count TEXT NOT NULL,
     total_value TEXT NOT NULL,
     included_manager_count TEXT NOT NULL,
+    confidential_omitted INTEGER NOT NULL,
     FOREIGN KEY (accession) REFERENCES ownership_filings (accession)
         ON DELETE CASCADE
 );

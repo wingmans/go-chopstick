@@ -12,9 +12,7 @@ import (
 	"wingman.com/chopstick/internal/parser"
 )
 
-func parse13F(ctx context.Context, path string,
-	documents []parser.SubmissionDocument, filing *Filing,
-) error {
+func parse13F(ctx context.Context, path string, documents []parser.SubmissionDocument, filing *Filing) error {
 	document, err := primaryDocument(documents, filing.FormType)
 	if err != nil {
 		return err
@@ -106,6 +104,8 @@ func parse13F(ctx context.Context, path string,
 			EntryCount:           summary.value("tableEntryTotal"),
 			TotalValue:           summary.value("tableValueTotal"),
 			IncludedManagerCount: summary.value("otherIncludedManagersCount"),
+			ConfidentialOmitted: parseBoolean(
+				summary.value("isConfidentialOmitted")),
 		}
 	}
 

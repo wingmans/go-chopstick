@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	schemaVersion    = 1
+	schemaVersion    = 2
 	schemaRetryLimit = 20
 	schemaRetryDelay = 25 * time.Millisecond
 )
@@ -20,11 +20,11 @@ const (
 //go:embed sql/schema.sql
 var schemaSQL string
 
-func createSchema(ctx context.Context, db *sql.DB) error {
+func createSchema(ctx context.Context, db *sql.DB) (bool, error) {
 	for attempt := 0; ; attempt++ {
-		err := applySchema(ctx, db)
+		created, err := applySchema(ctx, db)
 		if err == nil || !schemaIsLocked(err) || attempt == schemaRetryLimit {
-			return err
+			return created, err
 		}
 
 		timer := time.NewTimer(schemaRetryDelay)
@@ -32,32 +32,32 @@ func createSchema(ctx context.Context, db *sql.DB) error {
 		case <-ctx.Done():
 			timer.Stop()
 
-			return fmt.Errorf("wait to initialize ownership schema: %w",
+			return false, fmt.Errorf("wait to initialize ownership schema: %w",
 				ctx.Err())
 		case <-timer.C:
 		}
 	}
 }
 
-func applySchema(ctx context.Context, db *sql.DB) error {
+func applySchema(ctx context.Context, db *sql.DB) (bool, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin ownership schema transaction: %w", err)
+		return false, fmt.Errorf("begin ownership schema transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	var version int
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(
 		&version); err != nil {
-		return fmt.Errorf("read ownership schema version: %w", err)
+		return false, fmt.Errorf("read ownership schema version: %w", err)
 	}
 
 	if version == schemaVersion {
-		return tx.Commit()
+		return false, tx.Commit()
 	}
 
 	if version != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	var tables int
@@ -65,26 +65,26 @@ func applySchema(ctx context.Context, db *sql.DB) error {
 		FROM sqlite_master
 		WHERE type = 'table'
 		  AND name NOT LIKE 'sqlite_%'`).Scan(&tables); err != nil {
-		return fmt.Errorf("inspect ownership schema: %w", err)
+		return false, fmt.Errorf("inspect ownership schema: %w", err)
 	}
 
 	if tables != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	if _, err := tx.ExecContext(ctx, schemaSQL); err != nil {
-		return fmt.Errorf("create ownership schema: %w", err)
+		return false, fmt.Errorf("create ownership schema: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
-		return fmt.Errorf("record ownership schema version: %w", err)
+	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 2"); err != nil {
+		return false, fmt.Errorf("record ownership schema version: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit ownership schema: %w", err)
+		return false, fmt.Errorf("commit ownership schema: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func schemaIsLocked(err error) bool {

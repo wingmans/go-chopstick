@@ -99,6 +99,18 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 		return fmt.Errorf("process stage: %w", err)
 	}
 
+	if err := pipeline.RunOwnershipConsumer(ctx, bus, pipeline.OwnershipConfig{
+		FilingsDirectory: config.FilingsDirectory,
+		DatabasePath:     config.OwnershipDB,
+		UserAgent:        config.UserAgent,
+		BaseURL:          config.BaseURL,
+		Drain:            true,
+		MaxAttempts:      config.MaxAttempts,
+		Failures:         failures,
+	}, logger.With("role", "ownership")); err != nil {
+		return fmt.Errorf("ownership stage: %w", err)
+	}
+
 	unresolved, err := failures.WorkFailures(ctx, "")
 	if err != nil {
 		return err

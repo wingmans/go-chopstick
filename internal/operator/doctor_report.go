@@ -345,26 +345,26 @@ func runStatus(ctx context.Context, cfg StatusConfig) error {
 
 	fmt.Println("Chop status")
 	fmt.Println()
-	fmt.Printf("  started           %s\n", status.StartedAt.Format(time.RFC3339))
-	fmt.Printf("  web URL           %s\n", httpURL(status.HTTPAddress))
-	fmt.Printf("  accessions        %d\n", status.Pipeline.Accessions)
-	fmt.Printf("  outbox pending    %d\n", status.Pipeline.OutboxPending)
-	fmt.Printf("  outbox published  %d\n", status.Pipeline.OutboxPublished)
-	fmt.Printf("  failures          %d\n", status.Pipeline.Failures)
-	fmt.Printf("  stream messages   %d\n", status.StreamMessages)
-	fmt.Printf("  stream bytes      %d\n", status.StreamBytes)
+	fmt.Printf("  %-22s%s\n", "started", status.StartedAt.Format(time.RFC3339))
+	fmt.Printf("  %-22s%s\n", "web URL", httpURL(status.HTTPAddress))
+	fmt.Printf("  %-22s%d\n", "accessions", status.Pipeline.Accessions)
+	fmt.Printf("  %-22s%d\n", "outbox pending", status.Pipeline.OutboxPending)
+	fmt.Printf("  %-22s%d\n", "outbox published", status.Pipeline.OutboxPublished)
+	fmt.Printf("  %-22s%d\n", "failures", status.Pipeline.Failures)
+	fmt.Printf("  %-22s%d\n", "stream messages", status.StreamMessages)
+	fmt.Printf("  %-22s%d\n", "stream bytes", status.StreamBytes)
 
 	if status.IndexImport != nil {
-		fmt.Printf("  index import      %s (%s)\n",
+		fmt.Printf("  %-22s%s (%s)\n", "index import",
 			status.IndexImport.State, status.IndexImport.Phase)
-		fmt.Printf("  import progress   files=%d examined=%d queued=%d "+
-			"duplicates=%d\n",
+		fmt.Printf("  %-22sfiles=%d examined=%d queued=%d duplicates=%d\n",
+			"import progress",
 			status.IndexImport.Files, status.IndexImport.Examined,
 			status.IndexImport.Queued, status.IndexImport.Duplicates)
 	}
 
 	for _, consumer := range status.Consumers {
-		fmt.Printf("  %-17s remaining=%d pending=%d in_flight=%d\n",
+		fmt.Printf("  %-22sremaining=%d pending=%d in_flight=%d\n",
 			consumer.Name, consumer.Pending+uint64(max(consumer.InFlight, 0)),
 			consumer.Pending, consumer.InFlight)
 	}

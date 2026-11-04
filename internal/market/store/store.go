@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/market/store/dbgen"
 )
 
@@ -113,10 +114,16 @@ func Open(ctx context.Context, path string) (*Store, error) {
 
 	db.SetMaxOpenConns(1)
 
-	if err := createSchema(ctx, db); err != nil {
+	created, err := createSchema(ctx, db)
+	if err != nil {
 		_ = db.Close()
 
 		return nil, err
+	}
+
+	if created {
+		ctxlog.FromContext(ctx).Info("database created", "database", "market",
+			"path", path, "schema_version", marketSchemaVersion)
 	}
 
 	queries, err := dbgen.Prepare(ctx, db)

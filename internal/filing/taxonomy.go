@@ -111,9 +111,7 @@ func (t Taxonomy) Metric(namespace, concept string) (MetricDefinition, bool) {
 
 // MetricReference returns the metric and selected concept reference for an
 // XBRL concept.
-func (t Taxonomy) MetricReference(namespace, concept string) (
-	MetricDefinition, ConceptReference, bool,
-) {
+func (t Taxonomy) MetricReference(namespace, concept string) (MetricDefinition, ConceptReference, bool) {
 	for _, definition := range t.Metrics {
 		for _, reference := range definition.Concepts {
 			if reference.Name == concept && namespaceMatches(reference.NamespaceFamily, namespace) {
@@ -123,10 +121,10 @@ func (t Taxonomy) MetricReference(namespace, concept string) (
 	}
 
 	return MetricDefinition{
-		Key: "", Label: "", Statement: "", CoverageTier: "", Concepts: nil,
-	}, ConceptReference{
-		NamespaceFamily: "", Name: "", Priority: 0,
-	}, false
+			Key: "", Label: "", Statement: "", CoverageTier: "", Concepts: nil,
+		}, ConceptReference{
+			NamespaceFamily: "", Name: "", Priority: 0,
+		}, false
 }
 
 // namespaceMatches checks if a given namespace matches the expected namespace family.

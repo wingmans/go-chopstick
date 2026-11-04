@@ -119,6 +119,7 @@ func TestParse13F(t *testing.T) {
 </otherManager></otherManagersInfo></coverPage><summaryPage>
 <otherIncludedManagersCount>1</otherIncludedManagersCount>
 <tableEntryTotal>1</tableEntryTotal><tableValueTotal>2500</tableValueTotal>
+<isConfidentialOmitted>true</isConfidentialOmitted>
 <otherManagers2Info><otherManager2><otherManager><name>Included Manager</name>
 <form13FFileNumber>028-2</form13FFileNumber></otherManager></otherManager2>
 </otherManagers2Info></summaryPage></formData></edgarSubmission>`
@@ -150,6 +151,7 @@ func TestParse13F(t *testing.T) {
 		filing.PreviousAccession != "0000000001-26-000001" ||
 		filing.InstitutionalSummary == nil ||
 		filing.InstitutionalSummary.TotalValue != "2500" ||
+		!filing.InstitutionalSummary.ConfidentialOmitted ||
 		len(filing.InstitutionalPositions) != 1 ||
 		len(filing.InstitutionalNotices) != 2 {
 		t.Fatalf("unexpected filing: %+v", filing)
@@ -159,6 +161,42 @@ func TestParse13F(t *testing.T) {
 	if position.CUSIP != "123456789" || position.Amount != "100" ||
 		position.ReportPeriod != "2025-12-31" {
 		t.Fatalf("unexpected position: %+v", position)
+	}
+}
+
+func TestParse13FNoticeWithoutPositions(t *testing.T) {
+	t.Parallel()
+
+	primary := `<edgarSubmission><headerData><submissionType>13F-NT</submissionType>
+<filerInfo><filer><credentials><cik>0000000300</cik></credentials></filer>
+<periodOfReport>12-31-2025</periodOfReport></filerInfo></headerData>
+<formData><coverPage><reportCalendarOrQuarter>12-31-2025</reportCalendarOrQuarter>
+<filingManager><name>Notice Manager LLC</name></filingManager>
+<reportType>13F NOTICE</reportType><otherManagersInfo><otherManager>
+<form13FFileNumber>028-1</form13FFileNumber><name>Reporting Manager</name>
+</otherManager></otherManagersInfo></coverPage></formData></edgarSubmission>`
+	path := writeOwnershipSubmission(t, "13F-NT",
+		"0000000001-26-000005",
+		testDocument{
+			documentType: "13F-NT", filename: "primary.xml",
+			content: primary,
+		})
+
+	filing, err := Parse(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if filing.ReportKind != "13F NOTICE" ||
+		filing.InstitutionalSummary != nil ||
+		len(filing.InstitutionalPositions) != 0 ||
+		len(filing.InstitutionalNotices) != 1 {
+		t.Fatalf("unexpected notice filing: %+v", filing)
+	}
+
+	if filing.InstitutionalNotices[0].ReportingManagerName !=
+		"Reporting Manager" {
+		t.Fatalf("unexpected notice: %+v", filing.InstitutionalNotices[0])
 	}
 }
 

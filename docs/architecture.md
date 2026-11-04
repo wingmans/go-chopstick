@@ -27,7 +27,10 @@ derived master index.
 `internal/chopstick/pipeline` owns the durable filing event, deduplication,
 outbox, NATS delivery, failure state, and serial workers. Its files expose the
 application flow: selection, submission acquisition, filing extraction,
-ownership import, and news projection. Each step has one worker.
+ownership consumption, and news projection. Each step has one worker.
+Financial discovery applies the configured form and constituent-set policy.
+Ownership discovery is global and uses the ownership package's independent
+form registry.
 
 `internal/parser` produces source-level filing data. `internal/filing` owns
 the persisted normalized financial model, file I/O, history, and taxonomy.

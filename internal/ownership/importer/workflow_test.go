@@ -34,12 +34,15 @@ func TestRunReusesCacheDeduplicatesAndResumes(t *testing.T) {
 	master := filepath.Join(root, "master.tsv")
 	accession := "0000000001-26-000001"
 	relative := "edgar/data/100/" + accession + ".txt"
+	legacyAccession := "0000000003-23-000001"
+	legacyRelative := "edgar/data/300/" + legacyAccession + ".txt"
+
 	writeCachedSubmission(t, cache, relative, accession)
+	writeCachedLegacySchedule(t, cache, legacyRelative, legacyAccession)
 	writeMaster(t, master,
 		"100|Issuer|4|2026-02-15|"+relative,
 		"200|Owner|4|2026-02-15|"+relative,
-		"300|Legacy Owner|SC 13G|2023-01-02|"+
-			"edgar/data/300/0000000003-23-000001.txt")
+		"300|Legacy Owner|SC 13G|2023-01-02|"+legacyRelative)
 
 	transport := &rejectingTransport{}
 	client := &http.Client{Transport: transport}
@@ -175,6 +178,44 @@ func writeCachedSubmission(t *testing.T, cache, relative,
 	fmt.Fprintln(&submission, "<XML>")
 	fmt.Fprintln(&submission, xml)
 	fmt.Fprintln(&submission, "</XML>")
+	fmt.Fprintln(&submission, "</TEXT>")
+	fmt.Fprintln(&submission, "</DOCUMENT>")
+	fmt.Fprintln(&submission, "</SEC-DOCUMENT>")
+
+	path, err := edgar.LocalFilingPath(cache, relative)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(path, []byte(submission.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeCachedLegacySchedule(t *testing.T, cache, relative,
+	accession string,
+) {
+	t.Helper()
+
+	var submission strings.Builder
+	fmt.Fprintf(&submission, "<SEC-DOCUMENT>%s.txt\n", accession)
+	fmt.Fprintln(&submission, "<SEC-HEADER>header")
+	fmt.Fprintf(&submission, "ACCESSION NUMBER: %s\n", accession)
+	fmt.Fprintln(&submission, "CONFORMED SUBMISSION TYPE: SC 13G")
+	fmt.Fprintln(&submission, "CENTRAL INDEX KEY: 0000000300")
+	fmt.Fprintln(&submission, "FILED AS OF DATE: 20230102")
+	fmt.Fprintln(&submission, "PUBLIC DOCUMENT COUNT: 1")
+	fmt.Fprintln(&submission, "</SEC-HEADER>")
+	fmt.Fprintln(&submission, "<DOCUMENT>")
+	fmt.Fprintln(&submission, "<TYPE>SC 13G")
+	fmt.Fprintln(&submission, "<SEQUENCE>1")
+	fmt.Fprintln(&submission, "<FILENAME>schedule13g.htm")
+	fmt.Fprintln(&submission, "<TEXT>")
+	fmt.Fprintln(&submission, "<html/>")
 	fmt.Fprintln(&submission, "</TEXT>")
 	fmt.Fprintln(&submission, "</DOCUMENT>")
 	fmt.Fprintln(&submission, "</SEC-DOCUMENT>")

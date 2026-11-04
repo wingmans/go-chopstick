@@ -442,7 +442,11 @@ func TestCompanyPageRealNVIDIASmoke(t *testing.T) {
 		t.Skip("local NVIDIA derived view is not available")
 	}
 
-	server := NewServer(parsedDir, nil)
+	server, err := NewConfiguredServer(parsedDir, "", "", nil)
+	if err != nil {
+		t.Skipf("local web databases cannot be opened: %v", err)
+	}
+
 	record := httptest.NewRecorder()
 	request := httptest.NewRequestWithContext(
 		context.Background(), http.MethodGet, "/companies/0001045810", nil)

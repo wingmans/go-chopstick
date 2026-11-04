@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/news/dbgen"
 )
 
@@ -63,6 +64,11 @@ func Open(ctx context.Context, path string) (*Store, bool, error) {
 		_ = db.Close()
 
 		return nil, false, err
+	}
+
+	if created {
+		ctxlog.FromContext(ctx).Info("database created", "database", "news",
+			"path", path, "schema_version", newsSchemaVersion)
 	}
 
 	queries, err := dbgen.Prepare(ctx, db)

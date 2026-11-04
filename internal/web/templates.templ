@@ -603,7 +603,8 @@ templ ownershipDirectoryBody(data ownershipDirectoryData) {
 	} else {
 		if !data.Available {
 			<section class="notice warning">The ownership database is not available.
-				Run the ownership importer or pass <code>--ownership-db</code> to use
+				Run <code>chop ownership backfill</code> or pass
+				<code>--ownership-db</code> to use
 				another database.</section>
 		}
 		<section class="panel"><div class="panel-heading"><h2>Companies</h2>
@@ -639,7 +640,8 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 		appear only when a security has an explicit issuer mapping from ownership filings.</section>
 	if !data.Available {
 		<section class="notice warning">The ownership database is not available. Run the
-			ownership importer or pass <code>--ownership-db</code> to use another database.</section>
+			<code>chop ownership backfill</code> or pass
+			<code>--ownership-db</code> to use another database.</section>
 	} else {
 		<section class="ownership-section"><div class="panel-heading">
 			<h2>Schedule 13D/G beneficial ownership</h2><span class="muted">latest reported state</span>

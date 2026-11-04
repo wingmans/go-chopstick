@@ -45,16 +45,15 @@ type rebuildEdgarCLI struct {
 }
 
 type indexCLI struct {
-	Download indexDownloadCLI `cmd:"" default:"withargs"                               help:"Download SEC indexes."`
-	Import   indexImportCLI   `cmd:"" help:"Import local indexes."`
-	Status   indexStatusCLI   `cmd:"" help:"Show index inventory and import coverage."`
+	Refresh indexRefreshCLI `cmd:"" default:"withargs"                               help:"Refresh local SEC indexes."`
+	Import  indexImportCLI  `cmd:"" help:"Import local indexes."`
+	Status  indexStatusCLI  `cmd:"" help:"Show index inventory and import coverage."`
 }
 
-type indexDownloadCLI struct {
-	FromYear      int  `default:"${from_year}"                                   help:"First year to download."                          short:"y"`
-	RefreshLatest bool `help:"Refresh the latest quarter and reuse older files." short:"r"`
-	Stitch        bool `default:"true"                                           help:"Concatenate quarterly TSV files into master.tsv." short:"s"`
-	Noop          bool `help:"Show actions without writing files."               short:"n"`
+type indexRefreshCLI struct {
+	FromYear int  `default:"${from_year}" help:"First year to refresh."            short:"y"`
+	Latest   bool `help:"Refresh only the latest quarter and reuse older files." short:"r"`
+	Noop     bool `help:"Show actions without writing files."                    short:"n"`
 }
 
 type indexImportCLI struct {
@@ -112,11 +111,11 @@ type coverageCLI struct {
 }
 
 type ownershipCLI struct {
-	Import ownershipImportCLI `cmd:"" default:"withargs"            help:"Import ownership filings."`
-	Status ownershipStatusCLI `cmd:"" help:"Show ownership status."`
+	Backfill ownershipBackfillCLI `cmd:"" default:"withargs"            help:"Import historical ownership filings."`
+	Status   ownershipStatusCLI   `cmd:"" help:"Show ownership status."`
 }
 
-type ownershipImportCLI struct {
+type ownershipBackfillCLI struct {
 	Master    string   `default:"${master}"                               help:"Local master.tsv path."      placeholder:"path"`
 	Database  string   `default:"${ownership_db}"                         help:"Ownership SQLite database."  placeholder:"path"`
 	CacheDir  string   `default:"${filings_dir}"                          help:"Raw filing cache directory." placeholder:"path"`

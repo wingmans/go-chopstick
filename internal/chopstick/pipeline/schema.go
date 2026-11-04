@@ -20,11 +20,11 @@ const (
 //go:embed sql/schema.sql
 var pollingSchema string
 
-func createSchema(ctx context.Context, db *sql.DB) error {
+func createSchema(ctx context.Context, db *sql.DB) (bool, error) {
 	for attempt := 0; ; attempt++ {
-		err := applySchema(ctx, db)
+		created, err := applySchema(ctx, db)
 		if err == nil || !schemaIsLocked(err) || attempt == schemaRetryLimit {
-			return err
+			return created, err
 		}
 
 		timer := time.NewTimer(schemaRetryDelay)
@@ -33,17 +33,17 @@ func createSchema(ctx context.Context, db *sql.DB) error {
 		case <-ctx.Done():
 			timer.Stop()
 
-			return fmt.Errorf("wait to initialize polling schema: %w",
+			return false, fmt.Errorf("wait to initialize polling schema: %w",
 				ctx.Err())
 		case <-timer.C:
 		}
 	}
 }
 
-func applySchema(ctx context.Context, db *sql.DB) error {
+func applySchema(ctx context.Context, db *sql.DB) (bool, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin polling schema transaction: %w", err)
+		return false, fmt.Errorf("begin polling schema transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -51,15 +51,15 @@ func applySchema(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(
 		&version,
 	); err != nil {
-		return fmt.Errorf("read polling schema version: %w", err)
+		return false, fmt.Errorf("read polling schema version: %w", err)
 	}
 
 	if version == pollingSchemaVersion {
-		return tx.Commit()
+		return false, tx.Commit()
 	}
 
 	if version != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	var tables int
@@ -72,26 +72,26 @@ func applySchema(ctx context.Context, db *sql.DB) error {
 			'polling_outbox',
 			'work_failures'
 		  )`).Scan(&tables); err != nil {
-		return fmt.Errorf("inspect polling schema: %w", err)
+		return false, fmt.Errorf("inspect polling schema: %w", err)
 	}
 
 	if tables != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	if _, err := tx.ExecContext(ctx, pollingSchema); err != nil {
-		return fmt.Errorf("create polling schema: %w", err)
+		return false, fmt.Errorf("create polling schema: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
-		return fmt.Errorf("record polling schema version: %w", err)
+		return false, fmt.Errorf("record polling schema version: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit polling schema: %w", err)
+		return false, fmt.Errorf("commit polling schema: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func schemaIsLocked(err error) bool {

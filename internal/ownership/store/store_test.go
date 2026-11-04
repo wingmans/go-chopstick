@@ -88,6 +88,10 @@ func TestEffective13FRestatementAndAddedHoldings(t *testing.T) {
 	original := institutionalFiling("0000000001-26-000001", "2026-02-01", "",
 		position("111111111", "Issuer A"),
 		position("222222222", "Issuer B"))
+	original.InstitutionalSummary = &ownership.InstitutionalSummary{
+		EntryCount: "2", TotalValue: "200",
+		ConfidentialOmitted: true,
+	}
 	restatement := institutionalFiling("0000000001-26-000002", "2026-02-02",
 		"RESTATEMENT", position("111111111", "Issuer A"))
 
@@ -107,6 +111,18 @@ func TestEffective13FRestatementAndAddedHoldings(t *testing.T) {
 
 	if count != 2 {
 		t.Fatalf("effective position count = %d, want 2", count)
+	}
+
+	var confidentialOmitted int
+	if err := store.db.QueryRowContext(t.Context(), `SELECT
+		confidential_omitted FROM institutional_summaries
+		WHERE accession = ?`, original.Accession).Scan(
+		&confidentialOmitted); err != nil {
+		t.Fatal(err)
+	}
+
+	if confidentialOmitted != 1 {
+		t.Fatalf("confidential omitted = %d, want 1", confidentialOmitted)
 	}
 }
 

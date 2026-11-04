@@ -20,12 +20,12 @@ const (
 //go:embed sql/schema.sql
 var marketSchema string
 
-func createSchema(ctx context.Context, db *sql.DB) error {
+func createSchema(ctx context.Context, db *sql.DB) (bool, error) {
 	for attempt := 0; ; attempt++ {
-		err := applySchema(ctx, db)
+		created, err := applySchema(ctx, db)
 		if err == nil || !marketSchemaIsLocked(err) ||
 			attempt == marketSchemaRetryLimit {
-			return err
+			return created, err
 		}
 
 		timer := time.NewTimer(marketSchemaRetryDelay)
@@ -34,17 +34,17 @@ func createSchema(ctx context.Context, db *sql.DB) error {
 		case <-ctx.Done():
 			timer.Stop()
 
-			return fmt.Errorf("wait to initialize market schema: %w",
+			return false, fmt.Errorf("wait to initialize market schema: %w",
 				ctx.Err())
 		case <-timer.C:
 		}
 	}
 }
 
-func applySchema(ctx context.Context, db *sql.DB) error {
+func applySchema(ctx context.Context, db *sql.DB) (bool, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin market schema transaction: %w", err)
+		return false, fmt.Errorf("begin market schema transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -52,15 +52,15 @@ func applySchema(ctx context.Context, db *sql.DB) error {
 	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(
 		&version,
 	); err != nil {
-		return fmt.Errorf("read market schema version: %w", err)
+		return false, fmt.Errorf("read market schema version: %w", err)
 	}
 
 	if version == marketSchemaVersion {
-		return tx.Commit()
+		return false, tx.Commit()
 	}
 
 	if version != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	var tables int
@@ -74,26 +74,26 @@ func applySchema(ctx context.Context, db *sql.DB) error {
 			'market_sync_state',
 			'market_repairs'
 		  )`).Scan(&tables); err != nil {
-		return fmt.Errorf("inspect market schema: %w", err)
+		return false, fmt.Errorf("inspect market schema: %w", err)
 	}
 
 	if tables != 0 {
-		return outdatedSchemaError(version)
+		return false, outdatedSchemaError(version)
 	}
 
 	if _, err := tx.ExecContext(ctx, marketSchema); err != nil {
-		return fmt.Errorf("create market schema: %w", err)
+		return false, fmt.Errorf("create market schema: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
-		return fmt.Errorf("record market schema version: %w", err)
+		return false, fmt.Errorf("record market schema version: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit market schema: %w", err)
+		return false, fmt.Errorf("commit market schema: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func marketSchemaIsLocked(err error) bool {

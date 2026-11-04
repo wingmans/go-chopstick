@@ -59,7 +59,8 @@ func ConfigFromEnvironment() (Config, error) {
 	}
 
 	forms, err := edgar.ValidateSupportedFormTypes(strings.Split(
-		environmentValue("EDGAR_FORM_TYPES", "10-K,10-Q,8-K"), ",",
+		environmentValue("EDGAR_FORM_TYPES",
+			"10-K,10-K/A,10-Q,10-Q/A,8-K,8-K/A"), ",",
 	))
 	if err != nil {
 		return Config{}, err

@@ -11,11 +11,12 @@ import (
 func renderIndexStatus(status transport.IndexStatusResponse) {
 	fmt.Println("Chop index status")
 	fmt.Println()
-	fmt.Printf("  quarterly cache   %s\n", status.Directory)
-	fmt.Printf("  available periods %s\n",
+	fmt.Printf("  %-22s%s\n", "quarterly cache", status.Directory)
+	fmt.Printf("  %-22s%s\n", "available periods",
 		periodSummary(status.AvailablePeriods))
-	fmt.Printf("  missing periods   %s\n", listOrNone(status.MissingPeriods))
-	fmt.Printf("  master index      %s (%s)\n",
+	fmt.Printf("  %-22s%s\n", "missing periods",
+		listOrNone(status.MissingPeriods))
+	fmt.Printf("  %-22s%s (%s)\n", "master index",
 		status.MasterPath, status.MasterState)
 
 	imported := periodSummary(status.ImportedPeriods)
@@ -23,7 +24,7 @@ func renderIndexStatus(status transport.IndexStatusResponse) {
 		imported = "none recorded"
 	}
 
-	fmt.Printf("  imported periods  %s\n", imported)
+	fmt.Printf("  %-22s%s\n", "imported periods", imported)
 
 	if status.LastImport != nil {
 		last := status.LastImport
@@ -33,20 +34,20 @@ func renderIndexStatus(status transport.IndexStatusResponse) {
 			selection = last.Files
 		}
 
-		fmt.Printf("  last committed    %s\n",
+		fmt.Printf("  %-22s%s\n", "last committed",
 			last.CommittedAt.Format(time.RFC3339))
-		fmt.Printf("  last selection    %s\n", listOrNone(selection))
-		fmt.Printf("  last result       files=%d examined=%d queued=%d "+
-			"duplicates=%d\n", len(last.Files), last.Examined,
-			last.Queued, last.Duplicates)
+		fmt.Printf("  %-22s%s\n", "last selection", listOrNone(selection))
+		fmt.Printf("  %-22sfiles=%d examined=%d queued=%d "+
+			"duplicates=%d\n", "last result", len(last.Files),
+			last.Examined, last.Queued, last.Duplicates)
 	}
 
 	if status.ActiveImport != nil {
 		active := status.ActiveImport
-		fmt.Printf("  active import     %s (%s)\n",
+		fmt.Printf("  %-22s%s (%s)\n", "active import",
 			active.State, active.Phase)
-		fmt.Printf("  active progress   files=%d examined=%d queued=%d "+
-			"duplicates=%d\n", active.Files, active.Examined,
+		fmt.Printf("  %-22sfiles=%d examined=%d queued=%d "+
+			"duplicates=%d\n", "active progress", active.Files, active.Examined,
 			active.Queued, active.Duplicates)
 	}
 }

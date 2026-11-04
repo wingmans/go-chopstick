@@ -348,7 +348,8 @@ func waitForRequestBudget(ctx context.Context, elapsed time.Duration) error {
 		return nil
 	}
 
-	ctxlog.FromContext(ctx).Debug("waiting before next download", "wait_ms", wait.Milliseconds())
+	ctxlog.FromContext(ctx).Debug("pacing next SEC request",
+		"wait_ms", wait.Milliseconds())
 
 	timer := time.NewTimer(wait)
 	defer timer.Stop()

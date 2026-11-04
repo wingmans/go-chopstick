@@ -36,7 +36,7 @@ func runOwnership(ctx context.Context, client *http.Client, cfg ownershipCommand
 			ToYear: cfg.toYear, FormTypes: cfg.formTypes,
 			Reprocess: cfg.reprocess, Noop: cfg.noop,
 		})
-	ctxlog.FromContext(ctx).Info("ownership import summary",
+	ctxlog.FromContext(ctx).Info("ownership backfill summary",
 		"selected", summary.Selected, "planned", summary.Planned,
 		"processed", summary.Processed, "reused", summary.Reused,
 		"unsupported", summary.Unsupported, "failed", summary.Failed)
