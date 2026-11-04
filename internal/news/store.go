@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	filingwork "wingman.com/chopstick/internal/filing/work"
 	"wingman.com/chopstick/internal/news/dbgen"
 )
 
@@ -78,7 +77,7 @@ func Open(ctx context.Context, path string) (*Store, bool, error) {
 
 // Apply stores an event after it has been durably received from JetStream.
 func (s *Store) Apply(ctx context.Context, sequence uint64, eventID string,
-	event filingwork.Event,
+	item Item,
 ) error {
 	if sequence > maxSQLiteInteger {
 		return fmt.Errorf("store news item: sequence %d exceeds SQLite integer",
@@ -88,18 +87,18 @@ func (s *Store) Apply(ctx context.Context, sequence uint64, eventID string,
 	err := s.queries.ApplyNewsItem(ctx, dbgen.ApplyNewsItemParams{
 		StreamSequence:  int64(sequence),
 		EventID:         eventID,
-		AccessionNumber: event.AccessionNumber,
-		CIK:             event.CIK,
-		CompanyName:     event.CompanyName,
-		FormType:        event.FormType,
-		FilingDate:      event.FilingDate,
-		FilingUrl:       event.FilingURL,
-		FilingPath:      event.FilingPath,
-		SourceFeed:      event.SourceFeed,
-		Selected:        boolInt(event.Selected != nil && *event.Selected),
-		SelectionReason: event.SelectionReason,
-		SelectionMode:   event.SelectionMode,
-		SelectionSet:    event.SelectionSet,
+		AccessionNumber: item.AccessionNumber,
+		CIK:             item.CIK,
+		CompanyName:     item.CompanyName,
+		FormType:        item.FormType,
+		FilingDate:      item.FilingDate,
+		FilingUrl:       item.FilingURL,
+		FilingPath:      item.FilingPath,
+		SourceFeed:      item.SourceFeed,
+		Selected:        boolInt(item.Selected),
+		SelectionReason: item.SelectionReason,
+		SelectionMode:   item.SelectionMode,
+		SelectionSet:    item.SelectionSet,
 	})
 	if err != nil {
 		return fmt.Errorf("store news item: %w", err)

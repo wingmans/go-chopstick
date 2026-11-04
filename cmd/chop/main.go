@@ -14,9 +14,9 @@ import (
 	"github.com/alecthomas/kong"
 
 	"wingman.com/chopstick/internal/buildinfo"
-	"wingman.com/chopstick/internal/choppie"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/envfile"
+	operator "wingman.com/chopstick/internal/operator"
 )
 
 func main() {
@@ -83,7 +83,7 @@ func runMain(args []string) int {
 	started := time.Now()
 
 	if err := runCommand(parsed, ctx, runtime); err != nil {
-		err = choppie.ClassifyError(ctx, err)
+		err = operator.ClassifyError(ctx, err)
 		if errors.Is(err, context.Canceled) {
 			logger.Info("shutdown requested")
 

@@ -14,8 +14,8 @@ import (
 	"github.com/alecthomas/kong"
 
 	"wingman.com/chopstick/internal/buildinfo"
+	"wingman.com/chopstick/internal/chopstick"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgarapp"
 	"wingman.com/chopstick/internal/envfile"
 )
 
@@ -54,7 +54,7 @@ func runMain(args []string) int {
 		return 1
 	}
 
-	config, err := edgarapp.ConfigFromEnvironment()
+	config, err := chopstick.ConfigFromEnvironment()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 
@@ -141,7 +141,7 @@ func runMain(args []string) int {
 	return 0
 }
 
-func applyCLI(config *edgarapp.Config, cli daemonCLI) {
+func applyCLI(config *chopstick.Config, cli daemonCLI) {
 	config.HTTPAddress = cli.Address
 	config.CommandAddress = cli.CommandAddress
 	config.NATSURL = cli.NATSURL
@@ -157,7 +157,7 @@ func applyCLI(config *edgarapp.Config, cli daemonCLI) {
 	config.MaxAttempts = cli.MaxAttempts
 }
 
-func run(config edgarapp.Config) error {
+func run(config chopstick.Config) error {
 	logger := ctxlog.New()
 	ctx := ctxlog.WithLogger(context.Background(), logger)
 
@@ -172,7 +172,7 @@ func run(config edgarapp.Config) error {
 		"form_types", config.FormTypes,
 	)
 
-	if err := edgarapp.Run(ctx, config, logger); err != nil {
+	if err := chopstick.Run(ctx, config, logger); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return nil
 		}

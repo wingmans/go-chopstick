@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"wingman.com/chopstick/internal/analysisstore"
-	dividendview "wingman.com/chopstick/internal/dividend"
 	filingview "wingman.com/chopstick/internal/filing"
+	dividendview "wingman.com/chopstick/internal/filing/dividend"
+	filingstore "wingman.com/chopstick/internal/filing/store"
 	"wingman.com/chopstick/internal/parser"
 )
 
@@ -14,7 +14,7 @@ import (
 // access in a separate filesystem-backed interface.
 type SQLiteStore struct {
 	files *JSONDirectory
-	views *analysisstore.Store
+	views *filingstore.Store
 }
 
 var (
@@ -24,7 +24,7 @@ var (
 
 // NewSQLiteStore opens the analysis database used by the web application.
 func NewSQLiteStore(ctx context.Context, parsedDir, databasePath string) (*SQLiteStore, error) {
-	views, err := analysisstore.Open(ctx, databasePath)
+	views, err := filingstore.Open(ctx, databasePath)
 	if err != nil {
 		return nil, err
 	}

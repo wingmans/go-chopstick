@@ -3,34 +3,35 @@ package web
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"wingman.com/chopstick/internal/edgar"
-	"wingman.com/chopstick/internal/eventbus"
-	filingwork "wingman.com/chopstick/internal/filing/work"
 	"wingman.com/chopstick/internal/news"
 )
+
+// DownloadRequester submits one explicit filing acquisition request.
+type DownloadRequester interface {
+	RequestDownload(ctx context.Context, item news.Item) error
+}
 
 // NewsServer serves the small, stream-backed EDGAR news page.
 type NewsServer struct {
 	store     *news.Store
 	logger    *slog.Logger
-	publisher eventbus.Publisher
+	requester DownloadRequester
 }
 
 // NewNewsServer creates a news page backed by a disposable read model.
-func NewNewsServer(store *news.Store, publisher eventbus.Publisher,
+func NewNewsServer(store *news.Store, requester DownloadRequester,
 	logger *slog.Logger,
 ) *NewsServer {
 	return &NewsServer{
 		store:     store,
 		logger:    logger,
-		publisher: publisher,
+		requester: requester,
 	}
 }
 
@@ -102,7 +103,7 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.publisher == nil {
+	if s.requester == nil {
 		http.Error(w, "event publisher unavailable",
 			http.StatusServiceUnavailable)
 
@@ -129,28 +130,9 @@ func (s *NewsServer) requestDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	selected := true
-	event := filingwork.Event{
-		SchemaVersion: 1, EventID: "filing.requested:" + item.AccessionNumber,
-		AccessionNumber: item.AccessionNumber, CIK: item.CIK,
-		CompanyName: item.CompanyName, FormType: item.FormType,
-		FilingDate: item.FilingDate, FilingPath: item.FilingPath,
-		FilingURL: item.FilingURL, SourceFeed: item.SourceFeed,
-		Timestamp: time.Now().UTC(), Selected: &selected,
-		SelectionReason: "requested from the news feed",
-		SelectionMode:   "on-demand", SelectionSet: item.SelectionSet,
-	}
-
-	payload, err := json.Marshal(event)
-	if err != nil {
-		http.Error(w, "could not encode request", http.StatusInternalServerError)
-
-		return
-	}
-
-	if err := s.publisher.Publish(context.WithoutCancel(r.Context()),
-		eventbus.SubjectFor(eventbus.SelectedSubject, event.FormType),
-		event.EventID, payload); err != nil {
+	if err := s.requester.RequestDownload(
+		context.WithoutCancel(r.Context()), item,
+	); err != nil {
 		http.Error(w, "could not queue filing", http.StatusServiceUnavailable)
 
 		return

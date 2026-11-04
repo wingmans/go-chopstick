@@ -7,7 +7,7 @@ The repository builds two Chop executables for SEC EDGAR data:
 - `chop` is the operator and offline-data command-line interface.
 
 `cmd/chop` contains the Kong command hierarchy and adapts parsed options to
-typed use cases. `internal/choppie` contains command workflows and operator
+typed use cases. `internal/operator` contains command workflows and operator
 rendering, but no command-line parser. See the
 [architecture guide](architecture.md) for the package boundaries.
 The current index-first daemon work is described in the

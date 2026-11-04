@@ -1,15 +1,9 @@
 package news
 
-import (
-	"testing"
-
-	filingwork "wingman.com/chopstick/internal/filing/work"
-)
+import "testing"
 
 func TestStoreOrdersByStreamSequenceAndFilters(t *testing.T) {
 	t.Parallel()
-
-	selected := true
 
 	store, created, err := Open(t.Context(), t.TempDir()+"/feed.db")
 	if err != nil {
@@ -22,7 +16,7 @@ func TestStoreOrdersByStreamSequenceAndFilters(t *testing.T) {
 		t.Fatal("new database was not reported as created")
 	}
 
-	for sequence, event := range map[uint64]filingwork.Event{
+	for sequence, event := range map[uint64]Item{
 		4: {
 			AccessionNumber: "first", CIK: "1", FormType: "10-Q",
 			FilingDate: "2026-01-01", SourceFeed: "ATOM",
@@ -30,7 +24,7 @@ func TestStoreOrdersByStreamSequenceAndFilters(t *testing.T) {
 		9: {
 			AccessionNumber: "second", CIK: "2", FormType: "10-K",
 			FilingDate: "2026-01-02", SourceFeed: "BATCH",
-			Selected: &selected,
+			Selected: true,
 		},
 	} {
 		if err := store.Apply(t.Context(), sequence,

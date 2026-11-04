@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"wingman.com/chopstick/internal/appdata"
-	"wingman.com/chopstick/internal/choppie"
+	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/edgar"
-	"wingman.com/chopstick/internal/eventbus"
+	operator "wingman.com/chopstick/internal/operator"
 	"wingman.com/chopstick/internal/transport"
 )
 
@@ -52,7 +52,7 @@ func commandDefaultsFromEnvironment() (commandDefaults, error) {
 	return commandDefaults{
 		FromYear:  fromYear,
 		Set:       environmentValue("EDGAR_SET", ""),
-		NATSURL:   environmentValue("EDGAR_NATS_URL", eventbus.DefaultURL),
+		NATSURL:   environmentValue("EDGAR_NATS_URL", pipeline.DefaultURL),
 		UserAgent: environmentValue("EDGAR_USER_AGENT", defaultUserAgent),
 		BaseURL:   environmentValue("EDGAR_BASE_URL", ""),
 		CommandAddress: environmentValue(
@@ -115,7 +115,7 @@ func (c *backfillCLI) Run(ctx context.Context, runtime *commandRuntime) error {
 		return err
 	}
 
-	return choppie.Backfill(ctx, choppie.BackfillConfig{
+	return operator.Backfill(ctx, operator.BackfillConfig{
 		SetName: c.Set, FromYear: c.FromYear, NATSURL: c.NATSURL,
 	}, runtime.Logger)
 }
@@ -133,7 +133,7 @@ func (c *rebuildEdgarCLI) Run(ctx context.Context, runtime *commandRuntime) erro
 		return err
 	}
 
-	return choppie.Rebuild(ctx, choppie.RebuildConfig{
+	return operator.Rebuild(ctx, operator.RebuildConfig{
 		SetName: c.Set, FromYear: c.FromYear, NATSURL: c.NATSURL,
 	}, runtime.Logger)
 }
@@ -152,7 +152,7 @@ func (c *indexDownloadCLI) Run(ctx context.Context, runtime *commandRuntime) err
 		return err
 	}
 
-	return choppie.DownloadIndex(ctx, runtime.Client, edgar.Config{
+	return operator.DownloadIndex(ctx, runtime.Client, edgar.Config{
 		Directory:     appdata.Path("cache", "indexes", "quarterly"),
 		ZipDirectory:  appdata.Path("cache", "index-zips"),
 		MasterPath:    appdata.Path("cache", "indexes", "master.tsv"),
@@ -174,7 +174,7 @@ func (c *indexImportCLI) Run(ctx context.Context) error {
 		file = absolute
 	}
 
-	return choppie.SubmitIndexImport(ctx, choppie.IndexImportConfig{
+	return operator.SubmitIndexImport(ctx, operator.IndexImportConfig{
 		Address: c.CommandAddress, File: file, Latest: c.Latest,
 		Year: c.Year, FromYear: c.FromYear, ToYear: c.ToYear,
 		DryRun: c.DryRun,
@@ -182,13 +182,13 @@ func (c *indexImportCLI) Run(ctx context.Context) error {
 }
 
 func (c *indexStatusCLI) Run(ctx context.Context) error {
-	return choppie.PrintIndexStatus(ctx, choppie.IndexStatusConfig{
+	return operator.PrintIndexStatus(ctx, operator.IndexStatusConfig{
 		Address: c.CommandAddress,
 	})
 }
 
 func (s selectionCLI) filter() (edgar.IndexFilter, error) {
-	return choppie.BuildFilter(s.CIK, s.Set, s.FormTypes, s.Year,
+	return operator.BuildFilter(s.CIK, s.Set, s.FormTypes, s.Year,
 		s.FromYear, s.ToYear)
 }
 
@@ -203,8 +203,8 @@ func (c *filingsCLI) Run(ctx context.Context, runtime *commandRuntime) error {
 		return errors.New("EDGAR_USER_AGENT cannot be empty")
 	}
 
-	return choppie.DownloadFilings(ctx, runtime.Client,
-		choppie.DownloadFilingsConfig{
+	return operator.DownloadFilings(ctx, runtime.Client,
+		operator.DownloadFilingsConfig{
 			MasterPath: appdata.Path("cache", "indexes", "master.tsv"),
 			AnalysisDB: c.AnalysisDB,
 			Download: edgar.FilingDownloadConfig{
@@ -233,7 +233,7 @@ func (c *parseCLI) Run(ctx context.Context) error {
 		return err
 	}
 
-	return choppie.ProcessSubmissions(ctx, choppie.ParseConfig{
+	return operator.ProcessSubmissions(ctx, operator.ParseConfig{
 		Files:      c.Files,
 		MasterPath: appdata.Path("cache", "indexes", "master.tsv"),
 		AnalysisDB: c.AnalysisDB, Filter: filter,
@@ -247,13 +247,13 @@ func (c *parseCLI) hasSelection() bool {
 }
 
 func (c *coverageCLI) Run(ctx context.Context) error {
-	filter, err := choppie.BuildFilter(c.CIK, c.Set, c.FormTypes, "",
+	filter, err := operator.BuildFilter(c.CIK, c.Set, c.FormTypes, "",
 		c.FromYear, c.ToYear)
 	if err != nil {
 		return err
 	}
 
-	return choppie.Coverage(ctx, choppie.CoverageConfig{
+	return operator.Coverage(ctx, operator.CoverageConfig{
 		MasterPath: c.Master, IndexesDir: c.IndexesDir,
 		FilingsDir: c.FilingsDir, ParsedDir: c.ParsedDir,
 		AnalysisDB: c.AnalysisDB, OutputPath: c.Output,
@@ -263,8 +263,8 @@ func (c *coverageCLI) Run(ctx context.Context) error {
 }
 
 func (c *ownershipImportCLI) Run(ctx context.Context, runtime *commandRuntime) error {
-	return choppie.Ownership(ctx, runtime.Client,
-		choppie.OwnershipConfig{
+	return operator.Ownership(ctx, runtime.Client,
+		operator.OwnershipConfig{
 			Operation: "import", MasterPath: c.Master,
 			DatabasePath: c.Database, CacheDir: c.CacheDir,
 			UserAgent: environmentValue("EDGAR_USER_AGENT", defaultUserAgent),
@@ -275,14 +275,14 @@ func (c *ownershipImportCLI) Run(ctx context.Context, runtime *commandRuntime) e
 }
 
 func (c *ownershipStatusCLI) Run(ctx context.Context, runtime *commandRuntime) error {
-	return choppie.Ownership(ctx, runtime.Client,
-		choppie.OwnershipConfig{
+	return operator.Ownership(ctx, runtime.Client,
+		operator.OwnershipConfig{
 			Operation: "status", DatabasePath: c.Database,
 		})
 }
 
-func artifactConfig(operation string, options artifactOptions) choppie.ArtifactsConfig {
-	return choppie.ArtifactsConfig{
+func artifactConfig(operation string, options artifactOptions) operator.ArtifactsConfig {
+	return operator.ArtifactsConfig{
 		Operation: operation, CIK: options.CIK,
 		Accession: options.Accession, ParsedDir: options.ParsedDir,
 		FilingsDir: options.FilingsDir, ArtifactsDir: options.ArtifactsDir,
@@ -290,12 +290,12 @@ func artifactConfig(operation string, options artifactOptions) choppie.Artifacts
 }
 
 func (c *artifactListCLI) Run(ctx context.Context) error {
-	return choppie.Artifacts(ctx,
+	return operator.Artifacts(ctx,
 		artifactConfig("list", c.artifactOptions))
 }
 
 func (c *artifactCleanCLI) Run(ctx context.Context) error {
-	return choppie.Artifacts(ctx,
+	return operator.Artifacts(ctx,
 		artifactConfig("clean", c.artifactOptions))
 }
 
@@ -305,14 +305,14 @@ func (c *artifactExtractCLI) Run(ctx context.Context) error {
 	cfg.Filenames = c.Documents
 	cfg.All = c.All
 
-	return choppie.Artifacts(ctx, cfg)
+	return operator.Artifacts(ctx, cfg)
 }
 
 func (c *artifactServeCLI) Run(ctx context.Context) error {
 	cfg := artifactConfig("serve", c.artifactOptions)
 	cfg.Address = c.Address
 
-	return choppie.Artifacts(ctx, cfg)
+	return operator.Artifacts(ctx, cfg)
 }
 
 func (c taxonomyOptions) run(ctx context.Context, operation string,
@@ -325,13 +325,13 @@ func (c taxonomyOptions) run(ctx context.Context, operation string,
 		return errors.New("--parsed-dir cannot be empty")
 	}
 
-	filter, err := choppie.BuildFilter(c.CIK, c.Set, c.FormTypes,
+	filter, err := operator.BuildFilter(c.CIK, c.Set, c.FormTypes,
 		c.Year, c.FromYear, c.ToYear)
 	if err != nil {
 		return err
 	}
 
-	return choppie.Taxonomy(ctx, choppie.TaxonomyConfig{
+	return operator.Taxonomy(ctx, operator.TaxonomyConfig{
 		Operation: operation, File: c.File, TaxonomyPath: c.Taxonomy,
 		ParsedDir: c.ParsedDir, Filter: filter, SetName: c.Set,
 		FromYear: c.FromYear, ToYear: c.ToYear,
@@ -353,7 +353,7 @@ func (c *taxonomyCoverageCLI) Run(ctx context.Context) error {
 }
 
 func (c *doctorCLI) Run(ctx context.Context, runtime *commandRuntime) error {
-	return choppie.Doctor(ctx, choppie.DoctorConfig{
+	return operator.Doctor(ctx, operator.DoctorConfig{
 		NATSURL: c.NATSURL, PollingDB: c.PollingDB,
 		NewsDB: c.NewsDB, MasterPath: c.Master,
 		HTTPAddress: webAddressFromEnvironment(), Verbose: runtime.Verbose,
@@ -361,19 +361,19 @@ func (c *doctorCLI) Run(ctx context.Context, runtime *commandRuntime) error {
 }
 
 func (c *statusCLI) Run(ctx context.Context) error {
-	return choppie.PrintStatus(ctx, choppie.StatusConfig{
+	return operator.PrintStatus(ctx, operator.StatusConfig{
 		Address: c.CommandAddress,
 	})
 }
 
 func (c *failuresListCLI) Run(ctx context.Context) error {
-	return choppie.PrintFailures(ctx, choppie.FailureListConfig{
+	return operator.PrintFailures(ctx, operator.FailureListConfig{
 		Address: c.CommandAddress, Stage: c.Stage, Limit: c.Limit,
 	})
 }
 
 func (c *failuresRetryCLI) Run(ctx context.Context) error {
-	return choppie.RetryFailureStage(ctx, choppie.FailureRetryConfig{
+	return operator.RetryFailureStage(ctx, operator.FailureRetryConfig{
 		Address: c.CommandAddress, Stage: c.Stage,
 	})
 }

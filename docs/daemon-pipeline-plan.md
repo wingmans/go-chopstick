@@ -69,8 +69,8 @@ These commands inspect or affect the running application through
 
 The Atom reader is already daemon-owned and continuous. `chop index import`
 becomes its finite, operator-triggered counterpart. It reads historical or
-quarterly index records and submits the same `work.Event` contract through the
-same deduplication and outbox boundary.
+quarterly index records and submits the same `pipeline.Event` contract through
+the same deduplication and outbox boundary.
 
 The first implementation moves only this background operation. After it is
 working, clean up command names, responsibilities, and use-case boundaries
@@ -227,25 +227,26 @@ a streaming command bus.
 - Do not add a generic command envelope, handler registry, middleware stack,
   streaming protocol, or command bus abstraction.
 - Map the existing typed Kong options to the transport request in `cmd/chop`.
-- Add a concrete index-import handler in `edgarapp`.
+- Add a concrete index-import handler in `chopstick`.
 - Validate the request before accepting it.
 - Return an accepted or busy response promptly.
 - Run accepted work beneath the daemon's root context.
-- Record one active index-import snapshot in `edgarapp`.
+- Record one active index-import snapshot in `chopstick`.
 - Ensure import and publication logs use the daemon logger.
 - Remove the application lock requirement from the daemon-owned import path.
 - Remove local import execution from the CLI path.
 
 The CLI continues to own parsing and response formatting. The transport owns
-only serialization and the local connection. `edgarapp` owns background
+only serialization and the local connection. `chopstick` owns background
 execution and lifecycle.
 
 ### 2. Keep Atom and index readers concrete
 
-- Reuse `internal/indeximport` for selecting and reading quarterly TSV files.
-- Convert index records into the existing `work.Event` contract.
-- Save events through `work.Store` so deduplication and outbox publication stay
-  atomic.
+- Reuse `internal/chopstick/ingest` for selecting and reading quarterly TSV
+  files.
+- Convert index records into the existing `pipeline.Event` contract.
+- Save events through `pipeline.Store` so deduplication and outbox publication
+  stay atomic.
 - Publish pending outbox entries through the existing event bus.
 - Let the continuously running selection, download, and processing consumers
   perform the remaining work.
@@ -362,7 +363,7 @@ Add tests that prove the ownership boundary and observable behavior:
 - `--latest` selects local input and does not fetch from the network.
 - A missing or stale master is stitched from all local quarterly inputs.
 - Importing one selected quarter does not truncate the full master.
-- Discovery still deduplicates accessions through `work.Store`.
+- Discovery still deduplicates accessions through `pipeline.Store`.
 - Outbox rows remain pending when publication fails.
 - Pending rows publish successfully after recovery.
 - Existing event JSON and NATS subjects remain unchanged.

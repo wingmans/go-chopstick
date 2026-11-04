@@ -45,6 +45,11 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 		return CompanyHistory{}, errors.New("company history CIK is empty")
 	}
 
+	taxonomy, err := LoadTaxonomy("")
+	if err != nil {
+		return CompanyHistory{}, err
+	}
+
 	cik = historyCIK(cik)
 	rowsByStatement := map[string]historyRows{}
 	company := ""
@@ -115,7 +120,7 @@ func BuildCompanyHistory(views []View, cik string) (CompanyHistory, error) {
 			parts := strings.SplitN(key, "\x00", 2)
 
 			row := HistoryRow{
-				Key: parts[0], Label: historyMetricLabel(parts[0]), Unit: "",
+				Key: parts[0], Label: historyMetricLabel(taxonomy, parts[0]), Unit: "",
 				Values: map[string]FactValue{}, Sources: map[string]string{},
 			}
 			if len(parts) == 2 {
@@ -154,8 +159,8 @@ func historyCIK(value string) string {
 }
 
 // historyMetricLabel returns the human-readable label for a given metric key.
-func historyMetricLabel(key string) string {
-	for _, metric := range defaultTaxonomy().Metrics {
+func historyMetricLabel(taxonomy Taxonomy, key string) string {
+	for _, metric := range taxonomy.Metrics {
 		if metric.Key == key {
 			return metric.Label
 		}

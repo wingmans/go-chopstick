@@ -11,10 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/chopstick/internal/analysisstore"
 	"wingman.com/chopstick/internal/constituents"
-	dividendview "wingman.com/chopstick/internal/dividend"
 	filingview "wingman.com/chopstick/internal/filing"
+	dividendview "wingman.com/chopstick/internal/filing/dividend"
+	filingnormalize "wingman.com/chopstick/internal/filing/normalize"
+	filingstore "wingman.com/chopstick/internal/filing/store"
 	"wingman.com/chopstick/internal/news"
 	"wingman.com/chopstick/internal/parser"
 )
@@ -48,7 +49,7 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 
 	requireGoldenIdentity(t, filing, expected)
 
-	view, err := filingview.Build(filing)
+	view, err := filingnormalize.Build(filing)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,11 +61,11 @@ func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := filingview.Save(parsedDir, filing); err != nil {
+	if _, err := filingview.Save(parsedDir, view); err != nil {
 		t.Fatal(err)
 	}
 
-	analysis, err := analysisstore.Open(context.Background(), filepath.Join(filepath.Dir(parsedDir), "analysis.db"))
+	analysis, err := filingstore.Open(context.Background(), filepath.Join(filepath.Dir(parsedDir), "analysis.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +416,7 @@ func TestCompanyPageRealNVIDIASmoke(t *testing.T) {
 		t.Skip("local NVIDIA analysis database is not available")
 	}
 
-	analysis, err := analysisstore.Open(context.Background(), filepath.Join(filepath.Dir(parsedDir), "analysis.db"))
+	analysis, err := filingstore.Open(context.Background(), filepath.Join(filepath.Dir(parsedDir), "analysis.db"))
 	if err != nil {
 		t.Skip("local NVIDIA analysis database cannot be opened")
 	}
@@ -498,18 +499,18 @@ func newCIKTestServer(t *testing.T) *Server {
 		t.Fatalf("SaveParsedFiling returned error: %v", err)
 	}
 
-	if _, err := filingview.Save(parsedDir, filing); err != nil {
+	view, err := filingnormalize.Build(filing)
+	if err != nil {
+		t.Fatalf("filingnormalize.Build returned error: %v", err)
+	}
+
+	if _, err := filingview.Save(parsedDir, view); err != nil {
 		t.Fatalf("filingview.Save returned error: %v", err)
 	}
 
-	view, err := filingview.Build(filing)
+	analysis, err := filingstore.Open(context.Background(), filepath.Join(filepath.Dir(parsedDir), "analysis.db"))
 	if err != nil {
-		t.Fatalf("filingview.Build returned error: %v", err)
-	}
-
-	analysis, err := analysisstore.Open(context.Background(), filepath.Join(filepath.Dir(parsedDir), "analysis.db"))
-	if err != nil {
-		t.Fatalf("analysisstore.Open returned error: %v", err)
+		t.Fatalf("filingstore.Open returned error: %v", err)
 	}
 
 	if err := analysis.SaveFilingView(t.Context(), view); err != nil {
@@ -517,7 +518,7 @@ func newCIKTestServer(t *testing.T) *Server {
 	}
 
 	if err := analysis.Close(); err != nil {
-		t.Fatalf("analysisstore.Close returned error: %v", err)
+		t.Fatalf("filingstore.Close returned error: %v", err)
 	}
 
 	setDir := t.TempDir()

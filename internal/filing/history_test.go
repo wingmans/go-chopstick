@@ -59,8 +59,6 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 						"FY" + year: {
 							Value: value, Nil: false, ContextRef: "c1",
 							Decimals: "-3", UnitRef: "",
-							priority: 0, concept: parser.QName{Namespace: "", Local: ""},
-							id: "", precision: "",
 						},
 					},
 				}},
@@ -72,8 +70,6 @@ func historyTestView(cik, accession, filingDate, year, value string) View {
 						year + "-06-30": {
 							Value: value, Nil: false, ContextRef: "c2",
 							Decimals: "-3", UnitRef: "",
-							priority: 0, concept: parser.QName{Namespace: "", Local: ""},
-							id: "", precision: "",
 						},
 					},
 				}},

@@ -3,12 +3,12 @@ version: "2"
 sql:
   - name: polling
     engine: sqlite
-    schema: internal/filing/work/sql/schema.sql
-    queries: internal/filing/work/sql/queries.sql
+    schema: internal/chopstick/pipeline/sql/schema.sql
+    queries: internal/chopstick/pipeline/sql/queries.sql
     gen:
       go:
         package: dbgen
-        out: internal/filing/work/dbgen
+        out: internal/chopstick/pipeline/dbgen
         sql_package: database/sql
         emit_empty_slices: true
         emit_prepared_queries: true
@@ -30,12 +30,12 @@ sql:
         omit_unused_structs: true
   - name: analysis
     engine: sqlite
-    schema: internal/analysisstore/sql/schema.sql
-    queries: internal/analysisstore/sql/queries.sql
+    schema: internal/filing/store/sql/schema.sql
+    queries: internal/filing/store/sql/queries.sql
     gen:
       go:
         package: dbgen
-        out: internal/analysisstore/dbgen
+        out: internal/filing/store/dbgen
         sql_package: database/sql
         emit_empty_slices: true
         emit_prepared_queries: true
