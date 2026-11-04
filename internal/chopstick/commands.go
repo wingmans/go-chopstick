@@ -119,7 +119,7 @@ func (h *adminHandler) status(ctx context.Context) (transport.Status, error) {
 		return transport.Status{}, err
 	}
 
-	bus, err := pipeline.Inspect(h.config.NATSURL)
+	bus, err := pipeline.Inspect(ctx, h.config.NATSURL)
 	if err != nil {
 		return transport.Status{}, err
 	}
@@ -318,7 +318,7 @@ func (h *adminHandler) retryFailures(ctx context.Context,
 	}
 	defer func() { _ = store.Close() }()
 
-	bus, err := pipeline.Connect(h.config.NATSURL)
+	bus, err := pipeline.Connect(ctx, h.config.NATSURL)
 	if err != nil {
 		return 0, err
 	}

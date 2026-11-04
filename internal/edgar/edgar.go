@@ -142,12 +142,21 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 		}
 	}
 
+	cached := 0
+	downloaded := 0
+	extracted := 0
+
 	for i, archive := range archives {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
 		started := time.Now()
+		logger := ctxlog.FromContext(ctx)
+		logger.Debug("checking EDGAR index",
+			"filename", archive.FileName,
+			"completed", i,
+			"total", len(archives))
 
 		refresh := cfg.RefreshLatest && i == 0
 
@@ -162,22 +171,34 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 			return err
 		}
 
-		logger := ctxlog.FromContext(ctx)
-
 		attrs := []any{
 			"filename", archive.FileName,
 			"duration_ms", time.Since(started).Milliseconds(),
 		}
 		switch {
 		case network:
+			downloaded++
+
 			logger.Debug("downloaded and extracted EDGAR index",
 				append(attrs, "source", "network", "url", archive.URL)...)
 		case sourcePath == archive.FileName:
+			cached++
+
 			logger.Debug("reused cached EDGAR index",
 				append(attrs, "source", "cache", "path", sourcePath)...)
 		default:
+			extracted++
+
 			logger.Debug("extracted cached EDGAR index",
 				append(attrs, "source", "cache", "path", sourcePath)...)
+		}
+
+		completed := i + 1
+		if network || completed%5 == 0 || completed == len(archives) {
+			logger.Info("EDGAR index progress",
+				"completed", completed, "total", len(archives),
+				"cached", cached, "extracted", extracted,
+				"downloaded", downloaded)
 		}
 
 		if network && i < len(archives)-1 {

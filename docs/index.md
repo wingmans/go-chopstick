@@ -12,9 +12,14 @@ rendering, but no command-line parser. See the
 [architecture guide](architecture.md) for the package boundaries.
 The current index-first daemon work is described in the
 [daemon pipeline plan](daemon-pipeline-plan.md).
+Future options for accelerating large index scans are recorded in the
+[master index performance note](master-index-performance.md).
 
 NATS remains a separate local service and carries durable filing events. Live
 control requests use the local TCP transport between `chop` and `chopd`.
+NATS disconnects and reconnects are logged. Outbox publication uses a bounded
+acknowledgement wait; a timeout fails the current stage and leaves unpublished
+rows pending for the next run.
 
 ## Development
 
@@ -67,6 +72,10 @@ data-root lock as `chopd` and refuse to run while the application is active:
 go run ./cmd/chop backfill
 go run ./cmd/chop rebuild edgar --confirm
 ```
+
+Backfill reports each sequential stage, elapsed time, quarterly-index progress,
+master-index discovery counts, and the existing consumer backlog counters. This
+is process-local progress reporting, not a persistent job or scheduler model.
 
 The rebuild preserves downloaded filings, quarterly indexes, index ZIP files,
 constituent sets, ownership data, and market data. It removes rebuildable

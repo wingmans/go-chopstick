@@ -28,6 +28,9 @@ derived master index.
 outbox, NATS delivery, failure state, and serial workers. Its files expose the
 application flow: selection, submission acquisition, filing extraction,
 ownership consumption, and news projection. Each step has one worker.
+An outbox row is marked published only after JetStream acknowledges it. A
+bounded acknowledgement timeout returns control to the current stage while
+leaving unacknowledged rows available for a later run.
 Financial discovery applies the configured form and constituent-set policy.
 Ownership discovery is global and uses the ownership package's independent
 form registry.

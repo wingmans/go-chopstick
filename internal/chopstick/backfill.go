@@ -40,37 +40,46 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 		return err
 	}
 
+	started := time.Now()
+
 	logger.Info("starting backfill", "set", config.SetName,
 		"from_year", config.FromYear, "through", "current available data")
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	if err := edgar.DownloadIndex(ctx, client, edgar.Config{
-		Directory:     config.IndexDirectory,
-		ZipDirectory:  config.IndexZipDirectory,
-		MasterPath:    config.MasterPath,
-		SinceYear:     config.FromYear,
-		UserAgent:     config.UserAgent,
-		RefreshLatest: false,
-		Stitch:        true,
-		BaseURL:       config.BaseURL,
+
+	if err := runBackfillStage(logger, "index", func() error {
+		return edgar.DownloadIndex(ctx, client, edgar.Config{
+			Directory:     config.IndexDirectory,
+			ZipDirectory:  config.IndexZipDirectory,
+			MasterPath:    config.MasterPath,
+			SinceYear:     config.FromYear,
+			UserAgent:     config.UserAgent,
+			RefreshLatest: false,
+			Stitch:        true,
+			BaseURL:       config.BaseURL,
+		})
 	}); err != nil {
 		return fmt.Errorf("index stage: %w", err)
 	}
 
-	bus, err := pipeline.Connect(config.NATSURL)
+	bus, err := pipeline.Connect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = bus.Close() }()
 
-	if err := discover(ctx, bus, config, logger.With("role", "discover")); err != nil {
+	if err := runBackfillStage(logger, "discovery", func() error {
+		return discover(ctx, bus, config, logger.With("role", "discover"))
+	}); err != nil {
 		return fmt.Errorf("discover stage: %w", err)
 	}
 
-	if err := pipeline.RunSelection(ctx, bus, pipeline.SelectionConfig{
-		SetName: config.SetName, CIKs: config.CIKs,
-		FormTypes: config.FormTypes, Drain: true,
-	}, logger.With("role", "select")); err != nil {
+	if err := runBackfillStage(logger, "selection", func() error {
+		return pipeline.RunSelection(ctx, bus, pipeline.SelectionConfig{
+			SetName: config.SetName, CIKs: config.CIKs,
+			FormTypes: config.FormTypes, Drain: true,
+		}, logger.With("role", "select"))
+	}); err != nil {
 		return fmt.Errorf("select stage: %w", err)
 	}
 
@@ -82,32 +91,38 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 	}
 	defer func() { _ = failures.Close() }()
 
-	if err := pipeline.RunSubmission(ctx, bus, pipeline.SubmissionConfig{
-		Directory: config.FilingsDirectory, UserAgent: config.UserAgent,
-		BaseURL: config.BaseURL, Drain: true,
-		MaxAttempts: config.MaxAttempts, Failures: failures,
-	}, logger.With("role", "download")); err != nil {
+	if err := runBackfillStage(logger, "download", func() error {
+		return pipeline.RunSubmission(ctx, bus, pipeline.SubmissionConfig{
+			Directory: config.FilingsDirectory, UserAgent: config.UserAgent,
+			BaseURL: config.BaseURL, Drain: true,
+			MaxAttempts: config.MaxAttempts, Failures: failures,
+		}, logger.With("role", "download"))
+	}); err != nil {
 		return fmt.Errorf("download stage: %w", err)
 	}
 
-	if err := pipeline.RunExtraction(ctx, bus, pipeline.ExtractionConfig{
-		FilingsDirectory: config.FilingsDirectory,
-		ParsedDirectory:  config.ParsedDirectory,
-		AnalysisDBPath:   config.AnalysisDB, Drain: true,
-		MaxAttempts: config.MaxAttempts, Failures: failures,
-	}, logger.With("role", "process")); err != nil {
+	if err := runBackfillStage(logger, "processing", func() error {
+		return pipeline.RunExtraction(ctx, bus, pipeline.ExtractionConfig{
+			FilingsDirectory: config.FilingsDirectory,
+			ParsedDirectory:  config.ParsedDirectory,
+			AnalysisDBPath:   config.AnalysisDB, Drain: true,
+			MaxAttempts: config.MaxAttempts, Failures: failures,
+		}, logger.With("role", "process"))
+	}); err != nil {
 		return fmt.Errorf("process stage: %w", err)
 	}
 
-	if err := pipeline.RunOwnershipConsumer(ctx, bus, pipeline.OwnershipConfig{
-		FilingsDirectory: config.FilingsDirectory,
-		DatabasePath:     config.OwnershipDB,
-		UserAgent:        config.UserAgent,
-		BaseURL:          config.BaseURL,
-		Drain:            true,
-		MaxAttempts:      config.MaxAttempts,
-		Failures:         failures,
-	}, logger.With("role", "ownership")); err != nil {
+	if err := runBackfillStage(logger, "ownership", func() error {
+		return pipeline.RunOwnershipConsumer(ctx, bus, pipeline.OwnershipConfig{
+			FilingsDirectory: config.FilingsDirectory,
+			DatabasePath:     config.OwnershipDB,
+			UserAgent:        config.UserAgent,
+			BaseURL:          config.BaseURL,
+			Drain:            true,
+			MaxAttempts:      config.MaxAttempts,
+			Failures:         failures,
+		}, logger.With("role", "ownership"))
+	}); err != nil {
 		return fmt.Errorf("ownership stage: %w", err)
 	}
 
@@ -122,7 +137,23 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 	}
 
 	logger.Info("backfill complete", "set", config.SetName,
-		"from_year", config.FromYear)
+		"from_year", config.FromYear,
+		"duration_ms", time.Since(started).Milliseconds())
+
+	return nil
+}
+
+func runBackfillStage(logger *slog.Logger, stage string, run func() error) error {
+	started := time.Now()
+
+	logger.Info("backfill stage started", "stage", stage)
+
+	if err := run(); err != nil {
+		return err
+	}
+
+	logger.Info("backfill stage completed", "stage", stage,
+		"duration_ms", time.Since(started).Milliseconds())
 
 	return nil
 }
@@ -148,7 +179,7 @@ func Rebuild(ctx context.Context, config Config, logger *slog.Logger) error {
 		return err
 	}
 
-	if err := pipeline.ResetStream(config.NATSURL); err != nil {
+	if err := pipeline.ResetStream(ctx, config.NATSURL); err != nil {
 		return err
 	}
 

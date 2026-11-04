@@ -150,7 +150,7 @@ func RunIndex(ctx context.Context, config Config, logger *slog.Logger) error {
 		return fmt.Errorf("record index import: %w", err)
 	}
 
-	bus, err := pipeline.Connect(config.NATSURL)
+	bus, err := pipeline.Connect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}

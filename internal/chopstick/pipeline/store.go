@@ -205,7 +205,18 @@ func (s *Store) PublishPending(ctx context.Context,
 		return fmt.Errorf("read polling outbox: %w", err)
 	}
 
-	for _, message := range messages {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	logger := ctxlog.FromContext(ctx)
+	started := time.Now()
+	lastProgress := started
+	published := 0
+
+	logger.Info("outbox flush started", "pending", len(messages))
+
+	for index, message := range messages {
 		if err := publisher.Publish(ctx, message.Subject, message.EventID,
 			message.Payload); err != nil {
 			_ = s.queries.RecordOutboxPublishFailure(
@@ -216,13 +227,40 @@ func (s *Store) PublishPending(ctx context.Context,
 				},
 			)
 
-			return err
+			logger.Error("outbox flush failed",
+				"published", published,
+				"remaining", len(messages)-published,
+				"event_id", message.EventID,
+				"error", err)
+
+			return fmt.Errorf("publish outbox message %d of %d: %w",
+				index+1, len(messages), err)
 		}
 
 		if err := s.queries.MarkOutboxPublished(ctx, message.ID); err != nil {
+			logger.Error("outbox acknowledgement persistence failed",
+				"published", published,
+				"remaining", len(messages)-published,
+				"event_id", message.EventID,
+				"error", err)
+
 			return fmt.Errorf("mark polling outbox published: %w", err)
 		}
+
+		published++
+		if time.Since(lastProgress) >= progressEvery {
+			logger.Info("outbox publication progress",
+				"published", published,
+				"total", len(messages),
+				"remaining", len(messages)-published)
+
+			lastProgress = time.Now()
+		}
 	}
+
+	logger.Info("outbox flush completed",
+		"published", published,
+		"duration_ms", time.Since(started).Milliseconds())
 
 	return nil
 }

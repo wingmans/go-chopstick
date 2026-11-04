@@ -13,9 +13,12 @@ import (
 	"time"
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
+	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
 	"wingman.com/chopstick/internal/ownership"
 )
+
+const reconciliationProgressEvery = 5 * time.Second
 
 func ensureMasterIndex(ctx context.Context, client *http.Client,
 	config Config, logger *slog.Logger,
@@ -58,7 +61,7 @@ func reconcileMasterIndex(ctx context.Context, config Config,
 		return nil
 	}
 
-	bus, err := pipeline.Connect(config.NATSURL)
+	bus, err := pipeline.Connect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}
@@ -70,6 +73,8 @@ func reconcileMasterIndex(ctx context.Context, config Config,
 func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 	logger *slog.Logger,
 ) error {
+	ctx = ctxlog.WithLogger(ctx, logger)
+
 	file, err := os.Open(config.MasterPath)
 	if err != nil {
 		return fmt.Errorf("open master index: %w", err)
@@ -89,8 +94,16 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 		CIKs: config.CIKs, FormTypes: config.FormTypes,
 	}
 	batch := make([]pipeline.Event, 0, 1000)
+	examined := 0
 	selected := 0
 	discovered := 0
+	lastProgress := time.Now()
+	reportProgress := func() {
+		logger.Info("master index discovery progress",
+			"examined", examined, "matched", selected, "new", discovered)
+
+		lastProgress = time.Now()
+	}
 	flush := func() error {
 		if len(batch) > 0 {
 			newEvents, saveErr := store.SaveBatchContext(ctx, batch)
@@ -113,13 +126,20 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 			}
 
 			logger.Info("master index reconciliation complete",
-				"selected", selected, "new", discovered)
+				"examined", examined, "matched", selected,
+				"new", discovered)
 
 			return nil
 		}
 
 		if readErr != nil {
 			return fmt.Errorf("read master index: %w", readErr)
+		}
+
+		examined++
+
+		if time.Since(lastProgress) >= reconciliationProgressEvery {
+			reportProgress()
 		}
 
 		if !shouldDiscover(record, financialFilter) {

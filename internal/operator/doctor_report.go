@@ -71,7 +71,7 @@ func runDoctor(ctx context.Context, cfg DoctorConfig) error {
 	checkOptionalSQLiteTable(ctx, &report, cfg.PollingDB, "work_failures")
 	checkSQLite(ctx, &report, cfg.NewsDB, "viewer DB", []string{"feed_items"})
 
-	bus, err := pipeline.Inspect(cfg.NATSURL)
+	bus, err := pipeline.Inspect(ctx, cfg.NATSURL)
 	if err != nil {
 		report.check("FAIL", "NATS", "unavailable; start local NATS")
 

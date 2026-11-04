@@ -30,7 +30,7 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	}
 	defer func() { _ = lock.Close() }()
 
-	bootstrap, err := pipeline.Connect(config.NATSURL)
+	bootstrap, err := pipeline.Connect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func runRole(ctx context.Context, role string, config Config,
 	logger = logger.With("role", role)
 	ctx = ctxlog.WithLogger(ctx, logger)
 
-	bus, err := pipeline.Connect(config.NATSURL)
+	bus, err := pipeline.Connect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}

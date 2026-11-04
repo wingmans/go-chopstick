@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"wingman.com/chopstick/internal/ctxlog"
 )
 
 const (
@@ -21,6 +23,7 @@ const (
 	SelectedSubject   = "edgar.filing.selection.selected"
 	SkippedSubject    = "edgar.filing.selection.skipped"
 	DownloadedSubject = "edgar.filing.downloaded"
+	publishAckTimeout = 10 * time.Second
 )
 
 // SubjectFor adds a routing-safe form type to a base filing subject.
@@ -47,8 +50,8 @@ type NATS struct {
 }
 
 // Connect opens a NATS connection and ensures the EDGAR event stream exists.
-func Connect(url string) (*NATS, error) {
-	bus, err := Inspect(url)
+func Connect(ctx context.Context, url string) (*NATS, error) {
+	bus, err := Inspect(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -64,15 +67,30 @@ func Connect(url string) (*NATS, error) {
 
 // Inspect opens a NATS connection without creating or changing JetStream
 // resources. Operational commands use it for read-only checks.
-func Inspect(url string) (*NATS, error) {
+func Inspect(ctx context.Context, url string) (*NATS, error) {
 	if strings.TrimSpace(url) == "" {
 		return nil, errors.New("NATS URL is required")
 	}
+
+	logger := ctxlog.FromContext(ctx)
 
 	connection, err := nats.Connect(url,
 		nats.Name("chopstick"),
 		nats.Timeout(5*time.Second),
 		nats.MaxReconnects(-1),
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			if err != nil {
+				logger.Warn("NATS disconnected", "error", err)
+			}
+		}),
+		nats.ReconnectHandler(func(connection *nats.Conn) {
+			logger.Info("NATS reconnected", "url", connection.ConnectedUrl())
+		}),
+		nats.ClosedHandler(func(connection *nats.Conn) {
+			if err := connection.LastError(); err != nil && ctx.Err() == nil {
+				logger.Warn("NATS connection closed", "error", err)
+			}
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("connect to NATS: %w", err)
@@ -90,8 +108,8 @@ func Inspect(url string) (*NATS, error) {
 
 // ResetStream removes all retained EDGAR events and durable consumers. The
 // next Connect call recreates the stream.
-func ResetStream(url string) error {
-	bus, err := Inspect(url)
+func ResetStream(ctx context.Context, url string) error {
+	bus, err := Inspect(ctx, url)
 	if err != nil {
 		return err
 	}
@@ -132,6 +150,9 @@ func (n *NATS) ensureStream() error {
 func (n *NATS) Publish(ctx context.Context, subject, messageID string,
 	payload []byte,
 ) error {
+	publishCtx, cancel := context.WithTimeout(ctx, publishAckTimeout)
+	defer cancel()
+
 	message := nats.NewMsg(subject)
 
 	message.Data = payload
@@ -139,7 +160,13 @@ func (n *NATS) Publish(ctx context.Context, subject, messageID string,
 		message.Header.Set(nats.MsgIdHdr, messageID)
 	}
 
-	if _, err := n.jetstream.PublishMsg(message, nats.Context(ctx)); err != nil {
+	if _, err := n.jetstream.PublishMsg(message,
+		nats.Context(publishCtx)); err != nil {
+		if errors.Is(publishCtx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("publish %s: acknowledgement timed out after %s: %w",
+				subject, publishAckTimeout, publishCtx.Err())
+		}
+
 		return fmt.Errorf("publish %s: %w", subject, err)
 	}
 
