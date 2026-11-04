@@ -1,4 +1,4 @@
-// Command chop manages SEC EDGAR data and the local application.
+// Command chop manages the local Chop application and its data.
 package main
 
 import (
@@ -120,13 +120,13 @@ func commandArgs(args []string) []string {
 func newParser(model *cli, defaults commandDefaults) (*kong.Kong, error) {
 	return kong.New(model,
 		kong.Name("chop"),
-		kong.Description(
-			"Operate the local Chop application and SEC EDGAR data."),
+		kong.Description("Operate the local Chop application and its data."),
 		kong.Writers(os.Stdout, os.Stderr),
 		kong.Vars(defaults.vars(buildinfo.Version)),
 		kong.Groups{
 			"operations": "Operations",
 			"data":       "EDGAR data",
+			"market":     "Market data",
 			"diag":       "Troubleshooting",
 		},
 		kong.ConfigureHelp(kong.HelpOptions{

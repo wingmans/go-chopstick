@@ -3,15 +3,40 @@ package operator
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/transport"
+	"wingman.com/chopstick/internal/xerr"
 )
+
+func TestClassifyErrorIdentifiesNATSPublishTimeout(t *testing.T) {
+	t.Parallel()
+
+	cause := fmt.Errorf("discover stage: %w", &pipeline.PublishAckTimeoutError{
+		Subject: "edgar.filing.discovered.4",
+		Timeout: 10 * time.Second,
+	})
+	err := ClassifyError(t.Context(), cause)
+
+	var classified *xerr.Error
+	if !errors.As(err, &classified) {
+		t.Fatalf("ClassifyError() error = %T, want *xerr.Error", err)
+	}
+
+	if classified.Code != xerr.Unavailable ||
+		classified.Reason != "NATS_PUBLISH_TIMEOUT" ||
+		classified.Message != "NATS publication timed out" {
+		t.Fatalf("ClassifyError() = %+v", classified)
+	}
+}
 
 func TestPathSizeAndFormatBytes(t *testing.T) {
 	directory := t.TempDir()

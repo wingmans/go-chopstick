@@ -33,7 +33,7 @@ func pullSubscription(bus *NATS, subject, durable string) (
 
 func consume(ctx context.Context, subscription *nats.Subscription,
 	logger *slog.Logger, stage string, drain bool, maxAttempts int,
-	failures FailureStore,
+	failures FailureStore, progressFields func() []any,
 	handle func(*nats.Msg, Event) (string, error),
 ) error {
 	if maxAttempts <= 0 {
@@ -42,6 +42,7 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 
 	stats := consumerStats{
 		lastReport: time.Now(), outcomes: make(map[string]uint64),
+		progressFields: progressFields,
 	}
 	if err := reportProgress(ctx, subscription, logger, stage, &stats,
 		true); err != nil {
@@ -165,14 +166,15 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 }
 
 type consumerStats struct {
-	lastReport time.Time
-	scanned    uint64
-	completed  uint64
-	skipped    uint64
-	failed     uint64
-	outcomes   map[string]uint64
-	previous   consumerSnapshot
-	reported   bool
+	lastReport     time.Time
+	scanned        uint64
+	completed      uint64
+	skipped        uint64
+	failed         uint64
+	outcomes       map[string]uint64
+	previous       consumerSnapshot
+	reported       bool
+	progressFields func() []any
 }
 
 type consumerSnapshot struct {
@@ -228,6 +230,10 @@ func reportProgress(ctx context.Context, subscription *nats.Subscription,
 
 	for _, outcome := range keys {
 		attributes = append(attributes, outcome, stats.outcomes[outcome])
+	}
+
+	if stats.progressFields != nil {
+		attributes = append(attributes, stats.progressFields()...)
 	}
 
 	logger.Log(ctx, report.level, report.message, attributes...)

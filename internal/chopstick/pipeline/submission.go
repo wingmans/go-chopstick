@@ -33,7 +33,7 @@ func RunSubmission(ctx context.Context, bus *NATS, cfg SubmissionConfig,
 	}
 
 	return consume(ctx, subscription, logger, "download", cfg.Drain,
-		cfg.MaxAttempts, cfg.Failures, func(message *nats.Msg,
+		cfg.MaxAttempts, cfg.Failures, nil, func(message *nats.Msg,
 			event Event,
 		) (string, error) {
 			record := edgar.EdgarIndex{

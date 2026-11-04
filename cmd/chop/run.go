@@ -10,10 +10,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"wingman.com/chopstick/internal/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/edgar"
+	marketyahoo "wingman.com/chopstick/internal/market/yahoo"
 	operator "wingman.com/chopstick/internal/operator"
 	"wingman.com/chopstick/internal/transport"
 )
@@ -75,6 +77,10 @@ func (d commandDefaults) vars(version string) map[string]string {
 		"news_db":         appdata.Path("feed.db"),
 		"analysis_db":     appdata.Path("analysis.db"),
 		"ownership_db":    appdata.Path("ownership.db"),
+		"market_db":       appdata.Path("market.db"),
+		"market_batch_dir": appdata.Path(
+			"market", "yahoo", "batches"),
+		"market_manifest": marketyahoo.DefaultManifest,
 		"master":          appdata.Path("cache", "indexes", "master.tsv"),
 		"indexes_dir":     appdata.Path("cache", "indexes", "quarterly"),
 		"index_zips":      appdata.Path("cache", "index-zips"),
@@ -84,6 +90,101 @@ func (d commandDefaults) vars(version string) map[string]string {
 		"coverage_output": appdata.Path(
 			"validation", "coverage-report.json"),
 	}
+}
+
+func priceConfig(command string, options pricesOptions) (marketyahoo.Config, error) {
+	from, err := parsePriceDate("from", options.From)
+	if err != nil {
+		return marketyahoo.Config{}, err
+	}
+
+	through := marketyahoo.DefaultTargetDate(time.Now())
+	if strings.TrimSpace(options.To) != "" {
+		through, err = parsePriceDate("to", options.To)
+		if err != nil {
+			return marketyahoo.Config{}, err
+		}
+	}
+
+	return marketyahoo.Config{
+		Command: command, ManifestPath: options.Manifest,
+		DatabasePath: options.Database, BatchDir: options.BatchDir,
+		From: from, Through: through, Tickers: normalizePriceTickers(options.Tickers),
+	}, nil
+}
+
+func parsePriceDate(name, value string) (time.Time, error) {
+	parsed, err := time.Parse(marketyahoo.DateLayout, strings.TrimSpace(value))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid %s date %q: %w", name, value, err)
+	}
+
+	return parsed, nil
+}
+
+func normalizePriceTickers(values []string) []string {
+	tickers := make([]string, 0, len(values))
+	for _, value := range values {
+		tickers = append(tickers, strings.ToUpper(strings.TrimSpace(value)))
+	}
+
+	return tickers
+}
+
+func runPrices(ctx context.Context, runtime *commandRuntime, cfg marketyahoo.Config) error {
+	return marketyahoo.Run(ctx, cfg, os.Stdout, runtime.Logger, time.Now)
+}
+
+func (c *pricesFetchCLI) Run(ctx context.Context, runtime *commandRuntime) error {
+	cfg, err := priceConfig("fetch", c.pricesOptions)
+	if err != nil {
+		return err
+	}
+
+	cfg.MaxSymbols = c.MaxSymbols
+	cfg.MaxDuration = c.MaxDuration
+
+	return runPrices(ctx, runtime, cfg)
+}
+
+func (c *pricesSyncCLI) Run(ctx context.Context, runtime *commandRuntime) error {
+	cfg, err := priceConfig("sync", c.pricesOptions)
+	if err != nil {
+		return err
+	}
+
+	cfg.MaxSymbols = c.MaxSymbols
+	cfg.MaxDuration = c.MaxDuration
+	cfg.SyncTimeout = c.SyncTimeout
+
+	return runPrices(ctx, runtime, cfg)
+}
+
+func (c *pricesStatusCLI) Run(ctx context.Context, runtime *commandRuntime) error {
+	cfg, err := priceConfig("status", c.pricesOptions)
+	if err != nil {
+		return err
+	}
+
+	return runPrices(ctx, runtime, cfg)
+}
+
+func (c *pricesRepairCLI) Run(ctx context.Context, runtime *commandRuntime) error {
+	from, err := parsePriceDate("from", c.From)
+	if err != nil {
+		return err
+	}
+
+	through, err := parsePriceDate("to", c.To)
+	if err != nil {
+		return err
+	}
+
+	return runPrices(ctx, runtime, marketyahoo.Config{
+		Command: "repair", ManifestPath: c.Manifest,
+		DatabasePath: c.Database, BatchDir: c.BatchDir,
+		From: from, Through: through, Tickers: normalizePriceTickers(c.Tickers),
+	})
 }
 
 func environmentValue(name, fallback string) string {

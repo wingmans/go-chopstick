@@ -19,6 +19,8 @@ import (
 	"wingman.com/chopstick/internal/ownership"
 )
 
+const institutionalPositionBatchSize = 50
+
 // Store is the SQLite ownership database.
 type Store struct {
 	db *sql.DB
@@ -206,46 +208,153 @@ func (store *Store) Save(ctx context.Context, filing ownership.Filing) error {
 		return err
 	}
 
-	partyIDs := make(map[string]string, len(filing.Parties))
+	partyIDs, partyOrdinals, err := saveParties(ctx, tx, filing, now)
+	if err != nil {
+		return err
+	}
 
+	securityIDs, err := saveSecurities(ctx, tx, filing, partyIDs, now)
+	if err != nil {
+		return err
+	}
+
+	if err := saveInstitutional(ctx, tx, filing, partyIDs,
+		securityIDs); err != nil {
+		return err
+	}
+
+	if err := saveBeneficial(ctx, tx, filing, partyIDs,
+		securityIDs); err != nil {
+		return err
+	}
+
+	if err := saveInsider(ctx, tx, filing, partyIDs, partyOrdinals,
+		securityIDs); err != nil {
+		return err
+	}
+
+	if err := saveSignatures(ctx, tx, filing); err != nil {
+		return err
+	}
+
+	if err := saveFootnotes(ctx, tx, filing); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit ownership filing: %w", err)
+	}
+
+	return nil
+}
+
+func saveParties(ctx context.Context, tx *sql.Tx, filing ownership.Filing,
+	now string,
+) (map[string]string, map[string]int, error) {
+	partyIDs := make(map[string]string, len(filing.Parties))
 	partyOrdinals := make(map[string]int, len(filing.Parties))
+
+	if len(filing.Parties) == 0 {
+		return partyIDs, partyOrdinals, nil
+	}
+
+	partyStatement, err := tx.PrepareContext(ctx, `INSERT INTO ownership_parties (
+		party_id, cik, name, party_type, updated_at
+	) VALUES (?, ?, ?, ?, ?)
+	ON CONFLICT(party_id) DO UPDATE SET
+		cik = CASE WHEN excluded.cik != '' THEN excluded.cik ELSE cik END,
+		name = CASE WHEN excluded.name != '' THEN excluded.name ELSE name END,
+		party_type = CASE
+			WHEN excluded.party_type != '' THEN excluded.party_type
+			ELSE party_type
+		END,
+		updated_at = excluded.updated_at`)
+	if err != nil {
+		return nil, nil, fmt.Errorf("prepare ownership party insert: %w", err)
+	}
+	defer func() { _ = partyStatement.Close() }()
+
+	filingPartyStatement, err := tx.PrepareContext(ctx,
+		`INSERT INTO ownership_filing_parties (
+			accession, party_id, role, ordinal, is_director, is_officer,
+			is_ten_percent_owner, is_other, officer_title, member_of_group
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return nil, nil, fmt.Errorf("prepare filing party insert: %w", err)
+	}
+	defer func() { _ = filingPartyStatement.Close() }()
+
 	for index, party := range filing.Parties {
-		id, cik, err := partyIdentity(filing.Accession, party)
-		if err != nil {
-			return err
+		id, cik, identityErr := partyIdentity(filing.Accession, party)
+		if identityErr != nil {
+			return nil, nil, identityErr
 		}
 
 		partyIDs[party.Key] = id
 		partyOrdinals[party.Key] = index + 1
 
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ownership_parties (
-			party_id, cik, name, party_type, updated_at
-		) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(party_id) DO UPDATE SET
-			cik = CASE WHEN excluded.cik != '' THEN excluded.cik ELSE cik END,
-			name = CASE WHEN excluded.name != '' THEN excluded.name ELSE name END,
-			party_type = CASE
-				WHEN excluded.party_type != '' THEN excluded.party_type
-				ELSE party_type
-			END,
-			updated_at = excluded.updated_at`, id, cik, party.Name, party.Type,
-			now); err != nil {
-			return fmt.Errorf("save ownership party %s: %w", party.Key, err)
+		if _, err := partyStatement.ExecContext(ctx, id, cik, party.Name,
+			party.Type, now); err != nil {
+			return nil, nil, fmt.Errorf("save ownership party %s: %w",
+				party.Key, err)
 		}
 
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ownership_filing_parties (
-			accession, party_id, role, ordinal, is_director, is_officer,
-			is_ten_percent_owner, is_other, officer_title, member_of_group
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, filing.Accession, id,
+		if _, err := filingPartyStatement.ExecContext(ctx, filing.Accession, id,
 			party.Role, index+1, boolInt(party.IsDirector),
 			boolInt(party.IsOfficer), boolInt(party.IsTenPercent),
 			boolInt(party.IsOther), party.OfficerTitle,
 			party.MemberOfGroup); err != nil {
-			return fmt.Errorf("save filing party %s: %w", party.Key, err)
+			return nil, nil, fmt.Errorf("save filing party %s: %w", party.Key, err)
 		}
 	}
 
+	return partyIDs, partyOrdinals, nil
+}
+
+func saveSecurities(ctx context.Context, tx *sql.Tx, filing ownership.Filing,
+	partyIDs map[string]string, now string,
+) (map[string]string, error) {
 	securityIDs := make(map[string]string, len(filing.Securities))
+
+	if len(filing.Securities) == 0 {
+		return securityIDs, nil
+	}
+
+	securityStatement, err := tx.PrepareContext(ctx,
+		`INSERT INTO ownership_securities (
+			security_id, issuer_party_id, title, security_class,
+			security_kind, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(security_id) DO UPDATE SET
+			issuer_party_id = COALESCE(
+				excluded.issuer_party_id, issuer_party_id),
+			title = CASE
+				WHEN excluded.title != '' THEN excluded.title ELSE title
+			END,
+			security_class = CASE
+				WHEN excluded.security_class != ''
+				THEN excluded.security_class ELSE security_class
+			END,
+			security_kind = CASE
+				WHEN excluded.security_kind != ''
+				THEN excluded.security_kind ELSE security_kind
+			END,
+			updated_at = excluded.updated_at`)
+	if err != nil {
+		return nil, fmt.Errorf("prepare ownership security insert: %w", err)
+	}
+	defer func() { _ = securityStatement.Close() }()
+
+	identifierStatement, err := tx.PrepareContext(ctx,
+		`INSERT OR REPLACE INTO ownership_security_identifiers (
+			security_id, identifier_type, identifier_value,
+			source_accession, confidence
+		) VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return nil, fmt.Errorf("prepare security identifier insert: %w", err)
+	}
+	defer func() { _ = identifierStatement.Close() }()
+
 	for _, security := range filing.Securities {
 		issuerID := partyIDs[security.IssuerKey]
 		id := securityIdentity(issuerID, security)
@@ -256,25 +365,9 @@ func (store *Store) Save(ctx context.Context, filing ownership.Filing) error {
 			issuer = issuerID
 		}
 
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ownership_securities (
-			security_id, issuer_party_id, title, security_class,
-			security_kind, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(security_id) DO UPDATE SET
-			issuer_party_id = COALESCE(
-				excluded.issuer_party_id, issuer_party_id),
-			title = CASE WHEN excluded.title != '' THEN excluded.title ELSE title END,
-			security_class = CASE
-				WHEN excluded.security_class != '' THEN excluded.security_class
-				ELSE security_class
-			END,
-			security_kind = CASE
-				WHEN excluded.security_kind != '' THEN excluded.security_kind
-				ELSE security_kind
-			END,
-			updated_at = excluded.updated_at`, id, issuer, security.Title,
-			security.Class, security.Kind, now); err != nil {
-			return fmt.Errorf("save ownership security %s: %w",
+		if _, err := securityStatement.ExecContext(ctx, id, issuer,
+			security.Title, security.Class, security.Kind, now); err != nil {
+			return nil, fmt.Errorf("save ownership security %s: %w",
 				security.Key, err)
 		}
 
@@ -295,57 +388,65 @@ func (store *Store) Save(ctx context.Context, filing ownership.Filing) error {
 		}
 
 		for _, identifier := range identifiers {
-			if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO
-				ownership_security_identifiers (
-					security_id, identifier_type, identifier_value,
-					source_accession, confidence
-				) VALUES (?, ?, ?, ?, ?)`, id, identifier[0], identifier[1],
-				filing.Accession, "reported"); err != nil {
-				return fmt.Errorf("save security identifier: %w", err)
+			if _, err := identifierStatement.ExecContext(ctx, id, identifier[0],
+				identifier[1], filing.Accession, "reported"); err != nil {
+				return nil, fmt.Errorf("save security identifier: %w", err)
 			}
 		}
 	}
 
-	if err := saveInstitutional(ctx, tx, filing, partyIDs,
-		securityIDs); err != nil {
-		return err
+	return securityIDs, nil
+}
+
+func saveSignatures(ctx context.Context, tx *sql.Tx,
+	filing ownership.Filing,
+) error {
+	if len(filing.Signatures) == 0 {
+		return nil
 	}
 
-	if err := saveBeneficial(ctx, tx, filing, partyIDs,
-		securityIDs); err != nil {
-		return err
+	statement, err := tx.PrepareContext(ctx, `INSERT INTO ownership_signatures (
+		accession, ordinal, signer_name, signature_date
+	) VALUES (?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare ownership signature insert: %w", err)
 	}
-
-	if err := saveInsider(ctx, tx, filing, partyIDs, partyOrdinals,
-		securityIDs); err != nil {
-		return err
-	}
+	defer func() { _ = statement.Close() }()
 
 	for index, signature := range filing.Signatures {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ownership_signatures (
-			accession, ordinal, signer_name, signature_date
-		) VALUES (?, ?, ?, ?)`, filing.Accession, index+1,
+		if _, err := statement.ExecContext(ctx, filing.Accession, index+1,
 			signature.Name, signature.Date); err != nil {
 			return fmt.Errorf("save ownership signature %d: %w", index+1, err)
 		}
 	}
+
+	return nil
+}
+
+func saveFootnotes(ctx context.Context, tx *sql.Tx,
+	filing ownership.Filing,
+) error {
+	if len(filing.Footnotes) == 0 {
+		return nil
+	}
+
+	statement, err := tx.PrepareContext(ctx, `INSERT INTO ownership_footnotes (
+		accession, footnote_id, footnote_text
+	) VALUES (?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare ownership footnote insert: %w", err)
+	}
+	defer func() { _ = statement.Close() }()
 
 	for _, footnote := range filing.Footnotes {
 		if footnote.ID == "" {
 			continue
 		}
 
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ownership_footnotes (
-			accession, footnote_id, footnote_text
-		) VALUES (?, ?, ?)`, filing.Accession, footnote.ID,
+		if _, err := statement.ExecContext(ctx, filing.Accession, footnote.ID,
 			footnote.Text); err != nil {
-			return fmt.Errorf("save ownership footnote %s: %w",
-				footnote.ID, err)
+			return fmt.Errorf("save ownership footnote %s: %w", footnote.ID, err)
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit ownership filing: %w", err)
 	}
 
 	return nil
@@ -482,41 +583,78 @@ func saveInstitutional(ctx context.Context, tx *sql.Tx,
 		}
 	}
 
-	for _, position := range filing.InstitutionalPositions {
-		securityID := securityIDs["cusip:"+position.CUSIP]
-		if securityID == "" {
-			return fmt.Errorf("position row %d has no security", position.Row)
-		}
+	if err := saveInstitutionalPositions(ctx, tx, filing, partyIDs,
+		securityIDs); err != nil {
+		return err
+	}
 
-		_, err := tx.ExecContext(ctx, `INSERT INTO institutional_positions (
+	if len(filing.InstitutionalNotices) > 0 {
+		statement, err := tx.PrepareContext(ctx, `INSERT INTO institutional_notices (
+			accession, row_number, manager_party_id, report_period,
+			notice_kind, reporting_manager_name, reporting_manager_file
+		) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return fmt.Errorf("prepare institutional notice insert: %w", err)
+		}
+		defer func() { _ = statement.Close() }()
+
+		for _, notice := range filing.InstitutionalNotices {
+			_, err := statement.ExecContext(ctx, filing.Accession, notice.Row,
+				partyIDs[notice.ManagerKey], notice.ReportPeriod, notice.Kind,
+				notice.ReportingManagerName, notice.ReportingManagerFile)
+			if err != nil {
+				return fmt.Errorf("save institutional notice %d: %w",
+					notice.Row, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func saveInstitutionalPositions(ctx context.Context, tx *sql.Tx,
+	filing ownership.Filing, partyIDs, securityIDs map[string]string,
+) error {
+	for start := 0; start < len(filing.InstitutionalPositions); start += institutionalPositionBatchSize {
+		end := min(start+institutionalPositionBatchSize,
+			len(filing.InstitutionalPositions))
+		positions := filing.InstitutionalPositions[start:end]
+
+		var query strings.Builder
+		query.WriteString(`INSERT INTO institutional_positions (
 			accession, row_number, manager_party_id, security_id,
 			report_period, issuer_name, security_class, cusip, figi,
 			reported_value, amount, amount_type, put_call,
 			investment_discretion, other_managers, voting_sole,
 			voting_shared, voting_none
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			filing.Accession, position.Row, partyIDs[position.ManagerKey],
-			securityID, position.ReportPeriod, position.IssuerName,
-			position.Class, position.CUSIP, position.FIGI, position.Value,
-			position.Amount, position.AmountType, position.PutCall,
-			position.InvestmentDiscretion, position.OtherManagers,
-			position.VotingSole, position.VotingShared, position.VotingNone)
-		if err != nil {
-			return fmt.Errorf("save institutional position %d: %w",
-				position.Row, err)
-		}
-	}
+		) VALUES `)
 
-	for _, notice := range filing.InstitutionalNotices {
-		_, err := tx.ExecContext(ctx, `INSERT INTO institutional_notices (
-			accession, row_number, manager_party_id, report_period,
-			notice_kind, reporting_manager_name, reporting_manager_file
-		) VALUES (?, ?, ?, ?, ?, ?, ?)`, filing.Accession, notice.Row,
-			partyIDs[notice.ManagerKey], notice.ReportPeriod, notice.Kind,
-			notice.ReportingManagerName, notice.ReportingManagerFile)
-		if err != nil {
-			return fmt.Errorf("save institutional notice %d: %w",
-				notice.Row, err)
+		arguments := make([]any, 0, len(positions)*18)
+		for index, position := range positions {
+			securityID := securityIDs["cusip:"+position.CUSIP]
+			if securityID == "" {
+				return fmt.Errorf("position row %d has no security", position.Row)
+			}
+
+			if index > 0 {
+				query.WriteByte(',')
+			}
+
+			query.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
+			arguments = append(arguments,
+				filing.Accession, position.Row, partyIDs[position.ManagerKey],
+				securityID, position.ReportPeriod, position.IssuerName,
+				position.Class, position.CUSIP, position.FIGI, position.Value,
+				position.Amount, position.AmountType, position.PutCall,
+				position.InvestmentDiscretion, position.OtherManagers,
+				position.VotingSole, position.VotingShared, position.VotingNone,
+			)
+		}
+
+		if _, err := tx.ExecContext(ctx, query.String(), arguments...); err != nil {
+			return fmt.Errorf("save institutional position rows %d-%d: %w",
+				positions[0].Row, positions[len(positions)-1].Row, err)
 		}
 	}
 
@@ -526,35 +664,51 @@ func saveInstitutional(ctx context.Context, tx *sql.Tx,
 func saveBeneficial(ctx context.Context, tx *sql.Tx,
 	filing ownership.Filing, partyIDs, securityIDs map[string]string,
 ) error {
-	for _, report := range filing.BeneficialReports {
-		_, err := tx.ExecContext(ctx, `INSERT INTO beneficial_ownership_reports (
+	if len(filing.BeneficialReports) > 0 {
+		statement, err := tx.PrepareContext(ctx, `INSERT INTO beneficial_ownership_reports (
 			accession, row_number, issuer_party_id, owner_party_id,
 			security_id, cusip, event_date, shares, percentage,
 			sole_voting_power, shared_voting_power,
 			sole_dispositive_power, shared_dispositive_power,
 			reporting_person_type, filer_category
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			filing.Accession, report.Row, partyIDs[report.IssuerKey],
-			partyIDs[report.OwnerKey], securityIDs[report.SecurityKey],
-			report.CUSIP, report.EventDate, report.Shares, report.Percent,
-			report.SoleVotingPower, report.SharedVotingPower,
-			report.SoleDispositivePower, report.SharedDispositivePower,
-			report.ReportingPersonType, report.FilerCategory)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
-			return fmt.Errorf("save beneficial ownership row %d: %w",
-				report.Row, err)
+			return fmt.Errorf("prepare beneficial ownership insert: %w", err)
+		}
+		defer func() { _ = statement.Close() }()
+
+		for _, report := range filing.BeneficialReports {
+			_, err := statement.ExecContext(ctx,
+				filing.Accession, report.Row, partyIDs[report.IssuerKey],
+				partyIDs[report.OwnerKey], securityIDs[report.SecurityKey],
+				report.CUSIP, report.EventDate, report.Shares, report.Percent,
+				report.SoleVotingPower, report.SharedVotingPower,
+				report.SoleDispositivePower, report.SharedDispositivePower,
+				report.ReportingPersonType, report.FilerCategory)
+			if err != nil {
+				return fmt.Errorf("save beneficial ownership row %d: %w",
+					report.Row, err)
+			}
 		}
 	}
 
-	for _, narrative := range filing.BeneficialNarratives {
-		_, err := tx.ExecContext(ctx,
+	if len(filing.BeneficialNarratives) > 0 {
+		statement, err := tx.PrepareContext(ctx,
 			`INSERT INTO beneficial_ownership_narratives (
 				accession, row_number, item_name, field_name, field_text
-			) VALUES (?, ?, ?, ?, ?)`, filing.Accession, narrative.Row,
-			narrative.Item, narrative.Field, narrative.Text)
+			) VALUES (?, ?, ?, ?, ?)`)
 		if err != nil {
-			return fmt.Errorf("save beneficial narrative %d: %w",
-				narrative.Row, err)
+			return fmt.Errorf("prepare beneficial narrative insert: %w", err)
+		}
+		defer func() { _ = statement.Close() }()
+
+		for _, narrative := range filing.BeneficialNarratives {
+			_, err := statement.ExecContext(ctx, filing.Accession, narrative.Row,
+				narrative.Item, narrative.Field, narrative.Text)
+			if err != nil {
+				return fmt.Errorf("save beneficial narrative %d: %w",
+					narrative.Row, err)
+			}
 		}
 	}
 
@@ -565,31 +719,39 @@ func saveInsider(ctx context.Context, tx *sql.Tx,
 	filing ownership.Filing, partyIDs map[string]string,
 	partyOrdinals map[string]int, securityIDs map[string]string,
 ) error {
-	for _, holding := range filing.InsiderHoldings {
-		_, err := tx.ExecContext(ctx, `INSERT INTO insider_holdings (
+	if len(filing.InsiderHoldings) > 0 {
+		statement, err := tx.PrepareContext(ctx, `INSERT INTO insider_holdings (
 			accession, row_number, owner_ordinal, issuer_party_id,
 			owner_party_id, security_id, report_date, is_derivative,
 			amount, direct_or_indirect, nature_of_ownership,
 			transaction_form_type, exercise_price, exercise_date,
 			expiration_date, underlying_title, underlying_shares,
 			footnote_refs
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			filing.Accession, holding.Row, partyOrdinals[holding.OwnerKey],
-			partyIDs[holding.IssuerKey], partyIDs[holding.OwnerKey],
-			securityIDs[holding.SecurityKey], holding.ReportDate,
-			boolInt(holding.Derivative), holding.Amount,
-			holding.DirectOrIndirect, holding.NatureOfOwnership,
-			holding.TransactionFormType, holding.ExercisePrice,
-			holding.ExerciseDate, holding.ExpirationDate,
-			holding.UnderlyingTitle, holding.UnderlyingShares,
-			holding.FootnoteRefs)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
-			return fmt.Errorf("save insider holding %d: %w", holding.Row, err)
+			return fmt.Errorf("prepare insider holding insert: %w", err)
+		}
+		defer func() { _ = statement.Close() }()
+
+		for _, holding := range filing.InsiderHoldings {
+			_, err := statement.ExecContext(ctx,
+				filing.Accession, holding.Row, partyOrdinals[holding.OwnerKey],
+				partyIDs[holding.IssuerKey], partyIDs[holding.OwnerKey],
+				securityIDs[holding.SecurityKey], holding.ReportDate,
+				boolInt(holding.Derivative), holding.Amount,
+				holding.DirectOrIndirect, holding.NatureOfOwnership,
+				holding.TransactionFormType, holding.ExercisePrice,
+				holding.ExerciseDate, holding.ExpirationDate,
+				holding.UnderlyingTitle, holding.UnderlyingShares,
+				holding.FootnoteRefs)
+			if err != nil {
+				return fmt.Errorf("save insider holding %d: %w", holding.Row, err)
+			}
 		}
 	}
 
-	for _, transaction := range filing.InsiderTransactions {
-		_, err := tx.ExecContext(ctx, `INSERT INTO insider_transactions (
+	if len(filing.InsiderTransactions) > 0 {
+		statement, err := tx.PrepareContext(ctx, `INSERT INTO insider_transactions (
 			accession, row_number, owner_ordinal, issuer_party_id,
 			owner_party_id, security_id, report_date, is_derivative,
 			transaction_date, execution_date, transaction_form_type,
@@ -599,22 +761,30 @@ func saveInsider(ctx context.Context, tx *sql.Tx,
 			expiration_date, underlying_title, underlying_shares,
 			footnote_refs
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?, ?, ?)`, filing.Accession, transaction.Row,
-			partyOrdinals[transaction.OwnerKey],
-			partyIDs[transaction.IssuerKey], partyIDs[transaction.OwnerKey],
-			securityIDs[transaction.SecurityKey], transaction.ReportDate,
-			boolInt(transaction.Derivative), transaction.TransactionDate,
-			transaction.ExecutionDate, transaction.TransactionFormType,
-			transaction.TransactionCode, transaction.EquitySwapInvolved,
-			transaction.AcquiredDisposed, transaction.Amount,
-			transaction.Price, transaction.SharesAfter,
-			transaction.DirectOrIndirect, transaction.NatureOfOwnership,
-			transaction.ExercisePrice, transaction.ExerciseDate,
-			transaction.ExpirationDate, transaction.UnderlyingTitle,
-			transaction.UnderlyingShares, transaction.FootnoteRefs)
+			?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
-			return fmt.Errorf("save insider transaction %d: %w",
-				transaction.Row, err)
+			return fmt.Errorf("prepare insider transaction insert: %w", err)
+		}
+		defer func() { _ = statement.Close() }()
+
+		for _, transaction := range filing.InsiderTransactions {
+			_, err := statement.ExecContext(ctx, filing.Accession, transaction.Row,
+				partyOrdinals[transaction.OwnerKey],
+				partyIDs[transaction.IssuerKey], partyIDs[transaction.OwnerKey],
+				securityIDs[transaction.SecurityKey], transaction.ReportDate,
+				boolInt(transaction.Derivative), transaction.TransactionDate,
+				transaction.ExecutionDate, transaction.TransactionFormType,
+				transaction.TransactionCode, transaction.EquitySwapInvolved,
+				transaction.AcquiredDisposed, transaction.Amount,
+				transaction.Price, transaction.SharesAfter,
+				transaction.DirectOrIndirect, transaction.NatureOfOwnership,
+				transaction.ExercisePrice, transaction.ExerciseDate,
+				transaction.ExpirationDate, transaction.UnderlyingTitle,
+				transaction.UnderlyingShares, transaction.FootnoteRefs)
+			if err != nil {
+				return fmt.Errorf("save insider transaction %d: %w",
+					transaction.Row, err)
+			}
 		}
 	}
 

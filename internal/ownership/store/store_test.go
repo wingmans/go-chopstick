@@ -2,11 +2,46 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 
 	"wingman.com/chopstick/internal/ownership"
 )
+
+func TestStoreBatchesInstitutionalPositions(t *testing.T) {
+	t.Parallel()
+
+	store, err := Open(t.Context(), filepath.Join(t.TempDir(), "ownership.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = store.Close() })
+
+	positions := make([]ownership.InstitutionalPosition, 0,
+		institutionalPositionBatchSize+1)
+	for index := range institutionalPositionBatchSize + 1 {
+		positions = append(positions,
+			position(fmt.Sprintf("%09d", index+1), fmt.Sprintf("Issuer %d", index+1)))
+	}
+
+	filing := institutionalFiling("0000000001-26-000099", "2026-02-01", "",
+		positions...)
+	if err := store.Save(t.Context(), filing); err != nil {
+		t.Fatal(err)
+	}
+
+	count, err := store.RowCount(t.Context(), "institutional_positions")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if count != int64(len(positions)) {
+		t.Fatalf("institutional position count = %d, want %d", count,
+			len(positions))
+	}
+}
 
 func TestStoreSavesFilingIdempotently(t *testing.T) {
 	t.Parallel()

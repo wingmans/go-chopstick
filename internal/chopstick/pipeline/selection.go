@@ -50,7 +50,7 @@ func RunSelection(ctx context.Context, bus *NATS, cfg SelectionConfig,
 		forms[strings.ToUpper(strings.TrimSpace(form))] = struct{}{}
 	}
 
-	return consume(ctx, subscription, logger, "selection", cfg.Drain, 1, nil,
+	return consume(ctx, subscription, logger, "selection", cfg.Drain, 1, nil, nil,
 		func(message *nats.Msg, event Event) (string, error) {
 			selected, reason := selectionDecision(event, cfg.SetName, ciks,
 				forms)

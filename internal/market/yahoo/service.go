@@ -1,4 +1,4 @@
-package main
+package yahoo
 
 import (
 	"context"
@@ -13,7 +13,8 @@ import (
 	marketworker "wingman.com/chopstick/internal/market/worker"
 )
 
-var errSyncIncomplete = errors.New("yahoo synchronization is incomplete")
+// ErrSyncIncomplete indicates that a bounded synchronization left work pending.
+var ErrSyncIncomplete = errors.New("yahoo synchronization is incomplete")
 
 func executeSync(
 	ctx context.Context,
@@ -47,7 +48,7 @@ func executeSync(
 	if errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf(
 			"%w: %d symbols still require work",
-			errSyncIncomplete,
+			ErrSyncIncomplete,
 			summary.Pending,
 		)
 	}

@@ -28,6 +28,31 @@ server_available() {
     grep --quiet '"server_id"'
 }
 
+jetstream_status() {
+  command -v jq >/dev/null || {
+    echo "JetStream status requires jq" >&2
+    return
+  }
+
+  echo
+  echo "JetStream consumers"
+  curl --fail --silent --show-error --max-time 2 \
+    'http://127.0.0.1:8222/jsz?streams=true&consumers=true' | \
+    jq -r '
+      ["CONSUMER", "COMPLETED", "IN_FLIGHT", "PENDING", "REDELIVERED"],
+      (
+        .account_details[].stream_detail[].consumer_detail[] |
+        [
+          .name,
+          .ack_floor.consumer_seq,
+          .num_ack_pending,
+          .num_pending,
+          .num_redelivered
+        ]
+      ) | @tsv
+    ' | column -t
+}
+
 start() {
   [[ -x "${nats_server}" ]] || {
     echo "project-local nats-server is not installed" >&2
@@ -95,11 +120,13 @@ reset() {
 status() {
   pid="$(running_pid)" && {
     echo "NATS is running with project PID ${pid}"
+    jetstream_status
     return
   }
 
   server_available && {
     echo "NATS is running but is not managed by this project"
+    jetstream_status
     return
   }
 

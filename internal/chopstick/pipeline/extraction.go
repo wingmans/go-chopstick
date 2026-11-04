@@ -20,7 +20,7 @@ func RunExtraction(ctx context.Context, bus *NATS, cfg ExtractionConfig,
 	}
 
 	return consume(ctx, subscription, logger, "process", cfg.Drain,
-		cfg.MaxAttempts, cfg.Failures, func(message *nats.Msg,
+		cfg.MaxAttempts, cfg.Failures, nil, func(message *nats.Msg,
 			event Event,
 		) (string, error) {
 			path, err := edgar.LocalFilingPath(cfg.FilingsDirectory,

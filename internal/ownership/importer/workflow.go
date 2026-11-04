@@ -43,6 +43,14 @@ type Summary struct {
 	Planned     int
 }
 
+// Timings records the serial phases used to handle one ownership filing.
+type Timings struct {
+	Lookup   time.Duration
+	Download time.Duration
+	Parse    time.Duration
+	Store    time.Duration
+}
+
 // BatchError reports a completed batch with one or more filing failures.
 type BatchError struct {
 	Count int
@@ -186,15 +194,28 @@ func ProcessOne(ctx context.Context, store *ownershipstore.Store,
 	downloader *edgar.FilingDownloader, config Config,
 	record edgar.EdgarIndex,
 ) (Decision, error) {
+	decision, _, err := ProcessOneMeasured(ctx, store, downloader, config, record)
+
+	return decision, err
+}
+
+// ProcessOneMeasured processes one ownership event and reports its phase
+// timings without changing the filing transaction or decision semantics.
+func ProcessOneMeasured(ctx context.Context, store *ownershipstore.Store,
+	downloader *edgar.FilingDownloader, config Config,
+	record edgar.EdgarIndex,
+) (Decision, Timings, error) {
+	var timings Timings
+
 	form := ownership.NormalizeFormType(record.FormType)
 	if !ownership.RecognizesForm(form) {
-		return DecisionFailed, fmt.Errorf(
+		return DecisionFailed, timings, fmt.Errorf(
 			"form %q is not a recognized ownership form", record.FormType)
 	}
 
 	accession, err := accessionFromPath(record.FilingPath)
 	if err != nil {
-		return DecisionFailed, err
+		return DecisionFailed, timings, err
 	}
 
 	family, _ := ownership.Family(form)
@@ -205,31 +226,46 @@ func ProcessOne(ctx context.Context, store *ownershipstore.Store,
 		SourcePath:    record.FilingPath,
 		ParserVersion: ownership.ParserVersion,
 	}
+
 	if !config.Reprocess {
+		started := time.Now()
 		needsImport, err := store.NeedsImport(ctx, accession,
 			ownership.ParserVersion)
+
+		timings.Lookup = time.Since(started)
 		if err != nil {
-			return DecisionFailed, err
+			return DecisionFailed, timings, err
 		}
 
 		if !needsImport {
-			return DecisionReused, nil
+			return DecisionReused, timings, nil
 		}
 	}
 
+	started := time.Now()
 	if err := downloader.Download(ctx, record); err != nil {
-		return recordFailure(ctx, store, record, outcome, err)
+		timings.Download = time.Since(started)
+
+		started = time.Now()
+		failureErr := recordFailure(ctx, store, record, outcome, err)
+		timings.Store = time.Since(started)
+
+		return DecisionFailed, timings, failureErr
 	}
+
+	timings.Download = time.Since(started)
 
 	path, err := edgar.LocalFilingPath(config.Download.Directory,
 		record.FilingPath)
 	if err != nil {
-		return DecisionFailed, err
+		return DecisionFailed, timings, err
 	}
 
 	outcome.SourcePath = path
 
+	started = time.Now()
 	filing, err := ownership.Parse(ctx, path)
+	timings.Parse = time.Since(started)
 	outcome.SourceSHA256 = filing.SourceSHA256
 
 	outcome.ReportDate = filing.ReportDate
@@ -237,11 +273,19 @@ func ProcessOne(ctx context.Context, store *ownershipstore.Store,
 		outcome.Status = "unsupported"
 		outcome.Diagnostic = err.Error()
 
-		return DecisionUnsupported, store.RecordOutcome(ctx, outcome)
+		started = time.Now()
+		storeErr := store.RecordOutcome(ctx, outcome)
+		timings.Store = time.Since(started)
+
+		return DecisionUnsupported, timings, storeErr
 	}
 
 	if err != nil {
-		return recordFailure(ctx, store, record, outcome, err)
+		started = time.Now()
+		failureErr := recordFailure(ctx, store, record, outcome, err)
+		timings.Store = time.Since(started)
+
+		return DecisionFailed, timings, failureErr
 	}
 
 	if filing.Accession != accession || filing.FormType != form {
@@ -249,32 +293,41 @@ func ProcessOne(ctx context.Context, store *ownershipstore.Store,
 			"index identity %s %s does not match submission %s %s",
 			accession, form, filing.Accession, filing.FormType)
 
-		return recordFailure(ctx, store, record, outcome, err)
+		started = time.Now()
+		failureErr := recordFailure(ctx, store, record, outcome, err)
+		timings.Store = time.Since(started)
+
+		return DecisionFailed, timings, failureErr
 	}
 
+	started = time.Now()
 	if err := store.Save(ctx, filing); err != nil {
-		return DecisionFailed, err
+		timings.Store = time.Since(started)
+
+		return DecisionFailed, timings, err
 	}
 
-	return DecisionProcessed, nil
+	timings.Store = time.Since(started)
+
+	return DecisionProcessed, timings, nil
 }
 
 func recordFailure(ctx context.Context, store *ownershipstore.Store,
 	record edgar.EdgarIndex, outcome ownershipstore.Outcome,
 	filingErr error,
-) (Decision, error) {
+) error {
 	if ctx.Err() != nil {
-		return DecisionFailed, ctx.Err()
+		return ctx.Err()
 	}
 
 	outcome.Status, outcome.Diagnostic = "failed", filingErr.Error()
 	if err := store.RecordOutcome(ctx, outcome); err != nil {
-		return DecisionFailed, errors.Join(filingErr, err)
+		return errors.Join(filingErr, err)
 	}
 
 	logFailure(ctx, record, filingErr)
 
-	return DecisionFailed, nil
+	return nil
 }
 
 func incrementSummary(summary *Summary, result Decision) {

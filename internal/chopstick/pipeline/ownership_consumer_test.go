@@ -52,7 +52,7 @@ func TestProcessOwnershipEventUsesConfiguredCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	decision, err := processOwnershipEvent(t.Context(), store, downloader,
+	decision, _, err := processOwnershipEvent(t.Context(), store, downloader,
 		cache, Event{
 			AccessionNumber: accession, CIK: "100", CompanyName: "Issuer",
 			FormType: "4", FilingDate: "2026-02-15", FilingPath: relative,

@@ -221,6 +221,68 @@ func TestKongParsesCommandHierarchy(t *testing.T) {
 	}
 }
 
+func TestKongParsesPriceCommands(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		args    []string
+		command string
+	}{
+		{
+			name: "fetch", command: "prices fetch",
+			args: []string{
+				"prices", "fetch", "--ticker", "msft", "--ticker", "aapl",
+				"--max-symbols", "2", "--max-duration", "30s",
+			},
+		},
+		{
+			name: "sync", command: "prices sync",
+			args: []string{"prices", "sync", "--sync-timeout", "4h"},
+		},
+		{
+			name: "status", command: "prices status",
+			args: []string{"prices", "status", "--to", "2026-11-03"},
+		},
+		{
+			name: "repair", command: "prices repair",
+			args: []string{
+				"prices", "repair", "--ticker", "MSFT",
+				"--from", "2026-10-01", "--to", "2026-10-31",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var model cli
+
+			parser, err := newParser(&model, testDefaults())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			parsed, err := parser.Parse(test.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if parsed.Command() != test.command {
+				t.Fatalf("command = %q, want %q", parsed.Command(), test.command)
+			}
+
+			if test.name == "fetch" &&
+				(len(model.Prices.Fetch.Tickers) != 2 ||
+					model.Prices.Fetch.MaxSymbols != 2 ||
+					model.Prices.Fetch.MaxDuration.String() != "30s") {
+				t.Fatalf("unexpected price fetch: %+v", model.Prices.Fetch)
+			}
+		})
+	}
+}
+
 func TestKongRejectsInvalidArguments(t *testing.T) {
 	t.Parallel()
 
@@ -229,6 +291,7 @@ func TestKongRejectsInvalidArguments(t *testing.T) {
 		{"artifacts", "extract", "--cik", "1"},
 		{"failures", "retry", "--stage", "unknown"},
 		{"taxonomy", "lint", "--format", "yaml"},
+		{"prices", "repair", "--ticker", "MSFT"},
 	} {
 		var model cli
 

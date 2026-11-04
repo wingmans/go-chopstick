@@ -1,6 +1,10 @@
 package main
 
-import "github.com/alecthomas/kong"
+import (
+	"time"
+
+	"github.com/alecthomas/kong"
+)
 
 type cli struct {
 	loggingCLI `embed:""`
@@ -8,19 +12,77 @@ type cli struct {
 	Version kong.VersionFlag `group:"diag" help:"Print version."                              short:"v"`
 	Verbose bool             `group:"diag" help:"Print verbose output and use debug logging."`
 
-	Backfill  backfillCLI  `cmd:"" group:"data" help:"Run a finite historical pipeline."`
-	Filings   filingsCLI   `cmd:"" group:"data" help:"Download and process filings."`
-	Parse     parseCLI     `cmd:"" group:"data" help:"Parse local submissions."`
-	Coverage  coverageCLI  `cmd:"" group:"data" help:"Report local filing coverage."`
-	Index     indexCLI     `cmd:"" group:"data" help:"Manage SEC indexes."`
-	Ownership ownershipCLI `cmd:"" group:"data" help:"Import and inspect ownership filings."`
-	Artifacts artifactsCLI `cmd:"" group:"data" help:"Inspect filing artifacts."`
-	Taxonomy  taxonomyCLI  `cmd:"" group:"data" help:"Inspect taxonomy coverage."`
+	Backfill  backfillCLI  `cmd:"" group:"data"   help:"Run a finite historical pipeline."`
+	Filings   filingsCLI   `cmd:"" group:"data"   help:"Download and process filings."`
+	Parse     parseCLI     `cmd:"" group:"data"   help:"Parse local submissions."`
+	Coverage  coverageCLI  `cmd:"" group:"data"   help:"Report local filing coverage."`
+	Index     indexCLI     `cmd:"" group:"data"   help:"Manage SEC indexes."`
+	Ownership ownershipCLI `cmd:"" group:"data"   help:"Import and inspect ownership filings."`
+	Artifacts artifactsCLI `cmd:"" group:"data"   help:"Inspect filing artifacts."`
+	Taxonomy  taxonomyCLI  `cmd:"" group:"data"   help:"Inspect taxonomy coverage."`
+	Prices    pricesCLI    `cmd:"" group:"market" help:"Manage Yahoo market prices."`
 
 	Doctor   doctorCLI   `cmd:"" group:"operations" help:"Validate local dependencies."`
 	Status   statusCLI   `cmd:"" group:"operations" help:"Show live application status."`
 	Rebuild  rebuildCLI  `cmd:"" group:"operations" help:"Rebuild disposable state."`
 	Failures failuresCLI `cmd:"" group:"operations" help:"Inspect and retry failures."`
+}
+
+type pricesCLI struct {
+	Fetch  pricesFetchCLI  `cmd:"" help:"Fetch a bounded batch of pending prices."`
+	Sync   pricesSyncCLI   `cmd:"" help:"Synchronize pending prices through a date."`
+	Status pricesStatusCLI `cmd:"" help:"Show pending Yahoo price work."`
+	Repair pricesRepairCLI `cmd:"" help:"Queue a price range for repair."`
+}
+
+type pricesOptions struct {
+	priceStorageOptions `embed:""`
+
+	From string `default:"1900-01-01" help:"First calendar date (YYYY-MM-DD)." placeholder:"date"`
+
+	To string `help:"Last calendar date (YYYY-MM-DD); default is latest complete market date." placeholder:"date"`
+
+	Tickers []string `help:"Limit work to this ticker; repeatable." name:"ticker" placeholder:"symbol" short:"t"`
+}
+
+type priceStorageOptions struct {
+	Manifest string `default:"${market_manifest}" help:"Constituent manifest path." placeholder:"path"`
+
+	Database string `default:"${market_db}" help:"Market SQLite database." placeholder:"path"`
+
+	BatchDir string `default:"${market_batch_dir}" help:"Retained Yahoo CSV batch directory." name:"batch-dir" placeholder:"path"`
+}
+
+type priceBatchOptions struct {
+	MaxSymbols int `default:"25" help:"Maximum symbols to attempt; zero disables the limit." name:"max-symbols" placeholder:"count"`
+
+	MaxDuration time.Duration `help:"Stop starting work after this duration; zero disables the limit." name:"max-duration" placeholder:"duration"`
+}
+
+type pricesFetchCLI struct {
+	pricesOptions     `embed:""`
+	priceBatchOptions `embed:""`
+}
+
+type pricesSyncCLI struct {
+	pricesOptions     `embed:""`
+	priceBatchOptions `embed:""`
+
+	SyncTimeout time.Duration `default:"2h" help:"Maximum duration of the synchronization." name:"sync-timeout" placeholder:"duration"`
+}
+
+type pricesStatusCLI struct {
+	pricesOptions `embed:""`
+}
+
+type pricesRepairCLI struct {
+	priceStorageOptions `embed:""`
+
+	From string `help:"First calendar date (YYYY-MM-DD)." placeholder:"date" required:""`
+
+	To string `help:"Last calendar date (YYYY-MM-DD)." placeholder:"date" required:""`
+
+	Tickers []string `help:"Repair this ticker; repeatable." name:"ticker" placeholder:"symbol" required:"" short:"t"`
 }
 
 type loggingCLI struct {
@@ -51,7 +113,7 @@ type indexCLI struct {
 }
 
 type indexRefreshCLI struct {
-	FromYear int  `default:"${from_year}" help:"First year to refresh."            short:"y"`
+	FromYear int  `default:"${from_year}"                                        help:"First year to refresh." short:"y"`
 	Latest   bool `help:"Refresh only the latest quarter and reuse older files." short:"r"`
 	Noop     bool `help:"Show actions without writing files."                    short:"n"`
 }

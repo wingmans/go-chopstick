@@ -1,4 +1,4 @@
-package main
+package yahoo
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestScheduledThroughUsesNewYorkWallClock(t *testing.T) {
-	location, err := time.LoadLocation(defaultTimezone)
+	location, err := time.LoadLocation(DefaultTimezone)
 	if err != nil {
 		t.Fatalf("load timezone: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestScheduledThroughUsesNewYorkWallClock(t *testing.T) {
 }
 
 func TestNextScheduledRunStaysAtNineAcrossDST(t *testing.T) {
-	location, err := time.LoadLocation(defaultTimezone)
+	location, err := time.LoadLocation(DefaultTimezone)
 	if err != nil {
 		t.Fatalf("load timezone: %v", err)
 	}

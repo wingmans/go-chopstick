@@ -1,4 +1,4 @@
-package main
+package yahoo
 
 import (
 	"path/filepath"

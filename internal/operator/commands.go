@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
@@ -442,6 +443,11 @@ func ClassifyError(ctx context.Context, err error) error {
 		return err
 	}
 
+	if _, ok := errors.AsType[*pipeline.PublishAckTimeoutError](err); ok {
+		return xerr.Wrap(xerr.Unavailable, "NATS_PUBLISH_TIMEOUT",
+			"NATS publication timed out", err)
+	}
+
 	switch {
 	case errors.Is(err, context.Canceled) ||
 		errors.Is(ctx.Err(), context.Canceled):
@@ -464,8 +470,8 @@ func ClassifyError(ctx context.Context, err error) error {
 		}
 
 		if _, ok := errors.AsType[net.Error](err); ok {
-			return xerr.Wrap(xerr.Unavailable, "EDGAR_UNAVAILABLE",
-				"EDGAR service is unavailable", err)
+			return xerr.Wrap(xerr.Unavailable, "EXTERNAL_SERVICE_UNAVAILABLE",
+				"an external service is unavailable", err)
 		}
 
 		return xerr.Wrap(xerr.Internal, "CHOP_COMMAND_FAILED",

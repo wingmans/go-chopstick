@@ -17,6 +17,8 @@ import (
 func RunOwnershipConsumer(ctx context.Context, bus *NATS, cfg OwnershipConfig,
 	logger *slog.Logger,
 ) error {
+	timings := &ownershipTimings{}
+
 	store, err := ownershipstore.Open(ctx, cfg.DatabasePath)
 	if err != nil {
 		return err
@@ -41,15 +43,17 @@ func RunOwnershipConsumer(ctx context.Context, bus *NATS, cfg OwnershipConfig,
 	}
 
 	return consume(ctx, subscription, logger, "ownership", cfg.Drain,
-		cfg.MaxAttempts, cfg.Failures, func(message *nats.Msg,
+		cfg.MaxAttempts, cfg.Failures, timings.fields, func(message *nats.Msg,
 			event Event,
 		) (string, error) {
 			if !ownership.RecognizesForm(event.FormType) {
 				return "ignored", message.Ack()
 			}
 
-			decision, err := processOwnershipEvent(ctx, store, downloader,
+			decision, measured, err := processOwnershipEvent(ctx, store, downloader,
 				cfg.FilingsDirectory, event)
+			timings.add(measured)
+
 			if err != nil {
 				return "", err
 			}
@@ -67,10 +71,10 @@ func RunOwnershipConsumer(ctx context.Context, bus *NATS, cfg OwnershipConfig,
 func processOwnershipEvent(ctx context.Context, store *ownershipstore.Store,
 	downloader *edgar.FilingDownloader, filingsDirectory string,
 	event Event,
-) (ownershipimporter.Decision, error) {
+) (ownershipimporter.Decision, ownershipimporter.Timings, error) {
 	filed, err := time.Parse("2006-01-02", event.FilingDate)
 	if err != nil {
-		return ownershipimporter.DecisionFailed, err
+		return ownershipimporter.DecisionFailed, ownershipimporter.Timings{}, err
 	}
 
 	record := edgar.EdgarIndex{
@@ -79,10 +83,33 @@ func processOwnershipEvent(ctx context.Context, store *ownershipstore.Store,
 		FilingPath: event.FilingPath,
 	}
 
-	return ownershipimporter.ProcessOne(ctx, store, downloader,
+	return ownershipimporter.ProcessOneMeasured(ctx, store, downloader,
 		ownershipimporter.Config{
 			Download: edgar.FilingDownloadConfig{
 				Directory: filingsDirectory,
 			},
 		}, record)
+}
+
+type ownershipTimings struct {
+	lookup   time.Duration
+	download time.Duration
+	parse    time.Duration
+	store    time.Duration
+}
+
+func (t *ownershipTimings) add(value ownershipimporter.Timings) {
+	t.lookup += value.Lookup
+	t.download += value.Download
+	t.parse += value.Parse
+	t.store += value.Store
+}
+
+func (t *ownershipTimings) fields() []any {
+	return []any{
+		"lookup_time", t.lookup,
+		"download_time", t.download,
+		"parse_time", t.parse,
+		"store_time", t.store,
+	}
 }

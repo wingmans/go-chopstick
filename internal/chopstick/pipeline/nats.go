@@ -43,6 +43,22 @@ type Publisher interface {
 	Publish(ctx context.Context, subject, messageID string, payload []byte) error
 }
 
+// PublishAckTimeoutError reports that JetStream did not acknowledge a publish
+// before its bounded wait expired.
+type PublishAckTimeoutError struct {
+	Subject string
+	Timeout time.Duration
+}
+
+func (e *PublishAckTimeoutError) Error() string {
+	return fmt.Sprintf("publish %s: acknowledgement timed out after %s: %s",
+		e.Subject, e.Timeout, context.DeadlineExceeded)
+}
+
+func (e *PublishAckTimeoutError) Unwrap() error {
+	return context.DeadlineExceeded
+}
+
 // NATS owns one connection and the JetStream context derived from it.
 type NATS struct {
 	connection *nats.Conn
@@ -163,8 +179,10 @@ func (n *NATS) Publish(ctx context.Context, subject, messageID string,
 	if _, err := n.jetstream.PublishMsg(message,
 		nats.Context(publishCtx)); err != nil {
 		if errors.Is(publishCtx.Err(), context.DeadlineExceeded) {
-			return fmt.Errorf("publish %s: acknowledgement timed out after %s: %w",
-				subject, publishAckTimeout, publishCtx.Err())
+			return &PublishAckTimeoutError{
+				Subject: subject,
+				Timeout: publishAckTimeout,
+			}
 		}
 
 		return fmt.Errorf("publish %s: %w", subject, err)

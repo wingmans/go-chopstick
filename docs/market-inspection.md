@@ -1,5 +1,28 @@
 # Inspect market data
 
+Use the Chop CLI for the normal Yahoo price workflow:
+
+```bash
+chop prices status
+chop prices fetch
+chop prices sync
+```
+
+`fetch` attempts at most 25 symbols by default. Use repeated `--ticker` flags
+to limit any command to specific manifest members:
+
+```bash
+chop prices fetch --ticker MSFT --ticker AAPL
+```
+
+Queue a known range for another attempt with `repair`:
+
+```bash
+chop prices repair --ticker MSFT --from 2026-10-01 --to 2026-10-31
+```
+
+Run `chop prices <command> --help` for paths, limits, and date options.
+
 Open the market database with column headings:
 
 ```bash
