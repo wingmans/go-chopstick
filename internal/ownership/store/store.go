@@ -163,6 +163,29 @@ func (store *Store) NeedsImport(ctx context.Context, accession,
 		(status == "processed" && (sourcePath == "" || sourceHash == "")), nil
 }
 
+// FilingSourcePath returns the retained source submission for one accession.
+func (store *Store) FilingSourcePath(ctx context.Context,
+	accession string,
+) (string, error) {
+	var sourcePath string
+
+	err := store.db.QueryRowContext(ctx, `SELECT source_path
+		FROM ownership_filings WHERE accession = ?`, accession).Scan(&sourcePath)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", os.ErrNotExist
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("read ownership filing source: %w", err)
+	}
+
+	if strings.TrimSpace(sourcePath) == "" {
+		return "", os.ErrNotExist
+	}
+
+	return sourcePath, nil
+}
+
 // Status returns the durable outcome for one accession.
 func (store *Store) Status(ctx context.Context,
 	accession string,

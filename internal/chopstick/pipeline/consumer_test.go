@@ -1,10 +1,15 @@
 package pipeline
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"testing"
 	"time"
+
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func TestConsumerReportUsesIntervalActivity(t *testing.T) {
@@ -41,6 +46,34 @@ func TestConsumerReportUsesIntervalActivity(t *testing.T) {
 		report.message != "consumer backlog drained" ||
 		math.Abs(report.rate-1.2) > 0.0001 {
 		t.Fatalf("drained report = %+v", report)
+	}
+}
+
+func TestWorkRetryDelayBacksOffThrottledRequests(t *testing.T) {
+	t.Parallel()
+
+	throttled := fmt.Errorf("download: %w", &edgar.HTTPError{
+		StatusCode: http.StatusTooManyRequests,
+	})
+	if got := workRetryDelay(throttled, 3); got != 4*time.Minute {
+		t.Fatalf("retry delay = %s, want 4m", got)
+	}
+
+	withHeader := &edgar.HTTPError{
+		StatusCode: http.StatusTooManyRequests,
+		RetryAfter: 10 * time.Minute,
+	}
+	if got := workRetryDelay(withHeader, 2); got != 10*time.Minute {
+		t.Fatalf("retry delay = %s, want 10m", got)
+	}
+
+	forbidden := &edgar.HTTPError{StatusCode: http.StatusForbidden}
+	if got := workRetryDelay(forbidden, 1); got != 10*time.Minute {
+		t.Fatalf("forbidden retry delay = %s, want 10m", got)
+	}
+
+	if got := workRetryDelay(errors.New("temporary"), 4); got != time.Minute {
+		t.Fatalf("ordinary retry delay = %s, want 1m", got)
 	}
 }
 

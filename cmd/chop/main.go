@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +16,7 @@ import (
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/envfile"
 	operator "wingman.com/chopstick/internal/operator"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 func main() {
@@ -75,7 +75,7 @@ func runMain(args []string) int {
 	defer stop()
 
 	runtime := &commandRuntime{
-		Client:  &http.Client{Timeout: 30 * time.Second},
+		Client:  outbound.NewClient(30 * time.Second),
 		Logger:  logger,
 		Verbose: model.Verbose,
 	}

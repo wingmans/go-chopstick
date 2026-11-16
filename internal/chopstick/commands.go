@@ -307,9 +307,9 @@ func (h *adminHandler) listFailures(ctx context.Context,
 func (h *adminHandler) retryFailures(ctx context.Context,
 	stage string,
 ) (int, error) {
-	if stage != "download" && stage != "process" {
+	if stage != "download" && stage != "process" && stage != "ownership" {
 		return 0,
-			errors.New("stage must be download or process")
+			errors.New("stage must be download, process, or ownership")
 	}
 
 	store, err := pipeline.Open(ctx, h.config.PollingDB)

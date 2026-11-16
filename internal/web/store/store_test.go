@@ -98,7 +98,7 @@ func TestJSONDirectoryLoadsFilingAndSourcePath(t *testing.T) {
 	root := t.TempDir()
 	parsedDir := filepath.Join(root, "parsed")
 
-	filingsDir := filepath.Join(root, "filings")
+	filingsDir := filepath.Join(root, "cache", "filings")
 	if err := os.MkdirAll(filingsDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestJSONDirectoryRejectsSymlinkedSourceOutsideRoot(t *testing.T) {
 	root := t.TempDir()
 	parsedDir := filepath.Join(root, "parsed")
 
-	filingsDir := filepath.Join(root, "filings")
+	filingsDir := filepath.Join(root, "cache", "filings")
 	if err := os.MkdirAll(filingsDir, 0o750); err != nil {
 		t.Fatal(err)
 	}

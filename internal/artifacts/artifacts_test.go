@@ -33,6 +33,10 @@ func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {
 	}
 	destination := filepath.Join(directory, "artifacts")
 
+	if exists, err := BundleExists(destination); err != nil || exists {
+		t.Fatalf("bundle before extraction: exists=%t error=%v", exists, err)
+	}
+
 	manifest, err := Extract(t.Context(), filing, source, destination,
 		Selection{All: true})
 	if err != nil {
@@ -41,6 +45,10 @@ func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {
 
 	if manifest.TotalBytes != 3 {
 		t.Fatalf("decoded bytes = %d", manifest.TotalBytes)
+	}
+
+	if exists, err := BundleExists(destination); err != nil || !exists {
+		t.Fatalf("bundle after extraction: exists=%t error=%v", exists, err)
 	}
 
 	decoded, err := os.ReadFile(filepath.Join(destination, "pixel.jpg"))
@@ -70,9 +78,9 @@ func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {
 		!strings.Contains(index.Body.String(), `id="graphics-only"`) ||
 		!strings.Contains(index.Body.String(), `id="fit-image"`) ||
 		!strings.Contains(index.Body.String(),
-			`href="/viewer-assets/viewer.css"`) ||
+			`href="viewer-assets/viewer.css"`) ||
 		!strings.Contains(index.Body.String(),
-			`src="/viewer-assets/viewer.js"`) {
+			`src="viewer-assets/viewer.js"`) {
 		t.Fatalf("unexpected viewer index: status=%d body=%s",
 			index.Code, index.Body.String())
 	}
@@ -108,7 +116,9 @@ func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {
 		httptest.NewRequestWithContext(t.Context(), http.MethodGet,
 			"/files/pixel.jpg", nil))
 
-	if file.Code != http.StatusOK || file.Body.String() != "ABC" {
+	if file.Code != http.StatusOK || file.Body.String() != "ABC" ||
+		file.Header().Get("Content-Security-Policy") != "sandbox" ||
+		file.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("unexpected viewer file: status=%d body=%q",
 			file.Code, file.Body.String())
 	}

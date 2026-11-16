@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
 	marketstore "wingman.com/chopstick/internal/market/store"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 const (
@@ -90,7 +90,7 @@ func Run(ctx context.Context, cfg Config, output io.Writer,
 	defer func() { _ = store.Close() }()
 
 	client := newYahooClient(
-		&http.Client{Timeout: 30 * time.Second}, yahooChartURL, logger,
+		outbound.NewClient(30*time.Second), yahooChartURL, logger,
 	)
 
 	batches, err := newCSVBatchStore(internal.batchDir)

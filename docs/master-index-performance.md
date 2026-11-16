@@ -35,7 +35,7 @@ Discovery currently performs these operations sequentially:
 1. Scan `master.tsv` one line at a time with `bufio.Scanner`.
 2. Split and normalize every row.
 3. Parse the filing date for every valid row.
-4. Apply the financial constituent/form policy and global ownership policy.
+4. Apply the financial and issuer-scoped ownership policies.
 5. Collect matching records in batches of 1,000.
 6. Insert accessions and outbox messages into `polling.db` in one transaction.
 7. Publish pending outbox messages to NATS, waiting for each acknowledgement.
@@ -195,7 +195,7 @@ pipeline.
 Any optimization must produce the same durable discovery set:
 
 - configured financial forms only for the selected constituent set;
-- recognized ownership forms globally;
+- configured issuer-scoped ownership forms for the selected constituent set;
 - one durable event per accession;
 - unchanged event JSON and NATS subjects;
 - unchanged outbox acknowledgement and retry behavior;

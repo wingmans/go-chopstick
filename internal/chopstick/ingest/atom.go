@@ -8,14 +8,16 @@ import (
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 // AtomConfig configures the continuous SEC Atom source.
 type AtomConfig struct {
-	Interval  time.Duration
-	DBPath    string
-	UserAgent string
-	Publisher pipeline.Publisher
+	Interval    time.Duration
+	DBPath      string
+	UserAgent   string
+	Publisher   pipeline.Publisher
+	RequestGate *edgar.RequestGate
 }
 
 // RunAtom discovers recent filings until the context is cancelled.
@@ -35,7 +37,8 @@ func RunAtom(ctx context.Context, cfg AtomConfig) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	worker := NewWorker(NewSECFetcher(cfg.UserAgent), store, out, cfg.Interval)
+	worker := NewWorker(NewSECFetcherWithGate(cfg.UserAgent, cfg.RequestGate),
+		store, out, cfg.Interval)
 	if err := runCycle(ctx, worker, store, cfg.Publisher); err != nil {
 		logger.Warn("polling cycle failed", "error", err)
 	}

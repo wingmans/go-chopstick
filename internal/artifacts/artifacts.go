@@ -50,6 +50,20 @@ type ManifestDocument struct {
 	Decoded     bool   `json:"decoded"`
 }
 
+// BundleExists reports whether a generated artifact bundle has a manifest.
+func BundleExists(directory string) (bool, error) {
+	_, err := os.Stat(filepath.Join(directory, manifestName))
+	if err == nil {
+		return true, nil
+	}
+
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("inspect artifact manifest: %w", err)
+}
+
 // Extract creates a new disposable directory. It never overwrites an existing
 // bundle or modifies the source submission.
 func Extract(ctx context.Context, filing *parser.ParsedFiling, source,

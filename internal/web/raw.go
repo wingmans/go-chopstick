@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -157,7 +158,30 @@ func (s *Server) loadRawFiling(r *http.Request, cik, accession string) (
 		return nil, os.ErrNotExist
 	}
 
-	return s.rawStore.LoadFiling(r.Context(), cik, accession)
+	filing, err := s.rawStore.LoadFiling(r.Context(), cik, accession)
+	if err == nil || !errors.Is(err, os.ErrNotExist) || s.ownership == nil {
+		return filing, err
+	}
+
+	sourcePath, err := s.ownership.FilingSourcePath(r.Context(), accession)
+	if err != nil {
+		return nil, err
+	}
+
+	absolutePath, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve ownership filing source: %w", err)
+	}
+
+	filing, err = parser.ParseSubmission(r.Context(), absolutePath)
+	if err != nil {
+		return nil, err
+	}
+
+	filing.SourceBase = "absolute"
+	filing.SourcePath = absolutePath
+
+	return filing, nil
 }
 
 func (s *Server) writeRawUnavailable(w http.ResponseWriter, r *http.Request) {

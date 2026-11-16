@@ -4,24 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net/http"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 // RunSubmission acquires authoritative raw submissions for selected filings.
 func RunSubmission(ctx context.Context, bus *NATS, cfg SubmissionConfig,
 	logger *slog.Logger,
 ) error {
-	downloader, err := edgar.NewFilingDownloader(&http.Client{
-		Timeout: 30 * time.Second,
-	}, edgar.FilingDownloadConfig{
-		Directory: cfg.Directory,
-		UserAgent: cfg.UserAgent,
-		BaseURL:   cfg.BaseURL,
-	})
+	downloader, err := edgar.NewFilingDownloader(
+		outbound.NewClient(30*time.Second), edgar.FilingDownloadConfig{
+			Directory: cfg.Directory, UserAgent: cfg.UserAgent,
+			BaseURL: cfg.BaseURL, RequestGate: cfg.RequestGate,
+		})
 	if err != nil {
 		return err
 	}

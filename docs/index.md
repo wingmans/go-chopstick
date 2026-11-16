@@ -14,6 +14,8 @@ The current index-first daemon work is described in the
 [daemon pipeline plan](daemon-pipeline-plan.md).
 Future options for accelerating large index scans are recorded in the
 [master index performance note](master-index-performance.md).
+All external HTTP requests use the mandatory local
+[outbound gateway](outbound-gateway.md).
 
 NATS remains a separate local service and carries durable filing events. Live
 control requests use the local TCP transport between `chop` and `chopd`.
@@ -35,7 +37,7 @@ Use `make nats-status`, `make nats-stop`, and `make nats-reset` to inspect or
 manage the project-local development instance. Reset requires NATS to be
 stopped.
 
-`make run` is deliberately a thin development shortcut for
+`make run` starts and verifies the outbound gateway, then runs
 `go run ./cmd/chopd`. It does not start or supervise NATS and does not perform
 application operations.
 
@@ -52,9 +54,10 @@ The default instance runs the complete local monolith:
 
 The default automatic financial scope is `10-K`, `10-K/A`, `10-Q`,
 `10-Q/A`, `8-K`, and `8-K/A` for the configured constituent set. Ownership
-forms are discovered globally and handled by the separate ownership consumer.
-Legacy `SC 13D/G` submissions are retained but recorded as unsupported. `S-1`
-and `S-1/A` remain on-demand inputs rather than automatic pipeline work.
+processing is also issuer-scoped to the configured set. It automatically
+handles Form 4/4A and structured `SCHEDULE 13D/G` submissions. Forms 3/5,
+13F, and legacy HTML `SC 13D/G` submissions are deferred. `S-1` and `S-1/A`
+remain on-demand inputs rather than automatic pipeline work.
 
 Use another terminal for application commands:
 
@@ -63,6 +66,7 @@ go run ./cmd/chop doctor
 go run ./cmd/chop status
 go run ./cmd/chop failures list
 go run ./cmd/chop failures retry --stage download
+go run ./cmd/chop failures retry --stage ownership
 ```
 
 Historical backfill and rebuild are offline operations. They acquire the same
@@ -140,6 +144,6 @@ The application remains a monolith. Its Atom, selection, download, processing,
 ownership, news, and web roles share one process while retaining their NATS
 handoffs and separate databases.
 
-Make targets are limited to source-code lifecycle operations. Application
-startup, administration, and data workflows belong to the executables rather
-than Make.
+Make targets cover source-code lifecycle operations and the local NATS and
+outbound-gateway infrastructure. Application administration and data
+workflows belong to the executables rather than Make.

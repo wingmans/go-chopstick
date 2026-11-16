@@ -231,16 +231,21 @@ templ newsFeed(data newsPageData) {
 								{ item.SelectionReason }
 							</div>
 						</div>
-						if !item.Selected {
-							<div class="news-action" id={ "download-" + item.AccessionNumber }>
-								<form method="post" action={ newsDownloadURL(item.AccessionNumber) }
-									hx-post={ newsDownloadURL(item.AccessionNumber) }
-									hx-target={ "#download-" + item.AccessionNumber }
-									hx-swap="innerHTML">
-									<button type="submit">Download and parse</button>
-								</form>
-							</div>
-						}
+						<div class="news-action">
+							<a class="viewer-button" href={ artifactViewerURL(item.CIK,
+								item.AccessionNumber) } target="_blank" rel="noopener"
+								title="Open the locally cached filing">Viewer</a>
+							if !item.Selected {
+								<div id={ "download-" + item.AccessionNumber }>
+									<form method="post" action={ newsDownloadURL(item.AccessionNumber) }
+										hx-post={ newsDownloadURL(item.AccessionNumber) }
+										hx-target={ "#download-" + item.AccessionNumber }
+										hx-swap="innerHTML">
+										<button type="submit">Download and parse</button>
+									</form>
+								</div>
+							}
+						</div>
 					</div></li>
 				}
 			</ol>
@@ -578,6 +583,11 @@ func rawInspectorURL(cik string, accession string) templpkg.SafeURL {
 	return templpkg.SafeURL("/debug/raw/filings/" + cik + "/" + accession)
 }
 
+func artifactViewerURL(cik string, accession string) templpkg.SafeURL {
+	return templpkg.SafeURL("/viewer/" + canonicalCIK(cik) + "/" +
+		accession + "/")
+}
+
 templ ownershipDirectoryPage(data ownershipDirectoryData) {
 	@pageLayout(data.Page, ownershipDirectoryBody(data))
 }
@@ -636,8 +646,8 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 	</header>
 	<main><section class="heading"><h1>{ data.Member.Ticker } - { data.Member.Name }</h1>
 		<div class="subtitle">CIK { data.Member.CIK }</div></section>
-	<section class="notice">Reported ownership is not real-time. Form 13F positions
-		appear only when a security has an explicit issuer mapping from ownership filings.</section>
+	<section class="notice">Reported ownership is not real-time. Automatic processing
+		covers Form 4 and structured Schedule 13D/G filings for this company set.</section>
 	if !data.Available {
 		<section class="notice warning">The ownership database is not available. Run the
 			<code>chop ownership backfill</code> or pass
@@ -655,7 +665,8 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 				<tr><td>{ item.OwnerName }</td><td>{ item.EventDate }</td><td>{ item.Security }</td>
 					<td>{ item.CUSIP }</td><td class="num">{ item.Shares }</td>
 					<td class="num">{ item.Percentage }</td><td>
-						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
+						@ownershipFilingLink(data.Member.CIK, item.SourceURL, item.FormType,
+							item.Accession, item.FilingDate)
 					</td></tr>
 			}
 			</tbody></table></div>
@@ -673,7 +684,8 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 						(derivative)
 					}
 					</td><td class="num">{ item.Amount }</td><td>{ item.DirectOrIndirect }</td><td>
-						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
+						@ownershipFilingLink(data.Member.CIK, item.SourceURL, item.FormType,
+							item.Accession, item.FilingDate)
 					</td></tr>
 			}
 			</tbody></table></div>
@@ -689,24 +701,8 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 				<tr><td>{ item.OwnerName }</td><td>{ item.TransactionDate }</td><td>{ item.Security }</td>
 					<td>{ item.Code }</td><td>{ item.AcquiredDisposed }</td><td class="num">{ item.Amount }</td>
 					<td class="num">{ item.Price }</td><td class="num">{ item.SharesAfter }</td><td>
-						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
-					</td></tr>
-			}
-			</tbody></table></div>
-		</section>
-		<section class="ownership-section"><div class="panel-heading"><h2>Mapped Form 13F positions</h2>
-			<span class="muted">effective positions, up to 250 rows</span></div>
-			<div class="panel table-wrap"><table><thead><tr><th>Manager</th><th>Period</th>
-				<th>Security</th><th>CUSIP</th><th>Value</th><th>Amount</th><th>Type</th>
-				<th>Put/call</th><th>Filing</th></tr></thead><tbody>
-			if len(data.Data.Institutional) == 0 {
-				<tr><td class="empty" colspan="9">No explicitly mapped Form 13F positions.</td></tr>
-			}
-			for _, item := range data.Data.Institutional {
-				<tr><td>{ item.ManagerName }</td><td>{ item.Period }</td><td>{ item.Security }</td>
-					<td>{ item.CUSIP }</td><td class="num">{ item.Value }</td>
-					<td class="num">{ item.Amount }</td><td>{ item.AmountType }</td><td>{ item.PutCall }</td><td>
-						@ownershipFilingLink(item.SourceURL, item.FormType, item.Accession, item.FilingDate)
+						@ownershipFilingLink(data.Member.CIK, item.SourceURL, item.FormType,
+							item.Accession, item.FilingDate)
 					</td></tr>
 			}
 			</tbody></table></div>
@@ -731,13 +727,16 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 	</section>
 }
 
-templ ownershipFilingLink(sourceURL string, formType string, accession string,
-	filingDate string) {
+templ ownershipFilingLink(cik string, sourceURL string, formType string,
+	accession string, filingDate string) {
 	if sourceURL != "" {
-		<a href={ templpkg.SafeURL(sourceURL) }>{ formType } { shortAccession(accession) }</a>
+		<a href={ templpkg.SafeURL(sourceURL) } target="_blank" rel="noopener"
+			title="Open the filing on SEC.gov">{ formType } { shortAccession(accession) }</a>
 	} else {
 		{ formType } { shortAccession(accession) }
 	}
+	<a class="viewer-button" href={ artifactViewerURL(cik, accession) }
+		target="_blank" rel="noopener">Viewer</a>
 	<span class="source">filed { filingDate }</span>
 }
 

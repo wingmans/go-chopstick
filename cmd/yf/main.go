@@ -117,30 +117,17 @@ func parseConfig(args []string, output io.Writer,
 	flags := flag.NewFlagSet("yahoo-prices "+command, flag.ContinueOnError)
 	flags.SetOutput(output)
 	flags.Usage = func() { writeCommandUsage(output, command, flags) }
-	flags.StringVar(&fromValue, "from", "1900-01-01",
-		"bootstrap or repair start date (YYYY-MM-DD)")
-	flags.StringVar(&toValue, "to",
-		marketyahoo.DefaultTargetDate(now).Format(marketyahoo.DateLayout),
-		"last covered calendar date (YYYY-MM-DD)")
-	flags.StringVar(&databasePath, "database", appdata.Path("market.db"),
-		"SQLite database path")
-	flags.StringVar(&batchDir, "batch-dir",
-		appdata.Path("market", "yahoo", "batches"),
-		"directory for normalized CSV landing batches")
-	flags.StringVar(&manifestPath, "manifest", marketyahoo.DefaultManifest,
-		"constituent manifest path")
+	flags.StringVar(&fromValue, "from", "1900-01-01", "bootstrap or repair start date (YYYY-MM-DD)")
+	flags.StringVar(&toValue, "to", marketyahoo.DefaultTargetDate(now).Format(marketyahoo.DateLayout), "last covered calendar date (YYYY-MM-DD)")
+	flags.StringVar(&databasePath, "database", appdata.Path("market.db"), "SQLite database path")
+	flags.StringVar(&batchDir, "batch-dir", appdata.Path("market", "yahoo", "batches"), "directory for normalized CSV landing batches")
+	flags.StringVar(&manifestPath, "manifest", marketyahoo.DefaultManifest, "constituent manifest path")
 	flags.Var(&tickers, "ticker", "manifest ticker; may be repeated")
-	flags.IntVar(&maxSymbols, "max-symbols", marketyahoo.DefaultMaxSymbols,
-		"maximum symbols attempted by fetch; zero disables the limit")
-	flags.DurationVar(&maxDuration, "max-duration", 0,
-		"stop starting work after this duration; zero disables the limit")
-	flags.DurationVar(&syncTimeout, "sync-timeout",
-		marketyahoo.DefaultSyncTimeout,
-		"maximum duration of one sync cycle; zero disables the timeout")
-	flags.StringVar(&schedule, "schedule", marketyahoo.DefaultSchedule,
-		"daily service start time in HH:MM")
-	flags.StringVar(&timezone, "timezone", marketyahoo.DefaultTimezone,
-		"IANA timezone for the daily service")
+	flags.IntVar(&maxSymbols, "max-symbols", marketyahoo.DefaultMaxSymbols, "maximum symbols attempted by fetch; zero disables the limit")
+	flags.DurationVar(&maxDuration, "max-duration", 0, "stop starting work after this duration; zero disables the limit")
+	flags.DurationVar(&syncTimeout, "sync-timeout", marketyahoo.DefaultSyncTimeout, "maximum duration of one sync cycle; zero disables the timeout")
+	flags.StringVar(&schedule, "schedule", marketyahoo.DefaultSchedule, "daily service start time in HH:MM")
+	flags.StringVar(&timezone, "timezone", marketyahoo.DefaultTimezone, "IANA timezone for the daily service")
 
 	if err := flags.Parse(args[1:]); err != nil {
 		return marketyahoo.Config{}, err

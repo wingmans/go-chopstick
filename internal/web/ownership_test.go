@@ -41,17 +41,15 @@ func TestOwnershipViewerUsesSelectedCompanySet(t *testing.T) {
 	}
 
 	ownershipPath := filepath.Join(root, "ownership.db")
+	sourcePath := writeOwnershipViewerSource(t, root)
 
 	ownershipDB, err := ownershipstore.Open(t.Context(), ownershipPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := ownershipDB.Save(t.Context(), beneficialTestFiling()); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := ownershipDB.Save(t.Context(), institutionalTestFiling()); err != nil {
+	if err := ownershipDB.Save(t.Context(),
+		beneficialTestFiling(sourcePath)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,9 +75,39 @@ func TestOwnershipViewerUsesSelectedCompanySet(t *testing.T) {
 
 	company := ownershipRequest(t, server,
 		"/ownership/companies/0000000100")
-	requireOwnershipBody(t, company, "Alice Owner", "Large Manager",
+	requireOwnershipBody(t, company, "Alice Owner",
 		"Schedule 13D/G beneficial ownership",
-		"Mapped Form 13F positions")
+		`href="https://www.sec.gov/Archives/edgar/data/100/`+
+			`0000000100-26-000001.txt"`,
+		`href="/viewer/0000000100/0000000100-26-000001/"`,
+		`class="viewer-button"`)
+
+	inspector := ownershipRequest(t, server,
+		"/debug/raw/filings/0000000100/0000000100-26-000001")
+	requireOwnershipBody(t, inspector, "Raw Filing Inspector", "ownership.htm",
+		"pixel.jpg")
+
+	document := ownershipRequest(t, server,
+		"/debug/raw/filings/0000000100/0000000100-26-000001/documents/0")
+	requireOwnershipBody(t, document, "ownership filing")
+
+	viewer := ownershipRequest(t, server,
+		"/viewer/0000000100/0000000100-26-000001/")
+	requireOwnershipBody(t, viewer, "SEC artifact viewer", "ownership.htm",
+		"pixel.jpg", `data-image="true"`)
+
+	viewerRedirect := ownershipRequest(t, server,
+		"/viewer/0000000100/0000000100-26-000001")
+	if viewerRedirect.Code != http.StatusMovedPermanently ||
+		viewerRedirect.Header().Get("Location") !=
+			"/viewer/0000000100/0000000100-26-000001/" {
+		t.Fatalf("viewer redirect: status=%d location=%q",
+			viewerRedirect.Code, viewerRedirect.Header().Get("Location"))
+	}
+
+	image := ownershipRequest(t, server,
+		"/viewer/0000000100/0000000100-26-000001/files/pixel.jpg")
+	requireOwnershipBody(t, image, "ABC")
 
 	missing := ownershipRequest(t, server,
 		"/ownership/companies/0000000999")
@@ -89,12 +117,12 @@ func TestOwnershipViewerUsesSelectedCompanySet(t *testing.T) {
 	}
 }
 
-func beneficialTestFiling() ownership.Filing {
+func beneficialTestFiling(sourcePath string) ownership.Filing {
 	return ownership.Filing{
-		Accession: "0000000100-26-000001", FormType: "SC 13G",
+		Accession: "0000000100-26-000001", FormType: "SCHEDULE 13G",
 		Family: "beneficial", FilingDate: "2026-01-15",
 		ReportDate:   "2025-12-31",
-		SourcePath:   "/cache/edgar/data/100/filing.txt",
+		SourcePath:   sourcePath,
 		SourceSHA256: "beneficial", ParserVersion: ownership.ParserVersion,
 		Parties: []ownership.Party{
 			{Key: "issuer", CIK: "100", Name: "Acme Corporation"},
@@ -112,27 +140,52 @@ func beneficialTestFiling() ownership.Filing {
 	}
 }
 
-func institutionalTestFiling() ownership.Filing {
-	return ownership.Filing{
-		Accession: "0000000300-26-000001", FormType: "13F-HR",
-		Family: "institutional", FilingDate: "2026-02-14",
-		ReportDate:   "2025-12-31",
-		SourcePath:   "/cache/edgar/data/300/filing.txt",
-		SourceSHA256: "institutional", ParserVersion: ownership.ParserVersion,
-		Parties: []ownership.Party{{
-			Key: "manager", CIK: "300", Name: "Large Manager",
-		}},
-		Securities: []ownership.Security{{
-			Key: "cusip:000000100", Title: "Common stock",
-			CUSIP: "000000100",
-		}},
-		InstitutionalPositions: []ownership.InstitutionalPosition{{
-			Row: 1, ManagerKey: "manager", ReportPeriod: "2025-12-31",
-			IssuerName: "Acme Corporation", Class: "COM",
-			CUSIP: "000000100", Value: "8500", Amount: "100000",
-			AmountType: "SH",
-		}},
+func writeOwnershipViewerSource(t *testing.T, root string) string {
+	t.Helper()
+
+	directory := filepath.Join(root, "cache", "filings", "edgar", "data",
+		"100")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		t.Fatal(err)
 	}
+
+	path := filepath.Join(directory, "0000000100-26-000001.txt")
+
+	source := `<SEC-DOCUMENT>0000000100-26-000001.txt
+<SEC-HEADER>header
+ACCESSION NUMBER: 0000000100-26-000001
+CONFORMED SUBMISSION TYPE: SCHEDULE 13G
+CENTRAL INDEX KEY: 0000000100
+FILED AS OF DATE: 20260115
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>SCHEDULE 13G
+<SEQUENCE>1
+<FILENAME>ownership.htm
+<DESCRIPTION>ownership filing
+<TEXT>
+<html><body>ownership filing<img src="pixel.jpg"></body></html>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>GRAPHIC
+<SEQUENCE>2
+<FILENAME>pixel.jpg
+<DESCRIPTION>embedded image
+<TEXT>
+begin 644 pixel.jpg
+#04)#
+` + "`" + `
+end
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>
+`
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	return path
 }
 
 func ownershipRequest(t *testing.T, server http.Handler,

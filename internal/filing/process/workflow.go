@@ -11,6 +11,7 @@ import (
 
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 // ProcessFilings streams the filtered index, ensures local source files, then
@@ -46,7 +47,7 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 	batchProcessing := processing
 
 	if client == nil {
-		client = http.DefaultClient
+		client = outbound.NewClient(30 * time.Second)
 	}
 
 	downloader, err := edgar.NewFilingDownloader(client, download)

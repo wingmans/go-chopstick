@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 	"time"
 
@@ -138,11 +139,13 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 					"error", workErr, "accession", event.AccessionNumber,
 					"attempts", attempts)
 			} else {
-				_ = message.NakWithDelay(time.Minute)
+				retryIn := workRetryDelay(workErr, attempts)
+				_ = message.NakWithDelay(retryIn)
 
 				logger.Warn("event work failed; retry scheduled",
 					"error", workErr, "accession", event.AccessionNumber,
-					"attempt", attempts, "max_attempts", maxAttempts)
+					"attempt", attempts, "max_attempts", maxAttempts,
+					"retry_in", retryIn)
 			}
 		} else {
 			stats.completed++
@@ -163,6 +166,34 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			return err
 		}
 	}
+}
+
+func workRetryDelay(workErr error, attempts int) time.Duration {
+	delay := time.Minute
+
+	var upstream *edgar.HTTPError
+	if !errors.As(workErr, &upstream) {
+		return delay
+	}
+
+	throttleDelay := edgar.ThrottleDelay(upstream.StatusCode,
+		upstream.RetryAfter)
+	if throttleDelay == 0 {
+		return delay
+	}
+
+	if upstream.StatusCode == http.StatusForbidden {
+		return throttleDelay
+	}
+
+	exponent := min(max(attempts-1, 0), 4)
+
+	delay *= time.Duration(1 << exponent)
+	if throttleDelay > delay {
+		return throttleDelay
+	}
+
+	return delay
 }
 
 type consumerStats struct {

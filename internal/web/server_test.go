@@ -359,6 +359,17 @@ func TestNewsPageUsesConsolidatedRoutes(t *testing.T) {
 	}
 	defer func() { _ = store.Close() }()
 
+	if err := store.Apply(t.Context(), 1, "filing.news:test",
+		news.Item{
+			AccessionNumber: "0001193125-26-027207", CIK: "789019",
+			CompanyName: "Microsoft Corporation", FormType: "10-K",
+			FilingDate: "2026-01-01",
+			FilingURL:  "https://www.sec.gov/Archives/test.txt",
+			SourceFeed: "test", Selected: true,
+		}); err != nil {
+		t.Fatal(err)
+	}
+
 	server := NewServer(t.TempDir(), nil)
 	server.MountNews(NewNewsServer(store, nil, nil))
 
@@ -374,7 +385,10 @@ func TestNewsPageUsesConsolidatedRoutes(t *testing.T) {
 
 	requireMarkers(t, record.Body.String(),
 		"action=\"/news\"", "href=\"/ownership\"",
-		"href=\"/status\"", "/assets/news.css")
+		"href=\"/status\"", "/assets/news.css",
+		`href="https://www.sec.gov/Archives/test.txt"`,
+		`href="/viewer/0000789019/0001193125-26-027207/"`,
+		`class="viewer-button"`)
 }
 
 func TestIndexPageWithoutFiltersDoesNotLoadFilings(t *testing.T) {

@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"time"
+
+	"wingman.com/chopstick/internal/edgar"
 )
 
 const (
@@ -28,6 +30,7 @@ type SubmissionConfig struct {
 	Drain       bool
 	MaxAttempts int
 	Failures    FailureStore
+	RequestGate *edgar.RequestGate
 }
 
 // ExtractionConfig configures the serial filing-extraction worker.
@@ -49,4 +52,5 @@ type OwnershipConfig struct {
 	Drain            bool
 	MaxAttempts      int
 	Failures         FailureStore
+	RequestGate      *edgar.RequestGate
 }

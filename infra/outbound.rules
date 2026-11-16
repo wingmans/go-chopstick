@@ -1,0 +1,5 @@
+# bucket    rate  allowed HTTPS upstream hosts
+sec         8r/s  sec.gov *.sec.gov
+yahoo       5r/s  query1.finance.yahoo.com
+ecb         5r/s  data-api.ecb.europa.eu
+wikipedia   5r/s  en.wikipedia.org

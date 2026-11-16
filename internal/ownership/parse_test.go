@@ -246,6 +246,55 @@ Example narrative.</securityAndIssuer></item1>
 	}
 }
 
+func TestParseStructuredSchedule13GCurrentLayout(t *testing.T) {
+	t.Parallel()
+
+	xml := `<edgarSubmission><headerData><submissionType>SCHEDULE 13G</submissionType>
+</headerData><formData><coverPageHeader><securitiesClassTitle>Common Stock
+</securitiesClassTitle><eventDateRequiresFilingThisStatement>02/01/2026
+</eventDateRequiresFilingThisStatement><issuerInfo><issuerCik>0000000400
+</issuerCik><issuerName>Issuer Corp</issuerName><issuerCusips>
+<issuerCusipNumber>987654321</issuerCusipNumber></issuerCusips></issuerInfo>
+</coverPageHeader><coverPageHeaderReportingPersonDetails>
+<reportingPersonName>Large Owner</reportingPersonName><memberGroup>b</memberGroup>
+<reportingPersonBeneficiallyOwnedNumberOfShares><soleVotingPower>10
+</soleVotingPower><sharedVotingPower>20</sharedVotingPower>
+<soleDispositivePower>30</soleDispositivePower><sharedDispositivePower>40
+</sharedDispositivePower></reportingPersonBeneficiallyOwnedNumberOfShares>
+<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>100
+</reportingPersonBeneficiallyOwnedAggregateNumberOfShares><classPercent>6.5
+</classPercent><typeOfReportingPerson>IA</typeOfReportingPerson>
+</coverPageHeaderReportingPersonDetails><items><item1><issuerName>Issuer Corp
+</issuerName></item1></items></formData></edgarSubmission>`
+	path := writeOwnershipSubmission(t, "SCHEDULE 13G",
+		"0000000001-26-000006",
+		testDocument{
+			documentType: "SCHEDULE 13G", filename: "primary_doc.xml",
+			content: xml,
+		})
+
+	filing, err := Parse(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(filing.BeneficialReports) != 1 || len(filing.Securities) != 1 ||
+		len(filing.BeneficialNarratives) != 1 {
+		t.Fatalf("unexpected filing: %+v", filing)
+	}
+
+	report := filing.BeneficialReports[0]
+	if filing.Parties[0].CIK != "0000000400" ||
+		filing.Parties[1].MemberOfGroup != "b" || report.Shares != "100" ||
+		report.Percent != "6.5" || report.SoleVotingPower != "10" ||
+		report.SharedVotingPower != "20" ||
+		report.SoleDispositivePower != "30" ||
+		report.SharedDispositivePower != "40" ||
+		report.EventDate != "2026-02-01" {
+		t.Fatalf("unexpected parsed filing: %+v", filing)
+	}
+}
+
 func TestParseRecognizedLegacyFormReturnsUnsupported(t *testing.T) {
 	t.Parallel()
 

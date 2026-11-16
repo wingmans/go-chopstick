@@ -18,6 +18,8 @@ import (
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 // Atom Feed XML Schema Mapping.
@@ -46,24 +48,38 @@ type SECFetcher struct {
 	userAgent   string
 	feedURL     string
 	deadLetters []pipeline.DeadLetter
+	requestGate *edgar.RequestGate
 }
 
 func NewSECFetcher(userHeader string) *SECFetcher {
-	return NewSECFetcherWithURL(userHeader, defaultFeedURL)
+	return NewSECFetcherWithGate(userHeader, nil)
 }
 
 const defaultFeedURL = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=&company=&datea=&dateb=&owner=include&count=100&output=atom"
 
 func NewSECFetcherWithURL(userHeader, feedURL string) *SECFetcher {
+	return newSECFetcher(userHeader, feedURL, nil)
+}
+
+// NewSECFetcherWithGate shares the application-wide SEC request budget.
+func NewSECFetcherWithGate(userHeader string,
+	requestGate *edgar.RequestGate,
+) *SECFetcher {
+	return newSECFetcher(userHeader, defaultFeedURL, requestGate)
+}
+
+func newSECFetcher(userHeader, feedURL string,
+	requestGate *edgar.RequestGate,
+) *SECFetcher {
+	if requestGate == nil {
+		requestGate = edgar.NewRequestGate()
+	}
+
 	return &SECFetcher{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				DisableKeepAlives: true,
-			},
-		},
-		userAgent: userHeader,
-		feedURL:   feedURL,
+		client:      outbound.NewClient(30 * time.Second),
+		userAgent:   userHeader,
+		feedURL:     feedURL,
+		requestGate: requestGate,
 	}
 }
 
@@ -90,6 +106,10 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pipeline.Event, error) 
 	// SEC strictly blocks requests missing proper User-Agent credentials
 	req.Header.Set("User-Agent", f.userAgent)
 
+	if err := f.requestGate.Wait(ctx); err != nil {
+		return nil, err
+	}
+
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed fetching feed: %w", err)
@@ -97,7 +117,17 @@ func (f *SECFetcher) FetchLatest(ctx context.Context) ([]pipeline.Event, error) 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("sec returned unexpected status: %d", resp.StatusCode)
+		upstream := edgar.NewHTTPError(resp, f.feedURL)
+		if delay := f.requestGate.Throttle(upstream.StatusCode,
+			upstream.RetryAfter); delay > 0 {
+			upstream.RetryAfter = delay
+			ctxlog.FromContext(ctx).Warn(
+				"SEC request blocked; request gate paused",
+				"status", upstream.StatusCode, "retry_in", delay,
+				"url", f.feedURL)
+		}
+
+		return nil, upstream
 	}
 
 	body, err := io.ReadAll(resp.Body)

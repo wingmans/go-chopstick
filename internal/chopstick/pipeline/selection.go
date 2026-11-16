@@ -11,6 +11,7 @@ import (
 
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ownership"
 )
 
 const SelectionDurable = "edgar-selection-v1"
@@ -96,6 +97,11 @@ func selectionDecision(event Event, setName string,
 	ciks, forms map[string]struct{},
 ) (bool, string) {
 	form := strings.ToUpper(strings.TrimSpace(event.FormType))
+	if ownership.RecognizesForm(form) {
+		return false, fmt.Sprintf(
+			"form type %q is handled by the ownership pipeline", form)
+	}
+
 	if !edgar.SupportsFormType(form) {
 		return false, fmt.Sprintf(
 			"form type %q is not supported by the financial filing parser",

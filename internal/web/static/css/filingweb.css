@@ -658,6 +658,18 @@ body.ownership-page td {
   font-weight: 400;
 }
 
+.viewer-button {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: white;
+  background: #2563eb;
+  font-size: 10px;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
 .empty-row {
   padding: 18px 8px;
   color: #94a3b8;

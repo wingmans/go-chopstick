@@ -15,13 +15,12 @@ import (
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/edgar"
-	"wingman.com/chopstick/internal/ownership"
 )
 
 const reconciliationProgressEvery = 5 * time.Second
 
 func ensureMasterIndex(ctx context.Context, client *http.Client,
-	config Config, logger *slog.Logger,
+	config Config, logger *slog.Logger, requestGate *edgar.RequestGate,
 ) error {
 	if _, err := os.Stat(config.MasterPath); err == nil {
 		return nil
@@ -41,6 +40,7 @@ func ensureMasterIndex(ctx context.Context, client *http.Client,
 		RefreshLatest: false,
 		Stitch:        true,
 		BaseURL:       config.BaseURL,
+		RequestGate:   requestGate,
 	})
 	if err != nil {
 		return err
@@ -169,5 +169,5 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 
 func shouldDiscover(record edgar.EdgarIndex, financialFilter edgar.IndexFilter) bool {
 	return edgar.MatchesIndexFilter(record, financialFilter) ||
-		ownership.RecognizesForm(record.FormType)
+		matchesAutomaticOwnershipScope(record, financialFilter.CIKs)
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"wingman.com/chopstick/internal/constituents"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
@@ -23,17 +24,19 @@ import (
 var staticFiles embed.FS
 
 type Server struct {
-	store       filingstore.Store
-	rawStore    filingstore.RawStore
-	ownership   *ownershipstore.Store
-	logger      *slog.Logger
-	setName     string
-	setAsOf     string
-	members     []constituents.Member
-	memberByCIK map[string]constituents.Member
-	memberByKey map[string][]string
-	news        http.Handler
-	mux         *http.ServeMux
+	store        filingstore.Store
+	rawStore     filingstore.RawStore
+	ownership    *ownershipstore.Store
+	artifactsDir string
+	artifactMu   sync.Mutex
+	logger       *slog.Logger
+	setName      string
+	setAsOf      string
+	members      []constituents.Member
+	memberByCIK  map[string]constituents.Member
+	memberByKey  map[string][]string
+	news         http.Handler
+	mux          *http.ServeMux
 }
 
 // NewServer creates a server instance with default configuration.
@@ -89,14 +92,15 @@ func NewConfiguredServerWithDatabases(ctx context.Context, parsedDir,
 	}
 
 	server := &Server{
-		store:       store,
-		rawStore:    store,
-		ownership:   ownershipStore,
-		logger:      logger,
-		setName:     setName,
-		setAsOf:     "",
-		memberByCIK: map[string]constituents.Member{},
-		memberByKey: map[string][]string{},
+		store:        store,
+		rawStore:     store,
+		ownership:    ownershipStore,
+		artifactsDir: filepath.Join(filepath.Dir(parsedDir), "tmp", "artifacts"),
+		logger:       logger,
+		setName:      setName,
+		setAsOf:      "",
+		memberByCIK:  map[string]constituents.Member{},
+		memberByKey:  map[string][]string{},
 	}
 	server.mux = server.routes()
 

@@ -3,11 +3,11 @@ package pipeline
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/outbound"
 	"wingman.com/chopstick/internal/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/ownership/importer"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
@@ -25,13 +25,11 @@ func RunOwnershipConsumer(ctx context.Context, bus *NATS, cfg OwnershipConfig,
 	}
 	defer func() { _ = store.Close() }()
 
-	downloader, err := edgar.NewFilingDownloader(&http.Client{
-		Timeout: 30 * time.Second,
-	}, edgar.FilingDownloadConfig{
-		Directory: cfg.FilingsDirectory,
-		UserAgent: cfg.UserAgent,
-		BaseURL:   cfg.BaseURL,
-	})
+	downloader, err := edgar.NewFilingDownloader(
+		outbound.NewClient(30*time.Second), edgar.FilingDownloadConfig{
+			Directory: cfg.FilingsDirectory, UserAgent: cfg.UserAgent,
+			BaseURL: cfg.BaseURL, RequestGate: cfg.RequestGate,
+		})
 	if err != nil {
 		return err
 	}

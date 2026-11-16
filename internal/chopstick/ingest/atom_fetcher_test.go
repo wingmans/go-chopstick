@@ -1,17 +1,21 @@
 package ingest
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
+	"wingman.com/chopstick/internal/edgar"
 )
 
 func TestParseAtomEntryAcceptsNumericAccessionPath(t *testing.T) {
@@ -34,6 +38,15 @@ func testDatabasePath(t *testing.T) string {
 	t.Helper()
 
 	return filepath.Join(t.TempDir(), "polling.db")
+}
+
+func testSECFetcher(userHeader, feedURL string,
+	requestGate *edgar.RequestGate,
+) *SECFetcher {
+	fetcher := newSECFetcher(userHeader, feedURL, requestGate)
+	fetcher.client = &http.Client{Timeout: 30 * time.Second}
+
+	return fetcher
 }
 
 func TestParseAtomEntryExtractsSECMetadata(t *testing.T) {
@@ -109,7 +122,7 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fetcher := NewSECFetcherWithURL("test-agent", server.URL)
+	fetcher := testSECFetcher("test-agent", server.URL, nil)
 
 	store, err := pipeline.OpenBackground(testDatabasePath(t))
 	if err != nil {
@@ -144,6 +157,39 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 	}
 }
 
+func TestSECFetcherForbiddenPausesSharedRequestGate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,
+		_ *http.Request,
+	) {
+		http.Error(w, "Request Rate Threshold Exceeded",
+			http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	gate := edgar.NewRequestGate()
+	fetcher := testSECFetcher("test-agent", server.URL, gate)
+
+	_, err := fetcher.FetchLatest(t.Context())
+
+	upstreamError, ok := errors.AsType[*edgar.HTTPError](err)
+	if !ok {
+		t.Fatalf("FetchLatest error = %v, want *edgar.HTTPError", err)
+	}
+
+	if upstreamError.RetryAfter != 10*time.Minute ||
+		!strings.Contains(upstreamError.Message,
+			"Request Rate Threshold Exceeded") {
+		t.Fatalf("unexpected upstream error: %+v", upstreamError)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+
+	if err := gate.Wait(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("gate Wait error = %v, want deadline exceeded", err)
+	}
+}
+
 func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 	feed, err := os.ReadFile(filepath.Join("..", "..", "..", "golden",
 		"sec-current.atom.xml"))
@@ -167,7 +213,7 @@ func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	worker := NewWorker(
-		NewSECFetcherWithURL("test-agent", server.URL),
+		testSECFetcher("test-agent", server.URL, nil),
 		store,
 		make(chan pipeline.Event, 32),
 		time.Minute,
@@ -222,7 +268,7 @@ func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
 
 	defer func() { _ = store.Close() }()
 
-	worker := NewWorker(NewSECFetcherWithURL("test-agent", server.URL), store,
+	worker := NewWorker(testSECFetcher("test-agent", server.URL, nil), store,
 		make(chan pipeline.Event, 2), time.Minute)
 	if err := worker.RunOnce(t.Context()); err != nil {
 		t.Fatal(err)

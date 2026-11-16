@@ -34,6 +34,7 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("/companies/{cik}", s.company)
 	mux.HandleFunc("/filings/{cik}/{accession}", s.detail)
 	mux.HandleFunc("/ownership/companies/{cik}", s.ownershipCompany)
+	mux.HandleFunc("/viewer/", s.artifactViewer)
 	mux.HandleFunc("/debug/raw/filings/{cik}/{accession}", s.rawInspector)
 
 	// APIs, actions, raw documents, and assets are intentionally absent from

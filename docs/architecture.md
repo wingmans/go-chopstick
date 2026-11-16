@@ -31,9 +31,15 @@ ownership consumption, and news projection. Each step has one worker.
 An outbox row is marked published only after JetStream acknowledges it. A
 bounded acknowledgement timeout returns control to the current stage while
 leaving unacknowledged rows available for a later run.
+All continuous SEC readers and startup index downloads share one process-wide
+request gate. HTTP 429 responses pause that gate and receive increasing retry
+delays. HTTP 403 responses enforce the SEC's ten-minute quiet period. This
+prevents independent workers from exceeding the aggregate request budget.
 Financial discovery applies the configured form and constituent-set policy.
-Ownership discovery is global and uses the ownership package's independent
-form registry.
+Automatic ownership discovery is issuer-scoped to the same constituent set.
+It currently selects Form 4/4A and structured `SCHEDULE 13D/G` submissions.
+The ownership package retains the broader form registry for explicit operator
+work and future pipeline scope.
 
 `internal/parser` produces source-level filing data. `internal/filing` owns
 the persisted normalized financial model, file I/O, history, and taxonomy.

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ecb"
+	"wingman.com/chopstick/internal/outbound"
 	"wingman.com/chopstick/internal/xerr"
 )
 
@@ -39,12 +40,7 @@ type App struct {
 func NewApp(cfg ecb.Config, stdout io.Writer) *App {
 	return &App{
 		Config: cfg,
-		Client: &http.Client{
-			Transport:     nil,
-			CheckRedirect: nil,
-			Jar:           nil,
-			Timeout:       ecb.RequestTimeout,
-		},
+		Client: outbound.NewClient(ecb.RequestTimeout),
 		Stdout: stdout,
 	}
 }

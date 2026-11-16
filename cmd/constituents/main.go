@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/html"
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/constituents"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 const (
@@ -72,12 +73,7 @@ func run(args []string) error {
 		return err
 	}
 
-	client := &http.Client{
-		Transport:     nil,
-		CheckRedirect: nil,
-		Jar:           nil,
-		Timeout:       30 * time.Second,
-	}
+	client := outbound.NewClient(30 * time.Second)
 	ctx := context.Background()
 
 	tickers, err := fetchSECCompanies(ctx, client, tickerURL)

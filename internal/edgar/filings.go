@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 const maxNormalizedFilingSize = 1 << 30
@@ -21,10 +22,11 @@ const maxNormalizedFilingSize = 1 << 30
 // FilingDownloadConfig contains the settings for downloading filing files.
 // Directory is the local root under which SEC-relative paths are preserved.
 type FilingDownloadConfig struct {
-	Directory string
-	UserAgent string
-	BaseURL   string
-	Noop      bool
+	Directory   string
+	UserAgent   string
+	BaseURL     string
+	Noop        bool
+	RequestGate *RequestGate
 }
 
 // FilingDownloader downloads filings with one request budget across its
@@ -32,7 +34,6 @@ type FilingDownloadConfig struct {
 type FilingDownloader struct {
 	client edgarClient
 	cfg    FilingDownloadConfig
-	pacer  requestPacer
 }
 
 // NewFilingDownloader creates a paced filing downloader.
@@ -42,19 +43,22 @@ func NewFilingDownloader(client *http.Client, cfg FilingDownloadConfig) (*Filing
 	}
 
 	if client == nil {
-		client = http.DefaultClient
+		client = outbound.NewClient(30 * time.Second)
+	}
+
+	gate := cfg.RequestGate
+	if gate == nil {
+		gate = NewRequestGate()
 	}
 
 	return &FilingDownloader{
-		client: newEDGARClient(client, cfg.UserAgent),
-		cfg:    cfg,
-		pacer:  requestPacer{lastRequest: time.Time{}},
+		client: newEDGARClientWithGate(client, cfg.UserAgent, gate), cfg: cfg,
 	}, nil
 }
 
 // Download downloads one authoritative raw filing submission.
 func (d *FilingDownloader) Download(ctx context.Context, record EdgarIndex) error {
-	return downloadReferencedFiles(ctx, d.client, d.cfg, record, &d.pacer)
+	return downloadReferencedFiles(ctx, d.client, d.cfg, record)
 }
 
 // UniqueFormTypes reads an EDGAR master TSV and returns its distinct form
@@ -154,11 +158,11 @@ func validateFilingDownloadConfig(cfg FilingDownloadConfig) error {
 	return nil
 }
 
-func downloadReferencedFiles(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, record EdgarIndex, pacer *requestPacer) error {
-	return downloadReferencedFile(ctx, client, cfg, record.FilingPath, pacer)
+func downloadReferencedFiles(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, record EdgarIndex) error {
+	return downloadReferencedFile(ctx, client, cfg, record.FilingPath)
 }
 
-func downloadReferencedFile(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, relativePath string, pacer *requestPacer) error {
+func downloadReferencedFile(ctx context.Context, client edgarClient, cfg FilingDownloadConfig, relativePath string) error {
 	started := time.Now()
 
 	destination, err := localFilingPath(cfg.Directory, relativePath)
@@ -204,10 +208,6 @@ func downloadReferencedFile(ctx context.Context, client edgarClient, cfg FilingD
 
 	if err := os.MkdirAll(filepath.Dir(destination), 0o750); err != nil {
 		return fmt.Errorf("create download directory: %w", err)
-	}
-
-	if err := pacer.wait(ctx); err != nil {
-		return err
 	}
 
 	resp, err := client.get(ctx, requestURL)
@@ -384,20 +384,4 @@ func archiveURL(baseURL, relativePath string) string {
 	}
 
 	return baseURL + "/" + strings.TrimLeft(relativePath, "/")
-}
-
-type requestPacer struct {
-	lastRequest time.Time
-}
-
-func (p *requestPacer) wait(ctx context.Context) error {
-	if !p.lastRequest.IsZero() {
-		if err := waitForRequestBudget(ctx, time.Since(p.lastRequest)); err != nil {
-			return err
-		}
-	}
-
-	p.lastRequest = time.Now()
-
-	return nil
 }

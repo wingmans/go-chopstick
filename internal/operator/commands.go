@@ -133,8 +133,9 @@ func validateFailureStage(stage string, required bool) error {
 		return errors.New("--stage is required")
 	}
 
-	if stage != "" && stage != "download" && stage != "process" {
-		return errors.New("--stage must be download or process")
+	if stage != "" && stage != "download" && stage != "process" &&
+		stage != "ownership" {
+		return errors.New("--stage must be download, process, or ownership")
 	}
 
 	return nil

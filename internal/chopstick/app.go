@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"time"
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/chopstick/ingest"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/outbound"
 	"wingman.com/chopstick/internal/transport"
 )
 
@@ -42,6 +43,8 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	requestGate := edgar.NewRequestGate()
+
 	startedAt := time.Now().UTC()
 	admin := &adminHandler{
 		config: config, startedAt: startedAt, logger: logger,
@@ -50,18 +53,20 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	commandServer := transport.NewServer(config.CommandAddress)
 
 	reconcileLogger := logger.With("role", "reconcile")
-	go reconcileAtStartup(ctx, config, reconcileLogger)
+	go reconcileAtStartup(ctx, config, reconcileLogger, requestGate)
 
 	for _, role := range []string{
 		"atom", "selection", "submission", "extraction", "ownership",
 	} {
 		go superviseRole(ctx, role, logger, func() error {
-			return runRole(ctx, role, config, logger)
+			return runRole(ctx, role, config, logger, requestGate)
 		})
 	}
 
 	errorsCh := make(chan error, 2)
-	go func() { errorsCh <- runRole(ctx, "web", config, logger) }()
+	go func() {
+		errorsCh <- runRole(ctx, "web", config, logger, requestGate)
+	}()
 	go func() {
 		errorsCh <- commandServer.Start(ctx, func(payload []byte) []byte {
 			return admin.Handle(ctx, payload)
@@ -80,10 +85,11 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 }
 
 func reconcileAtStartup(ctx context.Context, config Config,
-	logger *slog.Logger,
+	logger *slog.Logger, requestGate *edgar.RequestGate,
 ) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	if err := ensureMasterIndex(ctx, client, config, logger); err != nil &&
+	client := outbound.NewClient(30 * time.Second)
+	if err := ensureMasterIndex(ctx, client, config, logger,
+		requestGate); err != nil &&
 		!errors.Is(err, context.Canceled) {
 		logger.Warn("master index bootstrap failed", "error", err)
 
@@ -136,7 +142,7 @@ func superviseRole(ctx context.Context, role string, logger *slog.Logger,
 }
 
 func runRole(ctx context.Context, role string, config Config,
-	logger *slog.Logger,
+	logger *slog.Logger, requestGate *edgar.RequestGate,
 ) error {
 	logger = logger.With("role", role)
 	ctx = ctxlog.WithLogger(ctx, logger)
@@ -152,6 +158,7 @@ func runRole(ctx context.Context, role string, config Config,
 		return ingest.RunAtom(ctx, ingest.AtomConfig{
 			Interval: config.Interval, DBPath: config.PollingDB,
 			UserAgent: config.UserAgent, Publisher: bus,
+			RequestGate: requestGate,
 		})
 	case "selection":
 		return pipeline.RunSelection(ctx, bus, pipeline.SelectionConfig{
@@ -170,7 +177,7 @@ func runRole(ctx context.Context, role string, config Config,
 		return pipeline.RunSubmission(ctx, bus, pipeline.SubmissionConfig{
 			Directory: config.FilingsDirectory, UserAgent: config.UserAgent,
 			BaseURL: config.BaseURL, MaxAttempts: config.MaxAttempts,
-			Failures: failures,
+			Failures: failures, RequestGate: requestGate,
 		}, logger)
 	case "extraction":
 		failures, openErr := pipeline.Open(
@@ -200,7 +207,7 @@ func runRole(ctx context.Context, role string, config Config,
 			FilingsDirectory: config.FilingsDirectory,
 			DatabasePath:     config.OwnershipDB, UserAgent: config.UserAgent,
 			BaseURL: config.BaseURL, MaxAttempts: config.MaxAttempts,
-			Failures: failures,
+			Failures: failures, RequestGate: requestGate,
 		}, logger)
 	case "web":
 		return runWeb(ctx, bus, config, logger)

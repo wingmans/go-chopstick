@@ -29,6 +29,12 @@ func TestSelectionDecision(t *testing.T) {
 			reason: "company is outside EDGAR_SET=us-gaap",
 		},
 		{
+			name: "ownership", event: Event{
+				CIK: "320193", FormType: "4",
+			}, selected: false,
+			reason: "form type \"4\" is handled by the ownership pipeline",
+		},
+		{
 			name: "unsupported", event: Event{
 				CIK: "320193", FormType: "S-1",
 			}, selected: false,

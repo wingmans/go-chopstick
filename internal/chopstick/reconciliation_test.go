@@ -30,9 +30,14 @@ func TestDiscoveryScopeSeparatesFinancialAndOwnershipForms(t *testing.T) {
 	}{
 		{name: "financial member", record: record("320193", "10-K/A"), want: true},
 		{name: "financial outside set", record: record("1", "10-K"), want: false},
-		{name: "global institutional", record: record("1", "13F-HR"), want: true},
-		{name: "global insider", record: record("1", "4/A"), want: true},
-		{name: "global beneficial", record: record("1", "SCHEDULE 13G"), want: true},
+		{name: "member form 4", record: record("320193", "4/A"), want: true},
+		{name: "outside form 4", record: record("1", "4/A"), want: false},
+		{name: "member schedule 13d", record: record("320193", "SCHEDULE 13D/A"), want: true},
+		{name: "member schedule 13g", record: record("320193", "SCHEDULE 13G"), want: true},
+		{name: "legacy schedule", record: record("320193", "SC 13G"), want: false},
+		{name: "deferred form 3", record: record("320193", "3"), want: false},
+		{name: "deferred form 5", record: record("320193", "5"), want: false},
+		{name: "deferred institutional", record: record("320193", "13F-HR"), want: false},
 		{name: "on demand", record: record("320193", "S-1"), want: false},
 	}
 

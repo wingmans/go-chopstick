@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 const (
@@ -38,6 +39,7 @@ type Config struct {
 	Stitch        bool
 	BaseURL       string
 	Noop          bool
+	RequestGate   *RequestGate
 }
 
 // Archive describes one quarterly EDGAR index archive.
@@ -95,10 +97,11 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 	}
 
 	if client == nil {
-		client = http.DefaultClient
+		client = outbound.NewClient(30 * time.Second)
 	}
 
-	edgarClient := newEDGARClient(client, cfg.UserAgent)
+	edgarClient := newEDGARClientWithGate(client, cfg.UserAgent,
+		cfg.RequestGate)
 
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = DefaultBaseURL
@@ -199,12 +202,6 @@ func DownloadIndex(ctx context.Context, client *http.Client, cfg Config) error {
 				"completed", completed, "total", len(archives),
 				"cached", cached, "extracted", extracted,
 				"downloaded", downloaded)
-		}
-
-		if network && i < len(archives)-1 {
-			if err := waitForRequestBudget(ctx, time.Since(started)); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -361,26 +358,6 @@ func downloadArchive(ctx context.Context, client edgarClient,
 	}
 
 	return false, path, nil
-}
-
-func waitForRequestBudget(ctx context.Context, elapsed time.Duration) error {
-	wait := requestBudget - elapsed
-	if wait <= 0 {
-		return nil
-	}
-
-	ctxlog.FromContext(ctx).Debug("pacing next SEC request",
-		"wait_ms", wait.Milliseconds())
-
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 func downloadZip(ctx context.Context, client edgarClient, url, destination string) error {

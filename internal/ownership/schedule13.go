@@ -48,7 +48,7 @@ func parseSchedule13(ctx context.Context, path string,
 		return errors.New("schedule 13 has no issuer")
 	}
 
-	issuerCIK := issuer.value("issuerCIK")
+	issuerCIK := firstValue(issuer, "issuerCIK", "issuerCik")
 	issuerName := issuer.value("issuerName")
 	filing.Parties = append(filing.Parties, Party{
 		Key: "issuer", CIK: issuerCIK, Name: issuerName, Role: "issuer",
@@ -68,7 +68,8 @@ func parseSchedule13(ctx context.Context, path string,
 		AlternateCUSIPs: append([]string(nil), cusips[1:]...),
 	})
 
-	eventDate := normalizeDate(cover.value("dateOfEvent"))
+	eventDate := normalizeDate(firstValue(cover, "dateOfEvent",
+		"eventDateRequiresFilingThisStatement"))
 	if eventDate != "" {
 		filing.ReportDate = eventDate
 	}
@@ -78,33 +79,39 @@ func parseSchedule13(ctx context.Context, path string,
 		filing.AmendmentType = "STATE UPDATE"
 	}
 
-	reportingPersons := formData.path("reportingPersons")
-	if reportingPersons == nil {
+	reportingPersons := scheduleReportingPersons(formData)
+	if len(reportingPersons) == 0 {
 		return errors.New("schedule 13 has no reporting persons")
 	}
 
-	for index, person := range reportingPersons.childrenNamed(
-		"reportingPersonInfo") {
+	for index, person := range reportingPersons {
 		key := fmt.Sprintf("owner:%d", index+1)
 		types := childTexts(person, "typeOfReportingPerson")
+
+		voting := person.child("reportingPersonBeneficiallyOwnedNumberOfShares")
+		if voting == nil {
+			voting = person
+		}
+
 		filing.Parties = append(filing.Parties, Party{
 			Key: key, CIK: person.value("reportingPersonCIK"),
 			Name: person.value("reportingPersonName"),
 			Role: "reporting_owner", Type: strings.Join(types, ","),
-			MemberOfGroup: person.value("memberOfGroup"),
+			MemberOfGroup: firstValue(person, "memberOfGroup", "memberGroup"),
 		})
 		filing.BeneficialReports = append(filing.BeneficialReports,
 			BeneficialReport{
 				Row: index + 1, IssuerKey: "issuer", OwnerKey: key,
 				SecurityKey: "security", CUSIP: primaryCUSIP,
-				EventDate:         eventDate,
-				Shares:            person.value("aggregateAmountOwned"),
-				Percent:           person.value("percentOfClass"),
-				SoleVotingPower:   person.value("soleVotingPower"),
-				SharedVotingPower: person.value("sharedVotingPower"),
-				SoleDispositivePower: person.value(
+				EventDate: eventDate,
+				Shares: firstValue(person, "aggregateAmountOwned",
+					"reportingPersonBeneficiallyOwnedAggregateNumberOfShares"),
+				Percent:           firstValue(person, "percentOfClass", "classPercent"),
+				SoleVotingPower:   voting.value("soleVotingPower"),
+				SharedVotingPower: voting.value("sharedVotingPower"),
+				SoleDispositivePower: voting.value(
 					"soleDispositivePower"),
-				SharedDispositivePower: person.value(
+				SharedDispositivePower: voting.value(
 					"sharedDispositivePower"),
 				ReportingPersonType: strings.Join(types, ","),
 				FilerCategory: strings.Join(
@@ -125,14 +132,39 @@ func scheduleNarratives(formData *xmlElement) []BeneficialNarrative {
 	var result []BeneficialNarrative
 
 	for _, item := range formData.children {
-		if !strings.HasPrefix(item.name, "item") {
-			continue
+		switch {
+		case strings.HasPrefix(item.name, "item") && item.name != "items":
+			collectScheduleNarratives(item, item.name, "", &result)
+		case item.name == "items" || item.name == "items1To7":
+			for _, nested := range item.children {
+				if strings.HasPrefix(nested.name, "item") {
+					collectScheduleNarratives(nested, nested.name, "", &result)
+				}
+			}
 		}
-
-		collectScheduleNarratives(item, item.name, "", &result)
 	}
 
 	return result
+}
+
+func scheduleReportingPersons(formData *xmlElement) []*xmlElement {
+	if reportingPersons := formData.child("reportingPersons"); reportingPersons != nil {
+		if people := reportingPersons.childrenNamed("reportingPersonInfo"); len(people) > 0 {
+			return people
+		}
+	}
+
+	return formData.childrenNamed("coverPageHeaderReportingPersonDetails")
+}
+
+func firstValue(element *xmlElement, names ...string) string {
+	for _, name := range names {
+		if value := element.value(name); value != "" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func collectScheduleNarratives(element *xmlElement, item, path string,

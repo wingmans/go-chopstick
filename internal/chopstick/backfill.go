@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"wingman.com/chopstick/internal/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/outbound"
 )
 
 // Backfill downloads the historical index, publishes discoveries, and drains
@@ -45,7 +45,8 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 	logger.Info("starting backfill", "set", config.SetName,
 		"from_year", config.FromYear, "through", "current available data")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := outbound.NewClient(30 * time.Second)
+	requestGate := edgar.NewRequestGate()
 
 	if err := runBackfillStage(logger, "index", func() error {
 		return edgar.DownloadIndex(ctx, client, edgar.Config{
@@ -57,6 +58,7 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 			RefreshLatest: false,
 			Stitch:        true,
 			BaseURL:       config.BaseURL,
+			RequestGate:   requestGate,
 		})
 	}); err != nil {
 		return fmt.Errorf("index stage: %w", err)
@@ -96,6 +98,7 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 			Directory: config.FilingsDirectory, UserAgent: config.UserAgent,
 			BaseURL: config.BaseURL, Drain: true,
 			MaxAttempts: config.MaxAttempts, Failures: failures,
+			RequestGate: requestGate,
 		}, logger.With("role", "download"))
 	}); err != nil {
 		return fmt.Errorf("download stage: %w", err)
@@ -121,6 +124,7 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 			Drain:            true,
 			MaxAttempts:      config.MaxAttempts,
 			Failures:         failures,
+			RequestGate:      requestGate,
 		}, logger.With("role", "ownership"))
 	}); err != nil {
 		return fmt.Errorf("ownership stage: %w", err)

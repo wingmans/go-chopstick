@@ -65,7 +65,7 @@ func Viewer(directory, cik, accession string) (http.Handler, error) {
 			Type: document.Type, Sequence: document.Sequence,
 			Filename: document.Filename, Description: document.Description,
 			Size: formatBytes(document.Bytes),
-			URL:  "/files/" + url.PathEscape(document.Filename),
+			URL:  "files/" + url.PathEscape(document.Filename),
 			Image: strings.HasPrefix(mime.TypeByExtension(
 				filepath.Ext(document.Filename)), "image/"),
 		}
@@ -92,8 +92,15 @@ func Viewer(directory, cik, accession string) (http.Handler, error) {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/files/", http.StripPrefix("/files/",
-		http.FileServer(http.Dir(directory))))
+	files := http.StripPrefix("/files/", http.FileServer(http.Dir(directory)))
+
+	mux.Handle("/files/", http.HandlerFunc(func(w http.ResponseWriter,
+		r *http.Request,
+	) {
+		w.Header().Set("Content-Security-Policy", "sandbox")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		files.ServeHTTP(w, r)
+	}))
 	mux.Handle("/viewer-assets/", http.StripPrefix("/viewer-assets/",
 		http.FileServer(http.FS(assets))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

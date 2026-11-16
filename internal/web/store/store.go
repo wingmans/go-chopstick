@@ -45,7 +45,8 @@ type Summary struct {
 }
 
 type JSONDirectory struct {
-	parsedDir string
+	parsedDir  string
+	filingsDir string
 }
 
 var (
@@ -55,7 +56,10 @@ var (
 
 // NewJSONDirectory creates a Store backed by the generated JSON directory.
 func NewJSONDirectory(parsedDir string) *JSONDirectory {
-	return &JSONDirectory{parsedDir: parsedDir}
+	return &JSONDirectory{
+		parsedDir:  parsedDir,
+		filingsDir: filepath.Join(filepath.Dir(parsedDir), "cache", "filings"),
+	}
 }
 
 // LoadDividendView reads the company-level dividend register.
@@ -239,7 +243,7 @@ func (s *JSONDirectory) SourcePath(ctx context.Context, filing *parser.ParsedFil
 	case "absolute":
 		source = filing.SourcePath
 	case "filings":
-		source = filepath.Join(filepath.Dir(s.parsedDir), "filings",
+		source = filepath.Join(s.filingsDir,
 			filepath.FromSlash(filing.SourcePath))
 	default:
 		return "", os.ErrNotExist

@@ -272,6 +272,6 @@ type failuresListCLI struct {
 	Limit          int    `default:"50"                        help:"Maximum failures to show." placeholder:"count"`
 }
 type failuresRetryCLI struct {
-	CommandAddress string `default:"${command_address}" help:"chopd command address."  placeholder:"host:port"`
-	Stage          string `enum:"download,process"      help:"Failure stage to retry." placeholder:"stage"     required:""`
+	CommandAddress string `default:"${command_address}"      help:"chopd command address."  placeholder:"host:port"`
+	Stage          string `enum:"download,process,ownership" help:"Failure stage to retry." placeholder:"stage"     required:""`
 }

@@ -17,7 +17,6 @@ import (
 	"wingman.com/chopstick/internal/chopstick"
 	"wingman.com/chopstick/internal/ctxlog"
 	"wingman.com/chopstick/internal/envfile"
-	"wingman.com/chopstick/internal/ownership"
 )
 
 type daemonCLI struct {
@@ -171,7 +170,7 @@ func run(config chopstick.Config) error {
 		"nats_url", config.NATSURL,
 		"set", config.SetName,
 		"financial_forms", config.FormTypes,
-		"ownership_forms", ownership.RecognizedFormTypes(),
+		"ownership_forms", chopstick.AutomaticOwnershipFormTypes(),
 		"on_demand_forms", []string{"S-1", "S-1/A"},
 	)
 

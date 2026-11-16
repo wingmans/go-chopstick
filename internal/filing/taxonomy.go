@@ -121,10 +121,10 @@ func (t Taxonomy) MetricReference(namespace, concept string) (MetricDefinition, 
 	}
 
 	return MetricDefinition{
-			Key: "", Label: "", Statement: "", CoverageTier: "", Concepts: nil,
-		}, ConceptReference{
-			NamespaceFamily: "", Name: "", Priority: 0,
-		}, false
+		Key: "", Label: "", Statement: "", CoverageTier: "", Concepts: nil,
+	}, ConceptReference{
+		NamespaceFamily: "", Name: "", Priority: 0,
+	}, false
 }
 
 // namespaceMatches checks if a given namespace matches the expected namespace family.
