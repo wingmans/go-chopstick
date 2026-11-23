@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/appdata"
-	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
+	"wingman.com/chopstick/internal/chopstick/web"
 	"wingman.com/chopstick/internal/edgar/news"
-	"wingman.com/chopstick/internal/web"
+	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
+	"wingman.com/chopstick/internal/platform/appdata"
 )
 
 func runWeb(ctx context.Context, bus *pipeline.NATS, config Config,

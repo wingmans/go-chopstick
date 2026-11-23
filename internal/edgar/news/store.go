@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/edgar/news/dbgen"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 const maxSQLiteInteger = uint64(1<<63 - 1)

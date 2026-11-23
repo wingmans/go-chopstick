@@ -10,12 +10,14 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		ActiveSection: "status", UseHTMX: true,
 	}
 
-	component := statusPage(page, s.news != nil)
+	ctx := r.Context()
+
+	component := statusPage(ctx, page, s.news != nil)
 	if isWorkspaceRequest(r) {
-		component = statusPageBody(s.news != nil)
+		component = statusPageBody(ctx, s.news != nil)
 	}
 
-	if err := component.Render(r.Context(), w); err != nil {
+	if err := component.Render(ctx, w); err != nil {
 		s.writeError(w, err)
 	}
 }

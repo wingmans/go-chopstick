@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/platform/outbound"
 	"wingman.com/chopstick/internal/edgar/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/edgar/ownership/importer"
 	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
+	"wingman.com/chopstick/internal/ingest/sec"
+	"wingman.com/chopstick/internal/platform/outbound"
 )
 
 // RunOwnershipConsumer imports recognized ownership filings independently.

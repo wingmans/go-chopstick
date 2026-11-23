@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
 	filingnormalize "wingman.com/chopstick/internal/edgar/filing/normalize"
 	filingstore "wingman.com/chopstick/internal/edgar/filing/store"
 	"wingman.com/chopstick/internal/edgar/parser"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 const (

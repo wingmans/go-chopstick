@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -8,11 +9,11 @@ import (
 	templpkg "github.com/a-h/templ"
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	"wingman.com/chopstick/internal/edgar/parser"
-	"wingman.com/chopstick/internal/web/templates/base"
+	"wingman.com/chopstick/internal/chopstick/web/templates/base"
 )
 
-templ pageLayout(page pageChrome, content templpkg.Component) {
-	@base.IndexPage(base.Page{
+templ pageLayout(renderCtx context.Context, page pageChrome, content templpkg.Component) {
+	@base.IndexPage(renderCtx, base.Page{
 		Title: page.Title,
 		Theme: "light",
 		BodyClass: page.BodyClass,
@@ -22,11 +23,11 @@ templ pageLayout(page pageChrome, content templpkg.Component) {
 	}, content)
 }
 
-templ dashboardPage(data dashboardData) {
-	@pageLayout(data.Page, dashboardPageBody(data))
+templ dashboardPage(renderCtx context.Context, data dashboardData) {
+	@pageLayout(renderCtx, data.Page, dashboardPageBody(renderCtx, data))
 }
 
-templ dashboardPageBody(data dashboardData) {
+templ dashboardPageBody(renderCtx context.Context, data dashboardData) {
 	<section id="workspace" class="workspace">
 		<header class="module-header">
 			<strong>EDGAR / local filings</strong>
@@ -47,13 +48,13 @@ templ dashboardPageBody(data dashboardData) {
 			</form>
 		</header>
 		<main class="module-content">
-			@dashboardFragment(data)
+			@dashboardFragment(renderCtx, data)
 		</main>
 		<script src="/assets/dashboard.js"></script>
 	</section>
 }
 
-templ dashboardFragment(data dashboardData) {
+templ dashboardFragment(renderCtx context.Context, data dashboardData) {
 	<div id="dashboard">
 		<div class="context" id="dataset-context">
 			<span>Local parsed filings</span>
@@ -74,11 +75,11 @@ templ dashboardFragment(data dashboardData) {
 			<button id="clear-recent" type="button">Clear</button>
 		</nav>
 		<section class="summary">
-			@summaryCard("Company", "company", valueOrAll(data.Company))
-			@summaryCard("CIK", "selected-cik", valueOrAll(data.CIK))
-			@summaryCard("Form", "selected-form", valueOrAll(data.FormType))
-			@summaryCard("Filings", "count", fmt.Sprint(data.FilingCount))
-			@summaryCard("Source", "", "Local")
+			@summaryCard(renderCtx, "Company", "company", valueOrAll(data.Company))
+			@summaryCard(renderCtx, "CIK", "selected-cik", valueOrAll(data.CIK))
+			@summaryCard(renderCtx, "Form", "selected-form", valueOrAll(data.FormType))
+			@summaryCard(renderCtx, "Filings", "count", fmt.Sprint(data.FilingCount))
+			@summaryCard(renderCtx, "Source", "", "Local")
 		</section>
 		<section class="panel">
 			<table>
@@ -117,7 +118,7 @@ templ dashboardFragment(data dashboardData) {
 	</div>
 }
 
-templ summaryCard(label string, id string, value string) {
+templ summaryCard(renderCtx context.Context, label string, id string, value string) {
 	<div class="card"><div class="label">{ label }</div>
 		if id != "" {
 			<div class="value" id={ id }>{ value }</div>
@@ -127,11 +128,11 @@ templ summaryCard(label string, id string, value string) {
 	</div>
 }
 
-templ statusPage(page pageChrome, newsAvailable bool) {
-	@pageLayout(page, statusPageBody(newsAvailable))
+templ statusPage(renderCtx context.Context, page pageChrome, newsAvailable bool) {
+	@pageLayout(renderCtx, page, statusPageBody(renderCtx, newsAvailable))
 }
 
-templ statusPageBody(newsAvailable bool) {
+templ statusPageBody(renderCtx context.Context, newsAvailable bool) {
 	<section id="workspace" class="workspace">
 	<header class="module-header"><strong>EDGAR / status</strong></header>
 	<main class="module-content">
@@ -152,11 +153,11 @@ templ statusPageBody(newsAvailable bool) {
 	</section>
 }
 
-templ newsPage(data newsPageData) {
-	@pageLayout(data.Page, newsPageBody(data))
+templ newsPage(renderCtx context.Context, data newsPageData) {
+	@pageLayout(renderCtx, data.Page, newsPageBody(renderCtx, data))
 }
 
-templ newsPageBody(data newsPageData) {
+templ newsPageBody(renderCtx context.Context, data newsPageData) {
 	<section id="workspace" class="workspace news-workspace">
 		<header class="module-header"><strong>EDGAR / filing news</strong></header>
 		<main class="module-content news-content">
@@ -190,12 +191,12 @@ templ newsPageBody(data newsPageData) {
 						value={ data.Filter.To }/></label>
 					<button type="submit">Filter</button>
 				</form>
-				@newsFeed(data)
+				@newsFeed(renderCtx, data)
 		</main>
 	</section>
 }
 
-templ newsFeed(data newsPageData) {
+templ newsFeed(renderCtx context.Context, data newsPageData) {
 	<section id="feed" aria-live="polite">
 		if len(data.Items) == 0 {
 			<p class="empty">No filings match these filters.</p>
@@ -257,11 +258,11 @@ func newsDownloadURL(accession string) templpkg.SafeURL {
 	return templpkg.SafeURL("/news/actions/download/" + accession)
 }
 
-templ companyPage(data companyPageData) {
-	@pageLayout(data.Page, companyPageBody(data))
+templ companyPage(renderCtx context.Context, data companyPageData) {
+	@pageLayout(renderCtx, data.Page, companyPageBody(renderCtx, data))
 }
 
-templ companyPageBody(data companyPageData) {
+templ companyPageBody(renderCtx context.Context, data companyPageData) {
 	<section id="workspace" class="workspace">
 	<header class="module-header"><a class="back" href="/">← Filing search</a></header>
 	<main id="company-history" data-cik={ data.History.CIK }>
@@ -272,7 +273,7 @@ templ companyPageBody(data companyPageData) {
 			{ data.History.Company }
 		</h1><div class="subtitle">CIK { data.History.CIK } · local 10-K history</div></section>
 		if data.HasDividends {
-			@companyDividends(data)
+			@companyDividends(renderCtx, data)
 		}
 		for _, statement := range data.History.Statements {
 			<section class="section" data-statement={ statement.Title }>
@@ -315,7 +316,7 @@ templ companyPageBody(data companyPageData) {
 	</section>
 }
 
-templ companyDividends(data companyPageData) {
+templ companyDividends(renderCtx context.Context, data companyPageData) {
 	<section class="section" id="dividend-register">
 		<h2 class="section-label">Dividends</h2>
 		<div class="table-wrap"><table class="history-table dividend-history-table"
@@ -351,11 +352,11 @@ templ companyDividends(data companyPageData) {
 	</section>
 }
 
-templ rawInspectorPage(data rawInspectorData) {
-	@pageLayout(data.Page, rawInspectorPageBody(data))
+templ rawInspectorPage(renderCtx context.Context, data rawInspectorData) {
+	@pageLayout(renderCtx, data.Page, rawInspectorPageBody(renderCtx, data))
 }
 
-templ rawInspectorPageBody(data rawInspectorData) {
+templ rawInspectorPageBody(renderCtx context.Context, data rawInspectorData) {
 	<section id="workspace" class="workspace">
 	<header class="module-header"><a class="back" href="/">← Filing search</a></header>
 	<main id="raw-filing-inspector">
@@ -412,11 +413,11 @@ func rawDocumentURL(cik string, accession string, index int) templpkg.SafeURL {
 		"/documents/" + strconv.Itoa(index))
 }
 
-templ detailPage(data detailData) {
-	@pageLayout(data.Page, detailPageBody(data))
+templ detailPage(renderCtx context.Context, data detailData) {
+	@pageLayout(renderCtx, data.Page, detailPageBody(renderCtx, data))
 }
 
-templ detailPageBody(data detailData) {
+templ detailPageBody(renderCtx context.Context, data detailData) {
 	<section id="workspace" class="workspace">
 	<header class="module-header"><a class="back" href={ templpkg.SafeURL(data.BackURL) }
 		hx-get={ data.BackURL } hx-target="#workspace" hx-swap="outerHTML"
@@ -429,15 +430,15 @@ templ detailPageBody(data detailData) {
 				{ data.Filing.Metadata.Accession } · compact local view</div>
 		</section>
 		<section class="summary" id="filing-summary-cards">
-			@summaryCard("CIK", "filing-cik", data.Filing.Metadata.CIK)
-			@summaryCard("Filed", "filing-date", data.Filing.Metadata.FilingDate)
-			@summaryCard("Report date", "report-date", data.Filing.Metadata.ReportDate)
-			@summaryCard("Documents", "document-count", fmt.Sprint(data.DocumentCount))
-			@summaryCard("XBRL facts", "fact-count", fmt.Sprint(data.Facts))
+			@summaryCard(renderCtx, "CIK", "filing-cik", data.Filing.Metadata.CIK)
+			@summaryCard(renderCtx, "Filed", "filing-date", data.Filing.Metadata.FilingDate)
+			@summaryCard(renderCtx, "Report date", "report-date", data.Filing.Metadata.ReportDate)
+			@summaryCard(renderCtx, "Documents", "document-count", fmt.Sprint(data.DocumentCount))
+			@summaryCard(renderCtx, "XBRL facts", "fact-count", fmt.Sprint(data.Facts))
 		</section>
 		<section id="financial-summary" aria-label="Financial statements">
 			for _, statement := range data.Statements {
-				@detailStatement(statement)
+				@detailStatement(renderCtx, statement)
 			}
 		</section>
 		<section class="panel" id="key-ratios">
@@ -459,25 +460,25 @@ templ detailPageBody(data detailData) {
 			</table></div>
 		</section>
 		if data.HasDividends {
-			@detailDividends(data)
+			@detailDividends(renderCtx, data)
 		}
-		@detailDocuments(data)
+		@detailDocuments(renderCtx, data)
 		<section class="panel" id="parsed-summary">
 			<div class="panel-heading"><h2>Parsed structure</h2>
 				<span class="muted">Compact view metadata</span></div>
 			<div class="summary" style="margin:0;border:0;border-radius:0">
-				@summaryCard("XBRL instances", "instance-count", fmt.Sprint(data.InstanceCount))
-				@summaryCard("Contexts", "context-count", fmt.Sprint(data.ContextCount))
-				@summaryCard("Diagnostics", "diagnostic-count", fmt.Sprint(data.Diagnostics))
-				@summaryCard("Parser version", "parser-version", data.Filing.ParserVersion)
-				@summaryCard("Status", "filing-status", data.Filing.Status)
+				@summaryCard(renderCtx, "XBRL instances", "instance-count", fmt.Sprint(data.InstanceCount))
+				@summaryCard(renderCtx, "Contexts", "context-count", fmt.Sprint(data.ContextCount))
+				@summaryCard(renderCtx, "Diagnostics", "diagnostic-count", fmt.Sprint(data.Diagnostics))
+				@summaryCard(renderCtx, "Parser version", "parser-version", data.Filing.ParserVersion)
+				@summaryCard(renderCtx, "Status", "filing-status", data.Filing.Status)
 			</div>
 		</section>
 	</main>
 	</section>
 }
 
-templ detailStatement(statement filingview.StatementView) {
+templ detailStatement(renderCtx context.Context, statement filingview.StatementView) {
 	<section class="panel statement" data-statement={ statement.Title }>
 		<div class="panel-heading"><h2>{ statement.Title }</h2>
 			<span class="muted">Default-context facts by period</span></div>
@@ -519,7 +520,7 @@ templ detailStatement(statement filingview.StatementView) {
 	</section>
 }
 
-templ detailDividends(data detailData) {
+templ detailDividends(renderCtx context.Context, data detailData) {
 	<section class="panel" id="dividend-register">
 		<div class="panel-heading"><h2>Dividends</h2>
 			<span class="muted">Company register from local filings</span></div>
@@ -556,7 +557,7 @@ templ detailDividends(data detailData) {
 	</section>
 }
 
-templ detailDocuments(data detailData) {
+templ detailDocuments(renderCtx context.Context, data detailData) {
 	<section class="panel" id="filing-documents">
 		<div class="panel-heading"><h2>Filing documents</h2>
 			<span class="muted">Optional raw filing inspector</span></div>
@@ -588,11 +589,11 @@ func artifactViewerURL(cik string, accession string) templpkg.SafeURL {
 		accession + "/")
 }
 
-templ ownershipDirectoryPage(data ownershipDirectoryData) {
-	@pageLayout(data.Page, ownershipDirectoryBody(data))
+templ ownershipDirectoryPage(renderCtx context.Context, data ownershipDirectoryData) {
+	@pageLayout(renderCtx, data.Page, ownershipDirectoryBody(renderCtx, data))
 }
 
-templ ownershipDirectoryBody(data ownershipDirectoryData) {
+templ ownershipDirectoryBody(renderCtx context.Context, data ownershipDirectoryData) {
 	<section id="workspace" class="workspace">
 	<header class="module-header"><strong>Company ownership</strong>
 		if data.SetName != "" {
@@ -635,11 +636,11 @@ templ ownershipDirectoryBody(data ownershipDirectoryData) {
 	</section>
 }
 
-templ ownershipCompanyPage(data ownershipCompanyData) {
-	@pageLayout(data.Page, ownershipCompanyBody(data))
+templ ownershipCompanyPage(renderCtx context.Context, data ownershipCompanyData) {
+	@pageLayout(renderCtx, data.Page, ownershipCompanyBody(renderCtx, data))
 }
 
-templ ownershipCompanyBody(data ownershipCompanyData) {
+templ ownershipCompanyBody(renderCtx context.Context, data ownershipCompanyData) {
 	<section id="workspace" class="workspace">
 	<header class="module-header"><a class="back" href="/ownership">← Company ownership</a>
 		<a href={ templpkg.SafeURL("/companies/" + data.Member.CIK) }>Financial history</a>
@@ -665,7 +666,7 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 				<tr><td>{ item.OwnerName }</td><td>{ item.EventDate }</td><td>{ item.Security }</td>
 					<td>{ item.CUSIP }</td><td class="num">{ item.Shares }</td>
 					<td class="num">{ item.Percentage }</td><td>
-						@ownershipFilingLink(data.Member.CIK, item.SourceURL, item.FormType,
+						@ownershipFilingLink(renderCtx, data.Member.CIK, item.SourceURL, item.FormType,
 							item.Accession, item.FilingDate)
 					</td></tr>
 			}
@@ -684,7 +685,7 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 						(derivative)
 					}
 					</td><td class="num">{ item.Amount }</td><td>{ item.DirectOrIndirect }</td><td>
-						@ownershipFilingLink(data.Member.CIK, item.SourceURL, item.FormType,
+						@ownershipFilingLink(renderCtx, data.Member.CIK, item.SourceURL, item.FormType,
 							item.Accession, item.FilingDate)
 					</td></tr>
 			}
@@ -701,7 +702,7 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 				<tr><td>{ item.OwnerName }</td><td>{ item.TransactionDate }</td><td>{ item.Security }</td>
 					<td>{ item.Code }</td><td>{ item.AcquiredDisposed }</td><td class="num">{ item.Amount }</td>
 					<td class="num">{ item.Price }</td><td class="num">{ item.SharesAfter }</td><td>
-						@ownershipFilingLink(data.Member.CIK, item.SourceURL, item.FormType,
+						@ownershipFilingLink(renderCtx, data.Member.CIK, item.SourceURL, item.FormType,
 							item.Accession, item.FilingDate)
 					</td></tr>
 			}
@@ -727,7 +728,7 @@ templ ownershipCompanyBody(data ownershipCompanyData) {
 	</section>
 }
 
-templ ownershipFilingLink(cik string, sourceURL string, formType string,
+templ ownershipFilingLink(renderCtx context.Context, cik string, sourceURL string, formType string,
 	accession string, filingDate string) {
 	if sourceURL != "" {
 		<a href={ templpkg.SafeURL(sourceURL) } target="_blank" rel="noopener"

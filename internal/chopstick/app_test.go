@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/edgar/ingest"
 	"wingman.com/chopstick/internal/ingest/sec"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/platform/transport"
 )
 

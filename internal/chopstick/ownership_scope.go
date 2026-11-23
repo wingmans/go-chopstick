@@ -1,8 +1,8 @@
 package chopstick
 
 import (
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/ownership"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 // AutomaticOwnershipFormTypes returns the issuer-scoped ownership forms that

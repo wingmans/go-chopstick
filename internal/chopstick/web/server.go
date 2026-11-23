@@ -14,9 +14,9 @@ import (
 	"strings"
 	"sync"
 
+	filingstore "wingman.com/chopstick/internal/chopstick/web/store"
 	"wingman.com/chopstick/internal/constituents"
 	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
-	filingstore "wingman.com/chopstick/internal/web/store"
 	"wingman.com/chopstick/internal/platform/xerr"
 )
 

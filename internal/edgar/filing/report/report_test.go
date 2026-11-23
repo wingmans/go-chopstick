@@ -12,8 +12,8 @@ import (
 
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	filingstore "wingman.com/chopstick/internal/edgar/filing/store"
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/parser"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {

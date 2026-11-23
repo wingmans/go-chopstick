@@ -9,16 +9,16 @@ import (
 	"os"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/chopstick"
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	filingworkflow "wingman.com/chopstick/internal/edgar/filing/process"
 	filingreport "wingman.com/chopstick/internal/edgar/filing/report"
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/edgar/ownership/importer"
 	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
+	"wingman.com/chopstick/internal/ingest/sec"
+	"wingman.com/chopstick/internal/platform/appdata"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/platform/transport"
 )
 

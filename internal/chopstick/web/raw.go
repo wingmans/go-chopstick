@@ -73,12 +73,14 @@ func (s *Server) rawInspector(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	component := rawInspectorPage(data)
+	ctx := r.Context()
+
+	component := rawInspectorPage(ctx, data)
 	if isWorkspaceRequest(r) {
-		component = rawInspectorPageBody(data)
+		component = rawInspectorPageBody(ctx, data)
 	}
 
-	if err := component.Render(r.Context(), w); err != nil {
+	if err := component.Render(ctx, w); err != nil {
 		s.writeError(w, err)
 	}
 }

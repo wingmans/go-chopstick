@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
+	filingstore "wingman.com/chopstick/internal/chopstick/web/store"
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
 	"wingman.com/chopstick/internal/edgar/news"
 	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
 	"wingman.com/chopstick/internal/edgar/parser"
-	filingstore "wingman.com/chopstick/internal/web/store"
 )
 
 type filingSummary struct {

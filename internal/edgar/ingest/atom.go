@@ -7,8 +7,8 @@ import (
 	"time"
 
 	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 // AtomConfig configures the continuous SEC Atom source.

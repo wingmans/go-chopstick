@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
 	"wingman.com/chopstick/internal/edgar/filing/store/dbgen"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 // Store is the SQLite-backed read model for normalized filing data.

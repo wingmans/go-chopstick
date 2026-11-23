@@ -43,7 +43,7 @@ Both commands should print the same version. Prefer the repository executable
 for generation as well:
 
 ```bash
-.tools/bin/templ generate ./internal/web
+.tools/bin/templ generate ./internal/chopstick/web
 ```
 
 Alternatively, all three version pins in `go.mod`, `go.sum`, and

@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/chopstick/internal/ingest/sec"
 	ownershipimporter "wingman.com/chopstick/internal/edgar/ownership/importer"
 	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 type noNetworkTransport struct {

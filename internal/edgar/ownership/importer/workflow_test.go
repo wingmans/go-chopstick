@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/chopstick/internal/ingest/sec"
 	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 type rejectingTransport struct {

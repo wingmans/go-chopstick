@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/chopstick/internal/chopstick/web/artifactviewer"
 	"wingman.com/chopstick/internal/edgar/artifacts"
 	"wingman.com/chopstick/internal/edgar/parser"
-	"wingman.com/chopstick/internal/web/artifactviewer"
 )
 
 type artifactCommandConfig struct {

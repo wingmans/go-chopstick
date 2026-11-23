@@ -41,12 +41,14 @@ func (s *Server) ownershipDirectory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	component := ownershipDirectoryPage(data)
+	ctx := r.Context()
+
+	component := ownershipDirectoryPage(ctx, data)
 	if isWorkspaceRequest(r) {
-		component = ownershipDirectoryBody(data)
+		component = ownershipDirectoryBody(ctx, data)
 	}
 
-	if err := component.Render(r.Context(), w); err != nil {
+	if err := component.Render(ctx, w); err != nil {
 		s.writeError(w, err)
 	}
 }
@@ -102,12 +104,14 @@ func (s *Server) ownershipCompany(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	component := ownershipCompanyPage(data)
+	ctx := r.Context()
+
+	component := ownershipCompanyPage(ctx, data)
 	if isWorkspaceRequest(r) {
-		component = ownershipCompanyBody(data)
+		component = ownershipCompanyBody(ctx, data)
 	}
 
-	if err := component.Render(r.Context(), w); err != nil {
+	if err := component.Render(ctx, w); err != nil {
 		s.writeError(w, err)
 	}
 }

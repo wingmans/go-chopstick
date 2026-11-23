@@ -1,14 +1,14 @@
-# Chop
+# Chopstick
 
-The repository builds two Chop executables for SEC EDGAR data:
+The repository builds two Chopstick executables for SEC EDGAR data:
 
 - `chopd` is the long-running application. It runs every continuous role and
   the HTTP application in one foreground process.
 - `chop` is the operator and offline-data command-line interface.
 
 `cmd/chop` contains the Kong command hierarchy and adapts parsed options to
-typed use cases. `internal/operator` contains command workflows and operator
-rendering, but no command-line parser. See the
+typed use cases. `internal/chopstick/operator` contains command workflows and
+operator rendering, but no command-line parser. See the
 [architecture guide](architecture.md) for the package boundaries.
 The current index-first daemon work is described in the
 [daemon pipeline plan](daemon-pipeline-plan.md).

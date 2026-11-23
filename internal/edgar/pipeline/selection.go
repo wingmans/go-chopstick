@@ -10,8 +10,8 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/ownership"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 const SelectionDurable = "edgar-selection-v1"

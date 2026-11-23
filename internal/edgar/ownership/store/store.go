@@ -15,8 +15,8 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/edgar/ownership"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 const institutionalPositionBatchSize = 50

@@ -1,6 +1,10 @@
 package base
 
-import templpkg "github.com/a-h/templ"
+import (
+	"context"
+
+	templpkg "github.com/a-h/templ"
+)
 
 type Page struct {
 	Title         string
@@ -11,7 +15,7 @@ type Page struct {
 	Styles        []string
 }
 
-templ IndexPage(page Page, workspace templpkg.Component) {
+templ IndexPage(renderCtx context.Context, page Page, workspace templpkg.Component) {
 	<!DOCTYPE html>
 	<html lang="en" data-theme={ page.Theme }>
 		<head>
@@ -33,7 +37,7 @@ templ IndexPage(page Page, workspace templpkg.Component) {
 				<span>EDGAR local workspace</span>
 			</header>
 			<div class="application-shell">
-				@Sidebar(page.ActiveSection)
+				@Sidebar(renderCtx, page.ActiveSection)
 				@workspace
 			</div>
 		</body>

@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/ownership"
 	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
+	"wingman.com/chopstick/internal/ingest/sec"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 // Config controls one streaming ownership import and completion pass.

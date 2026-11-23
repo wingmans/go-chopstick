@@ -383,7 +383,9 @@ func TestEnvironmentDefaultsReachKong(t *testing.T) {
 func TestChoppieContainsNoCLIParser(t *testing.T) {
 	t.Parallel()
 
-	directory := filepath.Join("..", "..", "internal", "operator")
+	directory := filepath.Join(
+		"..", "..", "internal", "chopstick", "operator",
+	)
 
 	entries, err := os.ReadDir(directory)
 	if err != nil {

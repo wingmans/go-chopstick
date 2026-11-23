@@ -49,7 +49,7 @@ generate:
 	@command -v "$(SQLC)" >/dev/null 2>&1 || { \
 		echo 'sqlc is unavailable; run make deps' >&2; exit 1; \
 	}
-	$(TEMPL) generate ./internal/web
+	$(TEMPL) generate ./internal/chopstick/web
 	$(SQLC) generate
 
 check-generated: generate
@@ -93,7 +93,7 @@ test: generate
 
 clean:
 	rm -rf $(BIN_DIR) dist
-	find internal/web -type f -name '*_templ.go' -delete
+	find internal/chopstick/web -type f -name '*_templ.go' -delete
 
 nats-start:
 	bash scripts/nats-dev.sh start

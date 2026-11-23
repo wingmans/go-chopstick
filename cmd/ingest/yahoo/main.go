@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
+	marketyahoo "wingman.com/chopstick/internal/market"
 	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/platform/ctxlog"
-	marketyahoo "wingman.com/chopstick/internal/market"
 )
 
 type tickerFlags []string

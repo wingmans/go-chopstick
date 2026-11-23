@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	sourceyahoo "wingman.com/chopstick/internal/ingest/yahoo"
 	marketstore "wingman.com/chopstick/internal/market/store"
 	marketworker "wingman.com/chopstick/internal/market/worker"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 // workReader and workWriter keep the downloader independent of SQLite. A

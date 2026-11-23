@@ -12,10 +12,10 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	operator "wingman.com/chopstick/internal/chopstick/operator"
 	"wingman.com/chopstick/internal/platform/buildinfo"
 	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/platform/envfile"
-	operator "wingman.com/chopstick/internal/operator"
 	"wingman.com/chopstick/internal/platform/outbound"
 )
 

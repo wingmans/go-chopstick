@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ingest/wikipedia"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/platform/outbound"
 )
 

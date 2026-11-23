@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"wingman.com/chopstick/internal/chopstick/web/artifactviewer"
 	"wingman.com/chopstick/internal/edgar/artifacts"
-	"wingman.com/chopstick/internal/web/artifactviewer"
 )
 
 const artifactViewerRoute = "/viewer/"

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/market/store/dbgen"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 const dateLayout = "2006-01-02"

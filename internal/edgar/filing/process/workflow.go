@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/platform/outbound"
 )
 

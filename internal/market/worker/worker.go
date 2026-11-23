@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
 	marketstore "wingman.com/chopstick/internal/market/store"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 const defaultLeaseDuration = 15 * time.Minute

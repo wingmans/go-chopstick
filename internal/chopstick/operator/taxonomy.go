@@ -13,8 +13,8 @@ import (
 
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	filingquality "wingman.com/chopstick/internal/edgar/filing/quality"
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/parser"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 type taxonomyBatchReport struct {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/news"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 const NewsDurable = "edgar-news-v2"

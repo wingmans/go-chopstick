@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	"wingman.com/chopstick/internal/platform/ctxlog"
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/edgar/ownership/importer"
+	"wingman.com/chopstick/internal/ingest/sec"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 type ownershipCommandConfig struct {

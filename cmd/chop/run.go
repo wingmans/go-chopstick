@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/platform/appdata"
+	operator "wingman.com/chopstick/internal/chopstick/operator"
 	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
 	"wingman.com/chopstick/internal/ingest/sec"
 	marketyahoo "wingman.com/chopstick/internal/market"
-	operator "wingman.com/chopstick/internal/operator"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/platform/transport"
 )
 

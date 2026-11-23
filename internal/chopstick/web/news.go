@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/edgar/news"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 // DownloadRequester submits one explicit filing acquisition request.
@@ -80,16 +80,18 @@ func (s *NewsServer) index(w http.ResponseWriter, r *http.Request) {
 		SupportedForms: sec.SupportedFormTypes(),
 	}
 
-	component := newsPage(data)
+	ctx := r.Context()
+
+	component := newsPage(ctx, data)
 	if isWorkspaceRequest(r) {
-		component = newsPageBody(data)
+		component = newsPageBody(ctx, data)
 	} else if strings.EqualFold(r.Header.Get("Hx-Request"), "true") {
-		component = newsFeed(data)
+		component = newsFeed(ctx, data)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if err := component.Render(r.Context(), w); err != nil &&
+	if err := component.Render(ctx, w); err != nil &&
 		s.logger != nil {
 		s.logger.Error("render news", "error", err)
 	}

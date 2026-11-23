@@ -28,14 +28,18 @@ type goldenDetailResults struct {
 }
 
 func TestGoldenDetailPagePreservesSummaryValues(t *testing.T) {
-	filingPath := filepath.Join("..", "..", "golden", "formtypes", "sample_10-K.txt")
+	filingPath := filepath.Join(
+		"..", "..", "..", "golden", "formtypes", "sample_10-K.txt",
+	)
 
 	filing, err := parser.ParseSubmission(t.Context(), filingPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	resultsFile := filepath.Join("..", "..", "golden", "golden-results.json")
+	resultsFile := filepath.Join(
+		"..", "..", "..", "golden", "golden-results.json",
+	)
 
 	resultsData, err := os.ReadFile(resultsFile)
 	if err != nil {

@@ -61,12 +61,14 @@ The main ownership rules are:
 
 - `cmd` parses process input and adapts it to typed operations.
 - `internal/ingest` owns external source protocols and decoding.
+- `internal/edgar` owns filing discovery, parsing, processing, and archive
+  behavior.
+- `internal/market` owns prices and corporate actions.
+- `internal/constituents` owns the shared constituent model.
 - `internal/chopstick` composes and supervises the application.
-- filing, market, ownership, and constituent transformations remain with their
-  respective domains.
-- `internal/web` owns HTTP handlers, templates, assets, and viewers.
-- `internal/platform/outbound` is the only production external HTTP-client
-  factory.
+- `internal/chopstick/web` owns HTTP handlers, templates, assets, and viewers.
+- `internal/platform` owns technical support; its `outbound` package is the
+  only production external HTTP-client factory.
 
 See the [architecture guide](docs/architecture.md),
 [outbound gateway guide](docs/outbound-gateway.md), and

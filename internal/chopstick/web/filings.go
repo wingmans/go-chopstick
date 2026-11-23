@@ -18,17 +18,19 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	component := dashboardPage(data)
+	ctx := r.Context()
+
+	component := dashboardPage(ctx, data)
 	if isWorkspaceRequest(r) {
-		component = dashboardPageBody(data)
+		component = dashboardPageBody(ctx, data)
 	} else if r.Header.Get("Hx-Request") == "true" &&
 		strings.Contains(r.Header.Get("Hx-Target"), "#dashboard") {
-		component = dashboardFragment(data)
+		component = dashboardFragment(ctx, data)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if err := component.Render(r.Context(), w); err != nil {
+	if err := component.Render(ctx, w); err != nil {
 		s.writeError(w, err)
 	}
 }
@@ -90,12 +92,14 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	component := companyPage(data)
+	ctx := r.Context()
+
+	component := companyPage(ctx, data)
 	if isWorkspaceRequest(r) {
-		component = companyPageBody(data)
+		component = companyPageBody(ctx, data)
 	}
 
-	if err := component.Render(r.Context(), w); err != nil {
+	if err := component.Render(ctx, w); err != nil {
 		s.writeError(w, err)
 	}
 }
@@ -181,12 +185,14 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	component := detailPage(data)
+	ctx := r.Context()
+
+	component := detailPage(ctx, data)
 	if isWorkspaceRequest(r) {
-		component = detailPageBody(data)
+		component = detailPageBody(ctx, data)
 	}
 
-	if err := component.Render(r.Context(), w); err != nil {
+	if err := component.Render(ctx, w); err != nil {
 		s.writeError(w, err)
 	}
 }
