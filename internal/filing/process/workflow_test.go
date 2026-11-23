@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	. "wingman.com/chopstick/internal/edgar"
+	. "wingman.com/chopstick/internal/ingest/sec"
 )
 
 func workflowConfig(t *testing.T) (FilingDownloadConfig, ProcessingConfig) {

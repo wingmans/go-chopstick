@@ -14,13 +14,13 @@ import (
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 const reconciliationProgressEvery = 5 * time.Second
 
 func ensureMasterIndex(ctx context.Context, client *http.Client,
-	config Config, logger *slog.Logger, requestGate *edgar.RequestGate,
+	config Config, logger *slog.Logger, requestGate *sec.RequestGate,
 ) error {
 	if _, err := os.Stat(config.MasterPath); err == nil {
 		return nil
@@ -31,7 +31,7 @@ func ensureMasterIndex(ctx context.Context, client *http.Client,
 	logger.Info("starting missing master index bootstrap",
 		"from_year", config.FromYear, "path", config.MasterPath)
 
-	err := edgar.DownloadIndex(ctx, client, edgar.Config{
+	err := sec.DownloadIndex(ctx, client, sec.Config{
 		Directory:     config.IndexDirectory,
 		ZipDirectory:  config.IndexZipDirectory,
 		MasterPath:    config.MasterPath,
@@ -87,10 +87,10 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 	}
 	defer func() { _ = store.Close() }()
 
-	reader := edgar.NewIndexReader(file, edgar.IndexFilter{
+	reader := sec.NewIndexReader(file, sec.IndexFilter{
 		FromYear: config.FromYear,
 	})
-	financialFilter := edgar.IndexFilter{
+	financialFilter := sec.IndexFilter{
 		CIKs: config.CIKs, FormTypes: config.FormTypes,
 	}
 	batch := make([]pipeline.Event, 0, 1000)
@@ -167,7 +167,7 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 	}
 }
 
-func shouldDiscover(record edgar.EdgarIndex, financialFilter edgar.IndexFilter) bool {
-	return edgar.MatchesIndexFilter(record, financialFilter) ||
+func shouldDiscover(record sec.EdgarIndex, financialFilter sec.IndexFilter) bool {
+	return sec.MatchesIndexFilter(record, financialFilter) ||
 		matchesAutomaticOwnershipScope(record, financialFilter.CIKs)
 }

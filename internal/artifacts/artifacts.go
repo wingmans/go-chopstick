@@ -18,7 +18,8 @@ import (
 const (
 	// MaxExtractedBytes is the hard ceiling for one inspection bundle.
 	MaxExtractedBytes int64 = 300 * 1024 * 1024
-	manifestName            = "manifest.json"
+	// ManifestName is the stable filename written into an artifact bundle.
+	ManifestName = "manifest.json"
 )
 
 // Selection identifies documents to extract.
@@ -52,7 +53,7 @@ type ManifestDocument struct {
 
 // BundleExists reports whether a generated artifact bundle has a manifest.
 func BundleExists(directory string) (bool, error) {
-	_, err := os.Stat(filepath.Join(directory, manifestName))
+	_, err := os.Stat(filepath.Join(directory, ManifestName))
 	if err == nil {
 		return true, nil
 	}
@@ -157,7 +158,7 @@ func Extract(ctx context.Context, filing *parser.ParsedFiling, source,
 
 // Clean removes only a directory carrying a matching generated manifest.
 func Clean(destination, cik, accession string) error {
-	data, err := os.ReadFile(filepath.Join(destination, manifestName))
+	data, err := os.ReadFile(filepath.Join(destination, ManifestName))
 	if err != nil {
 		return fmt.Errorf("read artifact manifest: %w", err)
 	}
@@ -335,7 +336,7 @@ func safeFilename(filename string) (string, error) {
 }
 
 func writeManifest(directory string, manifest Manifest) error {
-	file, err := os.OpenFile(filepath.Join(directory, manifestName),
+	file, err := os.OpenFile(filepath.Join(directory, ManifestName),
 		os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("create artifact manifest: %w", err)

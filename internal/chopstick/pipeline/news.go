@@ -10,7 +10,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/news"
 )
 
@@ -74,7 +74,7 @@ func ProjectNews(ctx context.Context, bus *NATS, store *news.Store,
 				continue
 			}
 
-			if filed.Year() < edgar.EarliestPipelineYear {
+			if filed.Year() < sec.EarliestPipelineYear {
 				_ = message.Ack()
 
 				continue

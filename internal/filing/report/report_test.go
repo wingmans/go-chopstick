@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
 	filingstore "wingman.com/chopstick/internal/filing/store"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/parser"
 )
 
@@ -32,7 +32,7 @@ func TestBuildReportsMissingDataAndAcquisitionRequests(t *testing.T) {
 		MasterPath: master, IndexesDir: filepath.Join(root, "indexes"),
 		FilingsDir: filepath.Join(root, "filings"), ParsedDir: filepath.Join(root, "parsed"),
 		AnalysisDB: filepath.Join(root, "analysis.db"),
-		Filter: edgar.IndexFilter{
+		Filter: sec.IndexFilter{
 			CIK: "789019", CIKs: nil,
 			FormTypes: []string{"10-K"}, Year: 0, FromYear: 0, ToYear: 0,
 		},
@@ -118,7 +118,7 @@ func TestGoldenExpectedCoverageFixture(t *testing.T) {
 		MasterPath: master, IndexesDir: filepath.Join(root, "indexes"),
 		FilingsDir: filepath.Join(root, "filings"), ParsedDir: filepath.Join(root, "parsed"),
 		AnalysisDB: filepath.Join(root, "analysis.db"),
-		Filter: edgar.IndexFilter{
+		Filter: sec.IndexFilter{
 			CIK: "", CIKs: nil, FormTypes: []string{"10-K"},
 			Year: 0, FromYear: 0, ToYear: 0,
 		},
@@ -206,7 +206,7 @@ func TestBuildUsesAnalysisDatabaseWithoutParserArtifacts(t *testing.T) {
 		MasterPath: master, FilingsDir: filepath.Join(root, "filings"),
 		ParsedDir:  filepath.Join(root, "parsed"),
 		AnalysisDB: filepath.Join(root, "analysis.db"),
-		Filter: edgar.IndexFilter{
+		Filter: sec.IndexFilter{
 			FormTypes: []string{"10-K"}, FromYear: 2024, ToYear: 2024,
 		},
 		SetName: "database-only", FromYear: 2024, ToYear: 2024,
@@ -237,7 +237,7 @@ func TestBuildUsesAnalysisDatabaseWithoutParserArtifacts(t *testing.T) {
 		MasterPath: master, FilingsDir: filepath.Join(root, "filings"),
 		ParsedDir:  filepath.Join(root, "parsed"),
 		AnalysisDB: filepath.Join(root, "analysis.db"),
-		Filter: edgar.IndexFilter{
+		Filter: sec.IndexFilter{
 			FormTypes: []string{"10-K"}, FromYear: 2024, ToYear: 2024,
 		},
 		SetName: "database-only", FromYear: 2024, ToYear: 2024,
@@ -395,7 +395,7 @@ func stringSliceMapValue(value map[string][]string) map[string][]string {
 func writeSourceFiling(t *testing.T, root, filingPath string) {
 	t.Helper()
 
-	localPath, err := edgar.LocalFilingPath(filepath.Join(root, "filings"), filingPath)
+	localPath, err := sec.LocalFilingPath(filepath.Join(root, "filings"), filingPath)
 	if err != nil {
 		t.Fatalf("local filing path: %v", err)
 	}

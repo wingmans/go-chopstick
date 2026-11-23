@@ -141,7 +141,7 @@ The CLI is an adapter around the reusable EDGAR package. It is responsible for:
 - applying user-facing defaults;
 - constructing an HTTP client;
 - logging command progress; and
-- delegating work to `internal/edgar`.
+- delegating work to `internal/ingest/sec`.
 
 The EDGAR package owns index parsing, filtering, stitching, download behavior,
 path handling, and rate limiting. This separation allows the same operations to

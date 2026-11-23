@@ -16,7 +16,7 @@ import (
 	"time"
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 var quarterlyFilePattern = regexp.MustCompile(`^(\d{4})-QTR([1-4])\.tsv$`)
@@ -212,7 +212,7 @@ func ensureMasterIndex(ctx context.Context, config Config,
 	logger.Info("stitching master index",
 		"path", config.MasterPath, "quarterly_files", len(paths))
 
-	if err := edgar.StitchToContext(ctx, config.IndexesDirectory,
+	if err := sec.StitchToContext(ctx, config.IndexesDirectory,
 		config.MasterPath); err != nil {
 		return fmt.Errorf("stitch master index: %w", err)
 	}
@@ -314,7 +314,7 @@ func readEvents(ctx context.Context,
 			return nil, fmt.Errorf("open %s: %w", path, err)
 		}
 
-		reader := edgar.NewIndexReader(file, edgar.IndexFilter{})
+		reader := sec.NewIndexReader(file, sec.IndexFilter{})
 
 		for {
 			if err := ctx.Err(); err != nil {
@@ -334,7 +334,7 @@ func readEvents(ctx context.Context,
 				return nil, fmt.Errorf("read %s: %w", path, err)
 			}
 
-			if record.DateFiled.Year() < edgar.EarliestPipelineYear {
+			if record.DateFiled.Year() < sec.EarliestPipelineYear {
 				continue
 			}
 

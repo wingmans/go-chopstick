@@ -11,7 +11,7 @@ import (
 
 	"wingman.com/chopstick/internal/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/outbound"
 )
 
@@ -46,10 +46,10 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 		"from_year", config.FromYear, "through", "current available data")
 
 	client := outbound.NewClient(30 * time.Second)
-	requestGate := edgar.NewRequestGate()
+	requestGate := sec.NewRequestGate()
 
 	if err := runBackfillStage(logger, "index", func() error {
-		return edgar.DownloadIndex(ctx, client, edgar.Config{
+		return sec.DownloadIndex(ctx, client, sec.Config{
 			Directory:     config.IndexDirectory,
 			ZipDirectory:  config.IndexZipDirectory,
 			MasterPath:    config.MasterPath,

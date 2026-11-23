@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/ownership/importer"
 )
@@ -16,7 +16,7 @@ type ownershipCommandConfig struct {
 	operation    string
 	masterPath   string
 	databasePath string
-	download     edgar.FilingDownloadConfig
+	download     sec.FilingDownloadConfig
 	formTypes    []string
 	fromYear     int
 	toYear       int

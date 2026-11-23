@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 const (
@@ -28,7 +28,7 @@ func environmentValue(name, fallback string) string {
 
 func environmentFromYear() (int, error) {
 	value := environmentValue(edgarFromYearEnv,
-		strconv.Itoa(edgar.EarliestPipelineYear))
+		strconv.Itoa(sec.EarliestPipelineYear))
 
 	year, err := strconv.Atoi(value)
 	if err != nil {
@@ -42,5 +42,5 @@ func environmentFromYear() (int, error) {
 func configuredFormTypes() ([]string, error) {
 	value := environmentValue(edgarFormTypesEnv, "10-K,10-Q,8-K")
 
-	return edgar.ValidateSupportedFormTypes(strings.Split(value, ","))
+	return sec.ValidateSupportedFormTypes(strings.Split(value, ","))
 }

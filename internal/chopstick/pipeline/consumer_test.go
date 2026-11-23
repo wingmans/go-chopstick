@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 func TestConsumerReportUsesIntervalActivity(t *testing.T) {
@@ -52,14 +52,14 @@ func TestConsumerReportUsesIntervalActivity(t *testing.T) {
 func TestWorkRetryDelayBacksOffThrottledRequests(t *testing.T) {
 	t.Parallel()
 
-	throttled := fmt.Errorf("download: %w", &edgar.HTTPError{
+	throttled := fmt.Errorf("download: %w", &sec.HTTPError{
 		StatusCode: http.StatusTooManyRequests,
 	})
 	if got := workRetryDelay(throttled, 3); got != 4*time.Minute {
 		t.Fatalf("retry delay = %s, want 4m", got)
 	}
 
-	withHeader := &edgar.HTTPError{
+	withHeader := &sec.HTTPError{
 		StatusCode: http.StatusTooManyRequests,
 		RetryAfter: 10 * time.Minute,
 	}
@@ -67,7 +67,7 @@ func TestWorkRetryDelayBacksOffThrottledRequests(t *testing.T) {
 		t.Fatalf("retry delay = %s, want 10m", got)
 	}
 
-	forbidden := &edgar.HTTPError{StatusCode: http.StatusForbidden}
+	forbidden := &sec.HTTPError{StatusCode: http.StatusForbidden}
 	if got := workRetryDelay(forbidden, 1); got != 10*time.Minute {
 		t.Fatalf("forbidden retry delay = %s, want 10m", got)
 	}

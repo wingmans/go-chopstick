@@ -15,7 +15,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 func TestParseAtomEntryAcceptsNumericAccessionPath(t *testing.T) {
@@ -40,13 +40,13 @@ func testDatabasePath(t *testing.T) string {
 	return filepath.Join(t.TempDir(), "polling.db")
 }
 
-func testSECFetcher(userHeader, feedURL string,
-	requestGate *edgar.RequestGate,
-) *SECFetcher {
-	fetcher := newSECFetcher(userHeader, feedURL, requestGate)
-	fetcher.client = &http.Client{Timeout: 30 * time.Second}
-
-	return fetcher
+func testSECFetcher(feedURL string, requestGate *sec.RequestGate) *SECFetcher {
+	return newSECFetcherWithClient(
+		&http.Client{Timeout: 30 * time.Second},
+		"test-agent",
+		feedURL,
+		requestGate,
+	)
 }
 
 func TestParseAtomEntryExtractsSECMetadata(t *testing.T) {
@@ -122,7 +122,7 @@ func TestPollingIngestionDeduplicatesFeedEntries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fetcher := testSECFetcher("test-agent", server.URL, nil)
+	fetcher := testSECFetcher(server.URL, nil)
 
 	store, err := pipeline.OpenBackground(testDatabasePath(t))
 	if err != nil {
@@ -166,14 +166,14 @@ func TestSECFetcherForbiddenPausesSharedRequestGate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	gate := edgar.NewRequestGate()
-	fetcher := testSECFetcher("test-agent", server.URL, gate)
+	gate := sec.NewRequestGate()
+	fetcher := testSECFetcher(server.URL, gate)
 
 	_, err := fetcher.FetchLatest(t.Context())
 
-	upstreamError, ok := errors.AsType[*edgar.HTTPError](err)
+	upstreamError, ok := errors.AsType[*sec.HTTPError](err)
 	if !ok {
-		t.Fatalf("FetchLatest error = %v, want *edgar.HTTPError", err)
+		t.Fatalf("FetchLatest error = %v, want *sec.HTTPError", err)
 	}
 
 	if upstreamError.RetryAfter != 10*time.Minute ||
@@ -213,7 +213,7 @@ func TestPollingIngestionGoldenFeedPopulatesDatabase(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	worker := NewWorker(
-		testSECFetcher("test-agent", server.URL, nil),
+		testSECFetcher(server.URL, nil),
 		store,
 		make(chan pipeline.Event, 32),
 		time.Minute,
@@ -268,7 +268,7 @@ func TestPollingIngestionGoldenFeedRecordsDeadLetter(t *testing.T) {
 
 	defer func() { _ = store.Close() }()
 
-	worker := NewWorker(testSECFetcher("test-agent", server.URL, nil), store,
+	worker := NewWorker(testSECFetcher(server.URL, nil), store,
 		make(chan pipeline.Event, 2), time.Minute)
 	if err := worker.RunOnce(t.Context()); err != nil {
 		t.Fatal(err)

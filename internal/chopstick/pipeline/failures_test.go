@@ -18,7 +18,7 @@ func TestWorkFailureLifecycle(t *testing.T) {
 
 	for want := 1; want <= 2; want++ {
 		attempts, err := store.RecordWorkFailure(t.Context(), "download",
-			"0000000001-26-000001", "edgar.filing.discovered.10-K",
+			"0000000001-26-000001", "sec.filing.discovered.10-K",
 			[]byte(`{"accession_number":"0000000001-26-000001"}`),
 			errors.New("temporary failure"))
 		if err != nil {
@@ -66,7 +66,7 @@ func TestRetryWorkFailuresPublishesUnresolvedItems(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	if _, err := store.RecordWorkFailure(t.Context(), "process",
-		"0000000001-26-000001", "edgar.filing.downloaded.10-K",
+		"0000000001-26-000001", "sec.filing.downloaded.10-K",
 		[]byte(`{"accession_number":"0000000001-26-000001"}`),
 		errors.New("parse failure")); err != nil {
 		t.Fatal(err)

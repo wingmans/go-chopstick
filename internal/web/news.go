@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/news"
 )
 
@@ -77,7 +77,7 @@ func (s *NewsServer) index(w http.ResponseWriter, r *http.Request) {
 			Styles: []string{"/assets/news.css"},
 		},
 		Items: items, Filter: filter,
-		SupportedForms: edgar.SupportedFormTypes(),
+		SupportedForms: sec.SupportedFormTypes(),
 	}
 
 	component := newsPage(data)

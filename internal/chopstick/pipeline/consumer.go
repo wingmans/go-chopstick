@@ -12,7 +12,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 func pullSubscription(bus *NATS, subject, durable string) (
@@ -105,7 +105,7 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 			continue
 		}
 
-		if filed.Year() < edgar.EarliestPipelineYear {
+		if filed.Year() < sec.EarliestPipelineYear {
 			_ = message.Ack()
 			stats.skipped++
 
@@ -171,12 +171,12 @@ func consume(ctx context.Context, subscription *nats.Subscription,
 func workRetryDelay(workErr error, attempts int) time.Duration {
 	delay := time.Minute
 
-	var upstream *edgar.HTTPError
+	var upstream *sec.HTTPError
 	if !errors.As(workErr, &upstream) {
 		return delay
 	}
 
-	throttleDelay := edgar.ThrottleDelay(upstream.StatusCode,
+	throttleDelay := sec.ThrottleDelay(upstream.StatusCode,
 		upstream.RetryAfter)
 	if throttleDelay == 0 {
 		return delay

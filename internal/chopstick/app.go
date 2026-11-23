@@ -11,7 +11,7 @@ import (
 	"wingman.com/chopstick/internal/chopstick/ingest"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/outbound"
 	"wingman.com/chopstick/internal/transport"
 )
@@ -43,7 +43,7 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	requestGate := edgar.NewRequestGate()
+	requestGate := sec.NewRequestGate()
 
 	startedAt := time.Now().UTC()
 	admin := &adminHandler{
@@ -85,7 +85,7 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 }
 
 func reconcileAtStartup(ctx context.Context, config Config,
-	logger *slog.Logger, requestGate *edgar.RequestGate,
+	logger *slog.Logger, requestGate *sec.RequestGate,
 ) {
 	client := outbound.NewClient(30 * time.Second)
 	if err := ensureMasterIndex(ctx, client, config, logger,
@@ -142,7 +142,7 @@ func superviseRole(ctx context.Context, role string, logger *slog.Logger,
 }
 
 func runRole(ctx context.Context, role string, config Config,
-	logger *slog.Logger, requestGate *edgar.RequestGate,
+	logger *slog.Logger, requestGate *sec.RequestGate,
 ) error {
 	logger = logger.With("role", role)
 	ctx = ctxlog.WithLogger(ctx, logger)

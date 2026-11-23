@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"wingman.com/chopstick/internal/artifacts"
+	"wingman.com/chopstick/internal/web/artifactviewer"
 )
 
 const artifactViewerRoute = "/viewer/"
@@ -81,7 +82,7 @@ func (s *Server) artifactViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler, err := artifacts.Viewer(destination, filing.Metadata.CIK,
+	handler, err := artifactviewer.Viewer(destination, filing.Metadata.CIK,
 		filing.Metadata.Accession)
 	if err != nil {
 		s.writeError(w, err)

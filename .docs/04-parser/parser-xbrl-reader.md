@@ -1,7 +1,8 @@
 # Local Submission Parser and XBRL Reader
 
 Status: local parsing and persistence are integrated with the `filings` workflow.
-The coordinator lives in `internal/filingworkflow`; `internal/edgar` contains
+The coordinator lives in `internal/filingworkflow`;
+`internal/ingest/sec` contains
 EDGAR parsing, XBRL, and persistence primitives.
 Financial interpretation and taxonomy mapping remain future work.
 
@@ -72,7 +73,7 @@ With `--noop --reprocess`, rebuilding is planned but never performed.
 
 Workflow entry points in `internal/filingworkflow` are `ProcessFilings`,
 `ProcessLocalFilings`, `ProcessLocalSubmissions`, and `ProcessSubmission`. The low-level
-`internal/edgar` entry points `ParseSubmission`, `SaveParsedFiling`, and
+`internal/ingest/sec` entry points `ParseSubmission`, `SaveParsedFiling`, and
 `LoadParsedFiling` remain available separately. This dependency direction keeps
 the orchestration layer from becoming part of the parser's domain API and keeps
 the CLI itself thin. Filings expose metadata

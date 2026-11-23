@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/outbound"
 	"wingman.com/chopstick/internal/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/ownership/importer"
@@ -25,8 +25,8 @@ func RunOwnershipConsumer(ctx context.Context, bus *NATS, cfg OwnershipConfig,
 	}
 	defer func() { _ = store.Close() }()
 
-	downloader, err := edgar.NewFilingDownloader(
-		outbound.NewClient(30*time.Second), edgar.FilingDownloadConfig{
+	downloader, err := sec.NewFilingDownloader(
+		outbound.NewClient(30*time.Second), sec.FilingDownloadConfig{
 			Directory: cfg.FilingsDirectory, UserAgent: cfg.UserAgent,
 			BaseURL: cfg.BaseURL, RequestGate: cfg.RequestGate,
 		})
@@ -67,7 +67,7 @@ func RunOwnershipConsumer(ctx context.Context, bus *NATS, cfg OwnershipConfig,
 }
 
 func processOwnershipEvent(ctx context.Context, store *ownershipstore.Store,
-	downloader *edgar.FilingDownloader, filingsDirectory string,
+	downloader *sec.FilingDownloader, filingsDirectory string,
 	event Event,
 ) (ownershipimporter.Decision, ownershipimporter.Timings, error) {
 	filed, err := time.Parse("2006-01-02", event.FilingDate)
@@ -75,7 +75,7 @@ func processOwnershipEvent(ctx context.Context, store *ownershipstore.Store,
 		return ownershipimporter.DecisionFailed, ownershipimporter.Timings{}, err
 	}
 
-	record := edgar.EdgarIndex{
+	record := sec.EdgarIndex{
 		CIK: event.CIK, CompanyName: event.CompanyName,
 		FormType: event.FormType, DateFiled: filed,
 		FilingPath: event.FilingPath,
@@ -83,7 +83,7 @@ func processOwnershipEvent(ctx context.Context, store *ownershipstore.Store,
 
 	return ownershipimporter.ProcessOneMeasured(ctx, store, downloader,
 		ownershipimporter.Config{
-			Download: edgar.FilingDownloadConfig{
+			Download: sec.FilingDownloadConfig{
 				Directory: filingsDirectory,
 			},
 		}, record)

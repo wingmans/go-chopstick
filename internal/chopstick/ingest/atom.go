@@ -8,7 +8,7 @@ import (
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 // AtomConfig configures the continuous SEC Atom source.
@@ -17,7 +17,7 @@ type AtomConfig struct {
 	DBPath      string
 	UserAgent   string
 	Publisher   pipeline.Publisher
-	RequestGate *edgar.RequestGate
+	RequestGate *sec.RequestGate
 }
 
 // RunAtom discovers recent filings until the context is cancelled.

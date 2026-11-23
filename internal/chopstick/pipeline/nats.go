@@ -17,12 +17,12 @@ import (
 const (
 	DefaultURL        = nats.DefaultURL
 	StreamName        = "EDGAR_EVENTS"
-	StreamSubjects    = "edgar.filing.>"
-	DiscoverySubject  = "edgar.filing.discovered"
-	SelectionSubject  = "edgar.filing.selection"
-	SelectedSubject   = "edgar.filing.selection.selected"
-	SkippedSubject    = "edgar.filing.selection.skipped"
-	DownloadedSubject = "edgar.filing.downloaded"
+	StreamSubjects    = "sec.filing.>"
+	DiscoverySubject  = "sec.filing.discovered"
+	SelectionSubject  = "sec.filing.selection"
+	SelectedSubject   = "sec.filing.selection.selected"
+	SkippedSubject    = "sec.filing.selection.skipped"
+	DownloadedSubject = "sec.filing.downloaded"
 	publishAckTimeout = 10 * time.Second
 )
 

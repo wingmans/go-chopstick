@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	ownershipimporter "wingman.com/chopstick/internal/ownership/importer"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 )
@@ -44,8 +44,8 @@ func TestProcessOwnershipEventUsesConfiguredCache(t *testing.T) {
 
 	transport := &noNetworkTransport{}
 
-	downloader, err := edgar.NewFilingDownloader(
-		&http.Client{Transport: transport}, edgar.FilingDownloadConfig{
+	downloader, err := sec.NewFilingDownloader(
+		&http.Client{Transport: transport}, sec.FilingDownloadConfig{
 			Directory: cache, UserAgent: "ownership-test test@example.com",
 		})
 	if err != nil {
@@ -128,7 +128,7 @@ PUBLIC DOCUMENT COUNT: 1
 </SEC-DOCUMENT>
 `, accession, accession, xml)
 
-	path, err := edgar.LocalFilingPath(cache, relative)
+	path, err := sec.LocalFilingPath(cache, relative)
 	if err != nil {
 		t.Fatal(err)
 	}

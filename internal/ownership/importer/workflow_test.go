@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 )
 
@@ -48,7 +48,7 @@ func TestRunReusesCacheDeduplicatesAndResumes(t *testing.T) {
 	client := &http.Client{Transport: transport}
 	config := Config{
 		MasterPath: master, DatabasePath: database,
-		Download: edgar.FilingDownloadConfig{
+		Download: sec.FilingDownloadConfig{
 			Directory: cache, UserAgent: "ownership-test test@example.com",
 		},
 		FromYear: 2022, ToYear: 2026,
@@ -182,7 +182,7 @@ func writeCachedSubmission(t *testing.T, cache, relative,
 	fmt.Fprintln(&submission, "</DOCUMENT>")
 	fmt.Fprintln(&submission, "</SEC-DOCUMENT>")
 
-	path, err := edgar.LocalFilingPath(cache, relative)
+	path, err := sec.LocalFilingPath(cache, relative)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func writeCachedLegacySchedule(t *testing.T, cache, relative,
 	fmt.Fprintln(&submission, "</DOCUMENT>")
 	fmt.Fprintln(&submission, "</SEC-DOCUMENT>")
 
-	path, err := edgar.LocalFilingPath(cache, relative)
+	path, err := sec.LocalFilingPath(cache, relative)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
 	filingstore "wingman.com/chopstick/internal/filing/store"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/parser"
 )
 
@@ -28,7 +28,7 @@ type Config struct {
 	FilingsDir  string
 	ParsedDir   string
 	AnalysisDB  string
-	Filter      edgar.IndexFilter
+	Filter      sec.IndexFilter
 	SetName     string
 	FromYear    int
 	ToYear      int
@@ -144,7 +144,7 @@ func Build(ctx context.Context, config Config) (Report, error) {
 		report.GeneratedAt = ""
 	}
 
-	reader := edgar.NewIndexReader(file, config.Filter)
+	reader := sec.NewIndexReader(file, config.Filter)
 	seen := make(map[string]struct{})
 
 	for {
@@ -219,7 +219,7 @@ func inspectFiling(
 	ctx context.Context,
 	config Config,
 	analysis *filingstore.Store,
-	record edgar.EdgarIndex,
+	record sec.EdgarIndex,
 ) (Filing, error) {
 	if err := ctx.Err(); err != nil {
 		return Filing{}, err
@@ -232,7 +232,7 @@ func inspectFiling(
 		sourceErr              error
 	)
 	if config.FilingsDir != "" {
-		sourcePath, sourceErr = edgar.LocalFilingPath(config.FilingsDir, record.FilingPath)
+		sourcePath, sourceErr = sec.LocalFilingPath(config.FilingsDir, record.FilingPath)
 	}
 
 	if config.ParsedDir != "" {

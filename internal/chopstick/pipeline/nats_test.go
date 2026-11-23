@@ -7,7 +7,7 @@ func TestSubjectForNormalizesFormType(t *testing.T) {
 
 	got := SubjectFor(DiscoverySubject, "10-K/A")
 
-	want := "edgar.filing.discovered.10-K_A"
+	want := "sec.filing.discovered.10-K_A"
 	if got != want {
 		t.Fatalf("SubjectFor() = %q, want %q", got, want)
 	}

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
 	filingquality "wingman.com/chopstick/internal/filing/quality"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/parser"
 )
 
@@ -57,7 +57,7 @@ type taxonomyFilingReport struct {
 }
 
 func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
-	parsedDir string, filter edgar.IndexFilter, setName string, fromYear,
+	parsedDir string, filter sec.IndexFilter, setName string, fromYear,
 	toYear int, format, out string,
 ) error {
 	taxonomy, err := filingview.LoadTaxonomy(taxonomyPath)
@@ -189,7 +189,7 @@ func runTaxonomyCommand(ctx context.Context, operation, path, taxonomyPath,
 
 // filingViewPaths returns the paths to all filing-view.json files in the given directory that match the filter.
 // The returned paths are sorted in lexicographical order.
-func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFilter, fromYear, toYear int) ([]string, error) {
+func filingViewPaths(ctx context.Context, directory string, filter sec.IndexFilter, fromYear, toYear int) ([]string, error) {
 	paths := []string{}
 
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
@@ -215,7 +215,7 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 			return nil
 		}
 
-		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
+		if !sec.MatchesIndexFilter(sec.EdgarIndex{
 			CIK: view.Metadata.CIK, CompanyName: view.Metadata.Company,
 			FormType: view.Metadata.FormType, DateFiled: dateFiled,
 			FilingPath: "local", IndexPath: "",
@@ -238,7 +238,7 @@ func filingViewPaths(ctx context.Context, directory string, filter edgar.IndexFi
 
 // parsedFilingPaths returns the paths to all filing.json files in the given directory that match the filter.
 // The returned paths are sorted in lexicographical order.
-func parsedFilingPaths(ctx context.Context, directory string, filter edgar.IndexFilter, fromYear, toYear int) ([]string, error) {
+func parsedFilingPaths(ctx context.Context, directory string, filter sec.IndexFilter, fromYear, toYear int) ([]string, error) {
 	paths := []string{}
 
 	err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
@@ -264,7 +264,7 @@ func parsedFilingPaths(ctx context.Context, directory string, filter edgar.Index
 			return nil
 		}
 
-		if !edgar.MatchesIndexFilter(edgar.EdgarIndex{
+		if !sec.MatchesIndexFilter(sec.EdgarIndex{
 			CIK: filing.Metadata.CIK, CompanyName: "",
 			FormType: filing.Metadata.FormType, DateFiled: dateFiled,
 			FilingPath: "local", IndexPath: "",

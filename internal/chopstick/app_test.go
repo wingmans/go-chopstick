@@ -12,7 +12,7 @@ import (
 
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/chopstick/ingest"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/transport"
 )
 
@@ -56,7 +56,7 @@ func TestConfigDefaultFinancialFormsIncludeAmendments(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := edgar.SupportedFormTypes()
+	want := sec.SupportedFormTypes()
 	if !slices.Equal(config.FormTypes, want) {
 		t.Fatalf("form types = %v, want %v", config.FormTypes, want)
 	}
@@ -64,7 +64,7 @@ func TestConfigDefaultFinancialFormsIncludeAmendments(t *testing.T) {
 
 func TestConfigRejectsInvalidServiceValues(t *testing.T) {
 	config := validConfig(t)
-	config.FromYear = edgar.EarliestPipelineYear - 1
+	config.FromYear = sec.EarliestPipelineYear - 1
 
 	if err := config.Validate(); err == nil {
 		t.Fatal("Validate accepted an invalid from year")
@@ -305,7 +305,7 @@ func validConfig(t *testing.T) Config {
 		HTTPAddress:       "127.0.0.1:8083",
 		Interval:          1,
 		FormTypes:         []string{"10-K"},
-		FromYear:          edgar.EarliestPipelineYear,
+		FromYear:          sec.EarliestPipelineYear,
 		MaxAttempts:       5,
 	}
 }

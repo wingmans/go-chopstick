@@ -1,8 +1,6 @@
 package artifacts
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,69 +56,6 @@ func TestExtractDecodesGraphicAndCleanUsesManifest(t *testing.T) {
 
 	if string(decoded) != "ABC" {
 		t.Fatalf("decoded content = %q", decoded)
-	}
-
-	handler, err := Viewer(destination, "0000000001", "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	index := httptest.NewRecorder()
-	handler.ServeHTTP(index, httptest.NewRequestWithContext(t.Context(),
-		http.MethodGet, "/", nil))
-
-	if index.Code != http.StatusOK ||
-		!strings.Contains(index.Body.String(), "pixel.jpg") ||
-		!strings.Contains(index.Body.String(), "<img") ||
-		!strings.Contains(index.Body.String(), `id="progress"`) ||
-		!strings.Contains(index.Body.String(), `id="document-search"`) ||
-		!strings.Contains(index.Body.String(), `id="type-filter"`) ||
-		!strings.Contains(index.Body.String(), `id="graphics-only"`) ||
-		!strings.Contains(index.Body.String(), `id="fit-image"`) ||
-		!strings.Contains(index.Body.String(),
-			`href="viewer-assets/viewer.css"`) ||
-		!strings.Contains(index.Body.String(),
-			`src="viewer-assets/viewer.js"`) {
-		t.Fatalf("unexpected viewer index: status=%d body=%s",
-			index.Code, index.Body.String())
-	}
-
-	css := httptest.NewRecorder()
-	handler.ServeHTTP(css, httptest.NewRequestWithContext(t.Context(), http.MethodGet,
-		"/viewer-assets/viewer.css", nil))
-
-	if css.Code != http.StatusOK ||
-		!strings.HasPrefix(css.Header().Get("Content-Type"), "text/css") ||
-		!strings.Contains(css.Body.String(), ".document.selected") {
-		t.Fatalf("unexpected viewer CSS: status=%d content-type=%q body=%s",
-			css.Code, css.Header().Get("Content-Type"), css.Body.String())
-	}
-
-	javascript := httptest.NewRecorder()
-	handler.ServeHTTP(javascript, httptest.NewRequestWithContext(t.Context(),
-		http.MethodGet,
-		"/viewer-assets/viewer.js", nil))
-
-	if javascript.Code != http.StatusOK ||
-		!strings.Contains(javascript.Header().Get("Content-Type"),
-			"javascript") ||
-		!strings.Contains(javascript.Body.String(),
-			`event.key === "ArrowRight"`) {
-		t.Fatalf("unexpected viewer JS: status=%d content-type=%q body=%s",
-			javascript.Code, javascript.Header().Get("Content-Type"),
-			javascript.Body.String())
-	}
-
-	file := httptest.NewRecorder()
-	handler.ServeHTTP(file,
-		httptest.NewRequestWithContext(t.Context(), http.MethodGet,
-			"/files/pixel.jpg", nil))
-
-	if file.Code != http.StatusOK || file.Body.String() != "ABC" ||
-		file.Header().Get("Content-Security-Policy") != "sandbox" ||
-		file.Header().Get("X-Content-Type-Options") != "nosniff" {
-		t.Fatalf("unexpected viewer file: status=%d body=%q",
-			file.Code, file.Body.String())
 	}
 
 	if err := Clean(destination, "0000000001", "test"); err != nil {

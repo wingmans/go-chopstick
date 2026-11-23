@@ -15,7 +15,7 @@ import (
 	"wingman.com/chopstick/internal/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 type doctorReport struct {
@@ -218,7 +218,7 @@ func checkConfiguredSet(report *doctorReport) {
 
 func printResolvedConfiguration(cfg DoctorConfig) {
 	fromYear, _ := environmentFromYear()
-	baseURL := environmentValue(edgarBaseURLEnv, edgar.DefaultBaseURL)
+	baseURL := environmentValue(edgarBaseURLEnv, sec.DefaultBaseURL)
 	forms, _ := configuredFormTypes()
 
 	fmt.Println()
@@ -227,7 +227,7 @@ func printResolvedConfiguration(cfg DoctorConfig) {
 		"not configured"))
 	fmt.Printf("  from year         %d\n", fromYear)
 	fmt.Printf("  form types        %s\n", strings.Join(forms, ","))
-	fmt.Printf("  parser supports   %s\n", strings.Join(edgar.SupportedFormTypes(), ","))
+	fmt.Printf("  parser supports   %s\n", strings.Join(sec.SupportedFormTypes(), ","))
 	fmt.Printf("  SEC archives      %s\n", baseURL)
 	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv, defaultUserAgent))
 	fmt.Printf("  NATS              %s\n", cfg.NATSURL)
@@ -248,7 +248,7 @@ func printResolvedConfiguration(cfg DoctorConfig) {
 	fmt.Printf("  news DB           %s\n", cfg.NewsDB)
 	fmt.Printf("  analysis DB       %s\n", appdata.Path("analysis.db"))
 	fmt.Printf("  master index      %s\n", cfg.MasterPath)
-	fmt.Printf("  event log         %s\n", appdata.Path("logs", "edgar.log"))
+	fmt.Printf("  event log         %s\n", appdata.Path("logs", "sec.log"))
 	fmt.Printf("  log level         %s\n", environmentValue("LOGLEVEL", "info"))
 }
 

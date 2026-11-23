@@ -14,8 +14,8 @@ import (
 
 	"wingman.com/chopstick/internal/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/edgar"
-	marketyahoo "wingman.com/chopstick/internal/market/yahoo"
+	"wingman.com/chopstick/internal/ingest/sec"
+	marketyahoo "wingman.com/chopstick/internal/market"
 	operator "wingman.com/chopstick/internal/operator"
 	"wingman.com/chopstick/internal/transport"
 )
@@ -39,7 +39,7 @@ type commandDefaults struct {
 }
 
 func commandDefaultsFromEnvironment() (commandDefaults, error) {
-	fromYear := edgar.EarliestPipelineYear
+	fromYear := sec.EarliestPipelineYear
 
 	if value := strings.TrimSpace(os.Getenv("EDGAR_FROM_YEAR")); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -238,9 +238,9 @@ func (c *rebuildEdgarCLI) Run(ctx context.Context, runtime *commandRuntime) erro
 }
 
 func validatePipelineYear(year int) error {
-	if year < edgar.EarliestPipelineYear {
+	if year < sec.EarliestPipelineYear {
 		return fmt.Errorf("--from-year must be %d or later",
-			edgar.EarliestPipelineYear)
+			sec.EarliestPipelineYear)
 	}
 
 	return nil
@@ -251,7 +251,7 @@ func (c *indexRefreshCLI) Run(ctx context.Context, runtime *commandRuntime) erro
 		return err
 	}
 
-	return operator.DownloadIndex(ctx, runtime.Client, edgar.Config{
+	return operator.DownloadIndex(ctx, runtime.Client, sec.Config{
 		Directory:     appdata.Path("cache", "indexes", "quarterly"),
 		ZipDirectory:  appdata.Path("cache", "index-zips"),
 		MasterPath:    appdata.Path("cache", "indexes", "master.tsv"),
@@ -286,7 +286,7 @@ func (c *indexStatusCLI) Run(ctx context.Context) error {
 	})
 }
 
-func (s selectionCLI) filter() (edgar.IndexFilter, error) {
+func (s selectionCLI) filter() (sec.IndexFilter, error) {
 	return operator.BuildFilter(s.CIK, s.Set, s.FormTypes, s.Year,
 		s.FromYear, s.ToYear)
 }
@@ -306,7 +306,7 @@ func (c *filingsCLI) Run(ctx context.Context, runtime *commandRuntime) error {
 		operator.DownloadFilingsConfig{
 			MasterPath: appdata.Path("cache", "indexes", "master.tsv"),
 			AnalysisDB: c.AnalysisDB,
-			Download: edgar.FilingDownloadConfig{
+			Download: sec.FilingDownloadConfig{
 				Directory: appdata.Path("cache", "filings"),
 				UserAgent: userAgent,
 				BaseURL:   environmentValue("EDGAR_BASE_URL", ""),

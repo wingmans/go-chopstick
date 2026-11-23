@@ -4,20 +4,20 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 func TestDiscoveryScopeSeparatesFinancialAndOwnershipForms(t *testing.T) {
 	t.Parallel()
 
-	filter := edgar.IndexFilter{
+	filter := sec.IndexFilter{
 		CIKs: []string{"0000320193"},
 		FormTypes: []string{
 			"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A",
 		},
 	}
-	record := func(cik, form string) edgar.EdgarIndex {
-		return edgar.EdgarIndex{
+	record := func(cik, form string) sec.EdgarIndex {
+		return sec.EdgarIndex{
 			CIK: cik, FormType: form,
 			DateFiled: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		}
@@ -25,7 +25,7 @@ func TestDiscoveryScopeSeparatesFinancialAndOwnershipForms(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		record edgar.EdgarIndex
+		record sec.EdgarIndex
 		want   bool
 	}{
 		{name: "financial member", record: record("320193", "10-K/A"), want: true},

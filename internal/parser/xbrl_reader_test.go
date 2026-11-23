@@ -129,12 +129,12 @@ func TestXBRLRejectsMalformedInstances(t *testing.T) {
 
 func TestStrictXBRLRejectsLegacyMalformedFixtures(t *testing.T) {
 	for _, path := range []string{
-		"../edgar/testdata/malformed-xbrl/missing-lt-semicolon.xml",
-		"../edgar/testdata/malformed-xbrl/missing-gt-semicolon.xml",
-		"../edgar/testdata/malformed-xbrl/split-entity-reference.xml",
-		"../edgar/testdata/malformed-xbrl/split-closing-tag-name.xml",
-		"../edgar/testdata/malformed-xbrl/split-closing-tag-opener.xml",
-		"../edgar/testdata/malformed-xbrl/truncated-closing-tag.xml",
+		"../ingest/sec/testdata/malformed-xbrl/missing-lt-semicolon.xml",
+		"../ingest/sec/testdata/malformed-xbrl/missing-gt-semicolon.xml",
+		"../ingest/sec/testdata/malformed-xbrl/split-entity-reference.xml",
+		"../ingest/sec/testdata/malformed-xbrl/split-closing-tag-name.xml",
+		"../ingest/sec/testdata/malformed-xbrl/split-closing-tag-opener.xml",
+		"../ingest/sec/testdata/malformed-xbrl/truncated-closing-tag.xml",
 	} {
 		t.Run(path, func(t *testing.T) {
 			source := openTestFile(t, path)
@@ -154,32 +154,38 @@ func TestSubmissionNormalizesReviewedLegacyMalformedFixtures(t *testing.T) {
 		value string
 	}{
 		{
-			path:  "../edgar/testdata/malformed-xbrl/missing-lt-semicolon.xml",
+			path: "../ingest/sec/testdata/malformed-xbrl/" +
+				"missing-lt-semicolon.xml",
 			code:  legacyMissingEntitySemicolonCode,
 			value: "A < B",
 		},
 		{
-			path:  "../edgar/testdata/malformed-xbrl/missing-gt-semicolon.xml",
+			path: "../ingest/sec/testdata/malformed-xbrl/" +
+				"missing-gt-semicolon.xml",
 			code:  legacyMissingEntitySemicolonCode,
 			value: "A > B",
 		},
 		{
-			path:  "../edgar/testdata/malformed-xbrl/split-entity-reference.xml",
+			path: "../ingest/sec/testdata/malformed-xbrl/" +
+				"split-entity-reference.xml",
 			code:  legacySplitEntityCode,
 			value: "A < B and C > D",
 		},
 		{
-			path:  "../edgar/testdata/malformed-xbrl/split-closing-tag-name.xml",
+			path: "../ingest/sec/testdata/malformed-xbrl/" +
+				"split-closing-tag-name.xml",
 			code:  legacySplitClosingTagCode,
 			value: "legacy text",
 		},
 		{
-			path:  "../edgar/testdata/malformed-xbrl/split-closing-tag-opener.xml",
+			path: "../ingest/sec/testdata/malformed-xbrl/" +
+				"split-closing-tag-opener.xml",
 			code:  legacySplitClosingTagCode,
 			value: "legacy text",
 		},
 		{
-			path:  "../edgar/testdata/malformed-xbrl/truncated-closing-tag.xml",
+			path: "../ingest/sec/testdata/malformed-xbrl/" +
+				"truncated-closing-tag.xml",
 			code:  legacyStrayClosingTagCode,
 			value: "legacy text</DescriptionOfDefinedContributionPensionAndO>",
 		},

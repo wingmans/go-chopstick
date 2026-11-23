@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/outbound"
 )
 
 // ProcessFilings streams the filtered index, ensures local source files, then
 // reuses or rebuilds parsed results. Download-only APIs remain available separately.
-func ProcessFilings(ctx context.Context, client *http.Client, master string, download edgar.FilingDownloadConfig,
-	processing ProcessingConfig, filter edgar.IndexFilter,
+func ProcessFilings(ctx context.Context, client *http.Client, master string, download sec.FilingDownloadConfig,
+	processing ProcessingConfig, filter sec.IndexFilter,
 ) (ProcessingSummary, error) {
 	var summary ProcessingSummary
 	defer func() { summary.log(ctx, download.Noop) }()
@@ -50,12 +50,12 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 		client = outbound.NewClient(30 * time.Second)
 	}
 
-	downloader, err := edgar.NewFilingDownloader(client, download)
+	downloader, err := sec.NewFilingDownloader(client, download)
 	if err != nil {
 		return summary, err
 	}
 
-	reader := edgar.NewIndexReader(file, filter)
+	reader := sec.NewIndexReader(file, filter)
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -94,7 +94,7 @@ func ProcessFilings(ctx context.Context, client *http.Client, master string, dow
 // ProcessLocalFilings processes only submissions already present on disk. The
 // master index supplies the same identity and filters used by the download flow.
 func ProcessLocalFilings(ctx context.Context, master, directory string, processing ProcessingConfig,
-	filter edgar.IndexFilter,
+	filter sec.IndexFilter,
 ) (ProcessingSummary, error) {
 	var summary ProcessingSummary
 	defer func() { summary.log(ctx, processing.Noop) }()
@@ -119,7 +119,7 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 
 	batchProcessing := processing
 
-	reader := edgar.NewIndexReader(file, filter)
+	reader := sec.NewIndexReader(file, filter)
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -142,7 +142,7 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 			"path", record.FilingPath,
 		)
 
-		path, err := edgar.LocalFilingPath(directory, record.FilingPath)
+		path, err := sec.LocalFilingPath(directory, record.FilingPath)
 		if err != nil {
 			return summary, err
 		}
@@ -174,7 +174,7 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 				continue
 			}
 
-			if err := edgar.NormalizeLocalFiling(path); err != nil {
+			if err := sec.NormalizeLocalFiling(path); err != nil {
 				summary.record(ctx, record.FilingPath, failed, err)
 
 				continue
@@ -190,8 +190,8 @@ func ProcessLocalFilings(ctx context.Context, master, directory string, processi
 	return summary, summary.failure()
 }
 
-func processIndexRecord(ctx context.Context, downloader *edgar.FilingDownloader, directory string,
-	processing ProcessingConfig, record edgar.EdgarIndex,
+func processIndexRecord(ctx context.Context, downloader *sec.FilingDownloader, directory string,
+	processing ProcessingConfig, record sec.EdgarIndex,
 ) (ProcessingResult, error) {
 	var result ProcessingResult
 
@@ -201,7 +201,7 @@ func processIndexRecord(ctx context.Context, downloader *edgar.FilingDownloader,
 		return result, err
 	}
 
-	path, err := edgar.LocalFilingPath(directory, record.FilingPath)
+	path, err := sec.LocalFilingPath(directory, record.FilingPath)
 	if err != nil {
 		return result, err
 	}

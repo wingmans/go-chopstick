@@ -10,7 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 )
 
@@ -102,7 +102,7 @@ func selectionDecision(event Event, setName string,
 			"form type %q is handled by the ownership pipeline", form)
 	}
 
-	if !edgar.SupportsFormType(form) {
+	if !sec.SupportsFormType(form) {
 		return false, fmt.Sprintf(
 			"form type %q is not supported by the financial filing parser",
 			form,

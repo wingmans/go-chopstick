@@ -16,6 +16,9 @@ Future options for accelerating large index scans are recorded in the
 [master index performance note](master-index-performance.md).
 All external HTTP requests use the mandatory local
 [outbound gateway](outbound-gateway.md).
+Package ownership and dependency direction are described in the
+[architecture guide](architecture.md). The standalone ECB tool is documented
+in the [ECB ingest guide](ecb-ingest.md).
 
 NATS remains a separate local service and carries durable filing events. Live
 control requests use the local TCP transport between `chop` and `chopd`.

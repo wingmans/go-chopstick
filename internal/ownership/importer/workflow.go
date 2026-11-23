@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 )
@@ -23,7 +23,7 @@ import (
 type Config struct {
 	MasterPath   string
 	DatabasePath string
-	Download     edgar.FilingDownloadConfig
+	Download     sec.FilingDownloadConfig
 	FromYear     int
 	ToYear       int
 	FormTypes    []string
@@ -110,13 +110,13 @@ func Run(ctx context.Context, client *http.Client,
 	}
 	defer func() { _ = store.Close() }()
 
-	downloader, err := edgar.NewFilingDownloader(client, config.Download)
+	downloader, err := sec.NewFilingDownloader(client, config.Download)
 	if err != nil {
 		return summary, err
 	}
 
 	started := time.Now().UTC()
-	reader := edgar.NewIndexReader(file, edgar.IndexFilter{
+	reader := sec.NewIndexReader(file, sec.IndexFilter{
 		FromYear: config.FromYear, ToYear: config.ToYear,
 	})
 	enabled := enabledForms(config.FormTypes)
@@ -169,7 +169,7 @@ func Run(ctx context.Context, client *http.Client,
 }
 
 func process(ctx context.Context, store *ownershipstore.Store,
-	downloader *edgar.FilingDownloader, config Config, record edgar.EdgarIndex,
+	downloader *sec.FilingDownloader, config Config, record sec.EdgarIndex,
 ) (Decision, error) {
 	accession, err := accessionFromPath(record.FilingPath)
 	if err != nil {
@@ -191,8 +191,8 @@ func process(ctx context.Context, store *ownershipstore.Store,
 // ProcessOne processes one recognized ownership event without batch-local
 // deduplication. Durable accession state still makes the operation idempotent.
 func ProcessOne(ctx context.Context, store *ownershipstore.Store,
-	downloader *edgar.FilingDownloader, config Config,
-	record edgar.EdgarIndex,
+	downloader *sec.FilingDownloader, config Config,
+	record sec.EdgarIndex,
 ) (Decision, error) {
 	decision, _, err := ProcessOneMeasured(ctx, store, downloader, config, record)
 
@@ -202,8 +202,8 @@ func ProcessOne(ctx context.Context, store *ownershipstore.Store,
 // ProcessOneMeasured processes one ownership event and reports its phase
 // timings without changing the filing transaction or decision semantics.
 func ProcessOneMeasured(ctx context.Context, store *ownershipstore.Store,
-	downloader *edgar.FilingDownloader, config Config,
-	record edgar.EdgarIndex,
+	downloader *sec.FilingDownloader, config Config,
+	record sec.EdgarIndex,
 ) (Decision, Timings, error) {
 	var timings Timings
 
@@ -255,7 +255,7 @@ func ProcessOneMeasured(ctx context.Context, store *ownershipstore.Store,
 
 	timings.Download = time.Since(started)
 
-	path, err := edgar.LocalFilingPath(config.Download.Directory,
+	path, err := sec.LocalFilingPath(config.Download.Directory,
 		record.FilingPath)
 	if err != nil {
 		return DecisionFailed, timings, err
@@ -313,7 +313,7 @@ func ProcessOneMeasured(ctx context.Context, store *ownershipstore.Store,
 }
 
 func recordFailure(ctx context.Context, store *ownershipstore.Store,
-	record edgar.EdgarIndex, outcome ownershipstore.Outcome,
+	record sec.EdgarIndex, outcome ownershipstore.Outcome,
 	filingErr error,
 ) error {
 	if ctx.Err() != nil {
@@ -349,7 +349,7 @@ func plan(ctx context.Context, source io.Reader,
 	var summary Summary
 
 	seen := make(map[string]struct{})
-	reader := edgar.NewIndexReader(source, edgar.IndexFilter{
+	reader := sec.NewIndexReader(source, sec.IndexFilter{
 		FromYear: config.FromYear, ToYear: config.ToYear,
 	})
 	enabled := enabledForms(config.FormTypes)
@@ -403,14 +403,14 @@ func validateConfig(config Config) error {
 		return errors.New("ownership database path is required")
 	}
 
-	if config.FromYear != 0 && config.FromYear < edgar.EarliestPipelineYear {
+	if config.FromYear != 0 && config.FromYear < sec.EarliestPipelineYear {
 		return fmt.Errorf("ownership start year must be %d or later",
-			edgar.EarliestPipelineYear)
+			sec.EarliestPipelineYear)
 	}
 
-	if config.ToYear != 0 && config.ToYear < edgar.EarliestPipelineYear {
+	if config.ToYear != 0 && config.ToYear < sec.EarliestPipelineYear {
 		return fmt.Errorf("ownership end year must be %d or later",
-			edgar.EarliestPipelineYear)
+			sec.EarliestPipelineYear)
 	}
 
 	if config.FromYear != 0 && config.ToYear != 0 &&
@@ -515,7 +515,7 @@ func recordCoverage(ctx context.Context, store *ownershipstore.Store,
 	return nil
 }
 
-func logFailure(ctx context.Context, record edgar.EdgarIndex, err error) {
+func logFailure(ctx context.Context, record sec.EdgarIndex, err error) {
 	ctxlog.FromContext(ctx).Warn("ownership filing failed",
 		"path", record.FilingPath, "form_type", record.FormType,
 		"error", err)

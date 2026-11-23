@@ -1,7 +1,7 @@
 package chopstick
 
 import (
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 )
 
@@ -15,13 +15,13 @@ func AutomaticOwnershipFormTypes() []string {
 	}
 }
 
-func matchesAutomaticOwnershipScope(record edgar.EdgarIndex, ciks []string) bool {
+func matchesAutomaticOwnershipScope(record sec.EdgarIndex, ciks []string) bool {
 	form := ownership.NormalizeFormType(record.FormType)
 	if !isAutomaticOwnershipForm(form) || len(ciks) == 0 {
 		return false
 	}
 
-	return edgar.MatchesIndexFilter(record, edgar.IndexFilter{CIKs: ciks})
+	return sec.MatchesIndexFilter(record, sec.IndexFilter{CIKs: ciks})
 }
 
 func isAutomaticOwnershipForm(form string) bool {

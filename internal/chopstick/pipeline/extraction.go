@@ -5,8 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/nats-io/nats.go"
-	"wingman.com/chopstick/internal/edgar"
 	filingprocess "wingman.com/chopstick/internal/filing/process"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 // RunExtraction parses acquired submissions and stores normalized results.
@@ -23,7 +23,7 @@ func RunExtraction(ctx context.Context, bus *NATS, cfg ExtractionConfig,
 		cfg.MaxAttempts, cfg.Failures, nil, func(message *nats.Msg,
 			event Event,
 		) (string, error) {
-			path, err := edgar.LocalFilingPath(cfg.FilingsDirectory,
+			path, err := sec.LocalFilingPath(cfg.FilingsDirectory,
 				event.FilingPath)
 			if err != nil {
 				return "", err

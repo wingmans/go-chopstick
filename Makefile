@@ -1,4 +1,4 @@
-.PHONY: help setup generate check-generated build run test lint docs-pdf clean \
+.PHONY: help deps generate check-generated build run test lint docs-pdf clean \
 	gateway-start gateway-stop gateway-status
 
 .DEFAULT_GOAL := help
@@ -44,10 +44,10 @@ deps:
 
 generate:
 	@command -v "$(TEMPL)" >/dev/null 2>&1 || { \
-		echo 'templ is unavailable; run make setup' >&2; exit 1; \
+		echo 'templ is unavailable; run make deps' >&2; exit 1; \
 	}
 	@command -v "$(SQLC)" >/dev/null 2>&1 || { \
-		echo 'sqlc is unavailable; run make setup' >&2; exit 1; \
+		echo 'sqlc is unavailable; run make deps' >&2; exit 1; \
 	}
 	$(TEMPL) generate ./internal/web
 	$(SQLC) generate
@@ -70,11 +70,11 @@ check-generated: generate
 
 build: generate
 	mkdir -p $(BIN_DIR)
-	go build -o $(BIN_DIR)/ecb-fx ./cmd/ecb
+	go build -o $(BIN_DIR)/ecb-fx ./cmd/ingest/ecb
 	go build -o $(BIN_DIR)/chop ./cmd/chop
 	go build -o $(BIN_DIR)/chopd ./cmd/chopd
-	go build -o $(BIN_DIR)/constituents ./cmd/constituents
-	go build -o $(BIN_DIR)/yahoo-prices ./cmd/yf
+	go build -o $(BIN_DIR)/constituents ./cmd/ingest/constituents
+	go build -o $(BIN_DIR)/yahoo-prices ./cmd/ingest/yahoo
 
 run: generate
 	$(MAKE) gateway-start

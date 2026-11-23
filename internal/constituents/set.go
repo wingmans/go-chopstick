@@ -14,6 +14,16 @@ import (
 
 const CIKWidth = 10
 
+// NormalizeTicker returns the common ticker spelling used by constituent
+// snapshots and SEC company data.
+func NormalizeTicker(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, "\u00a0", "")
+	value = strings.ReplaceAll(value, " ", "")
+
+	return strings.ReplaceAll(value, ".", "-")
+}
+
 // Member identifies a current constituent for EDGAR processing.
 type Member struct {
 	CIK    string `json:"cik"`

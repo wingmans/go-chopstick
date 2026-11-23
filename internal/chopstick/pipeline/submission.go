@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/outbound"
 )
 
@@ -15,8 +15,8 @@ import (
 func RunSubmission(ctx context.Context, bus *NATS, cfg SubmissionConfig,
 	logger *slog.Logger,
 ) error {
-	downloader, err := edgar.NewFilingDownloader(
-		outbound.NewClient(30*time.Second), edgar.FilingDownloadConfig{
+	downloader, err := sec.NewFilingDownloader(
+		outbound.NewClient(30*time.Second), sec.FilingDownloadConfig{
 			Directory: cfg.Directory, UserAgent: cfg.UserAgent,
 			BaseURL: cfg.BaseURL, RequestGate: cfg.RequestGate,
 		})
@@ -34,7 +34,7 @@ func RunSubmission(ctx context.Context, bus *NATS, cfg SubmissionConfig,
 		cfg.MaxAttempts, cfg.Failures, nil, func(message *nats.Msg,
 			event Event,
 		) (string, error) {
-			record := edgar.EdgarIndex{
+			record := sec.EdgarIndex{
 				CIK:         event.CIK,
 				CompanyName: event.CompanyName,
 				FormType:    event.FormType,

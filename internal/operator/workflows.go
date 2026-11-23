@@ -12,10 +12,10 @@ import (
 	"wingman.com/chopstick/internal/appdata"
 	"wingman.com/chopstick/internal/chopstick"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
 	filingview "wingman.com/chopstick/internal/filing"
 	filingworkflow "wingman.com/chopstick/internal/filing/process"
 	filingreport "wingman.com/chopstick/internal/filing/report"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/ownership/importer"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
@@ -82,7 +82,7 @@ type ParseConfig struct {
 	Files      []string
 	MasterPath string
 	AnalysisDB string
-	Filter     edgar.IndexFilter
+	Filter     sec.IndexFilter
 	Noop       bool
 	Reprocess  bool
 }
@@ -125,7 +125,7 @@ type CoverageConfig struct {
 	ParsedDir  string
 	AnalysisDB string
 	OutputPath string
-	Filter     edgar.IndexFilter
+	Filter     sec.IndexFilter
 	SetName    string
 	FromYear   int
 	ToYear     int
@@ -179,8 +179,8 @@ func ProcessFilings(
 	client *http.Client,
 	masterPath string,
 	analysisDB string,
-	config edgar.FilingDownloadConfig,
-	filter edgar.IndexFilter,
+	config sec.FilingDownloadConfig,
+	filter sec.IndexFilter,
 	reprocess bool,
 ) error {
 	_, err := filingworkflow.ProcessFilings(

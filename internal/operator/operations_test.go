@@ -21,7 +21,7 @@ func TestClassifyErrorIdentifiesNATSPublishTimeout(t *testing.T) {
 	t.Parallel()
 
 	cause := fmt.Errorf("discover stage: %w", &pipeline.PublishAckTimeoutError{
-		Subject: "edgar.filing.discovered.4",
+		Subject: "sec.filing.discovered.4",
 		Timeout: 10 * time.Second,
 	})
 	err := ClassifyError(t.Context(), cause)

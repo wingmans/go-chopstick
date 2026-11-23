@@ -12,6 +12,7 @@ import (
 
 	"wingman.com/chopstick/internal/artifacts"
 	"wingman.com/chopstick/internal/parser"
+	"wingman.com/chopstick/internal/web/artifactviewer"
 )
 
 type artifactCommandConfig struct {
@@ -110,7 +111,9 @@ func validateViewerAddress(address string) error {
 func serveArtifacts(ctx context.Context, cfg artifactCommandConfig,
 	destination string,
 ) error {
-	handler, err := artifacts.Viewer(destination, cfg.cik, cfg.accession)
+	handler, err := artifactviewer.Viewer(
+		destination, cfg.cik, cfg.accession,
+	)
 	if err != nil {
 		return err
 	}

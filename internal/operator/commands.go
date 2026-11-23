@@ -15,7 +15,7 @@ import (
 	"wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 	"wingman.com/chopstick/internal/transport"
 	"wingman.com/chopstick/internal/xerr"
@@ -168,9 +168,9 @@ func Ownership(ctx context.Context, client *http.Client,
 		return printOwnershipStatus(ctx, cfg.DatabasePath)
 	}
 
-	if cfg.FromYear < edgar.EarliestPipelineYear {
+	if cfg.FromYear < sec.EarliestPipelineYear {
 		return fmt.Errorf("--from-year must be %d or later",
-			edgar.EarliestPipelineYear)
+			sec.EarliestPipelineYear)
 	}
 
 	if cfg.ToYear != 0 && cfg.ToYear < cfg.FromYear {
@@ -195,7 +195,7 @@ func Ownership(ctx context.Context, client *http.Client,
 	return runOwnership(ctx, client, ownershipCommandConfig{
 		operation: cfg.Operation, masterPath: cfg.MasterPath,
 		databasePath: cfg.DatabasePath,
-		download: edgar.FilingDownloadConfig{
+		download: sec.FilingDownloadConfig{
 			Directory: cfg.CacheDir, UserAgent: cfg.UserAgent,
 			BaseURL: cfg.BaseURL, Noop: cfg.Noop,
 		},
@@ -229,7 +229,7 @@ type TaxonomyConfig struct {
 	File         string
 	TaxonomyPath string
 	ParsedDir    string
-	Filter       edgar.IndexFilter
+	Filter       sec.IndexFilter
 	SetName      string
 	FromYear     int
 	ToYear       int
@@ -246,22 +246,22 @@ func Taxonomy(ctx context.Context, cfg TaxonomyConfig) error {
 
 // DownloadIndex downloads and stitches SEC quarterly indexes.
 func DownloadIndex(ctx context.Context, client *http.Client,
-	cfg edgar.Config,
+	cfg sec.Config,
 ) error {
 	logger := ctxlog.FromContext(ctx)
 	logger.Info("starting SEC index refresh",
 		"from_year", cfg.SinceYear, "directory", cfg.Directory,
 		"stitch", cfg.Stitch, "noop", cfg.Noop)
 
-	return edgar.DownloadIndex(ctx, client, cfg)
+	return sec.DownloadIndex(ctx, client, cfg)
 }
 
 // DownloadFilingsConfig selects a finite filing download and parse workflow.
 type DownloadFilingsConfig struct {
 	MasterPath string
 	AnalysisDB string
-	Download   edgar.FilingDownloadConfig
-	Filter     edgar.IndexFilter
+	Download   sec.FilingDownloadConfig
+	Filter     sec.IndexFilter
 	SetName    string
 	Reprocess  bool
 }
@@ -299,25 +299,25 @@ func ProcessSubmissions(ctx context.Context, cfg ParseConfig) error {
 // BuildFilter resolves constituent and year selections into an index filter.
 func BuildFilter(cik, setName string, formTypes []string, year string,
 	fromYear, toYear int,
-) (edgar.IndexFilter, error) {
-	forms, err := edgar.ValidateSupportedFormTypes(formTypes)
+) (sec.IndexFilter, error) {
+	forms, err := sec.ValidateSupportedFormTypes(formTypes)
 	if err != nil {
-		return edgar.IndexFilter{}, err
+		return sec.IndexFilter{}, err
 	}
 
-	filter := edgar.IndexFilter{CIK: cik, FormTypes: forms}
+	filter := sec.IndexFilter{CIK: cik, FormTypes: forms}
 	if err := applySet(&filter, setName); err != nil {
-		return edgar.IndexFilter{}, err
+		return sec.IndexFilter{}, err
 	}
 
 	if err := applyYears(&filter, year, fromYear, toYear); err != nil {
-		return edgar.IndexFilter{}, err
+		return sec.IndexFilter{}, err
 	}
 
 	return filter, nil
 }
 
-func applySet(filter *edgar.IndexFilter, name string) error {
+func applySet(filter *sec.IndexFilter, name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil
@@ -337,7 +337,7 @@ func applySet(filter *edgar.IndexFilter, name string) error {
 	return nil
 }
 
-func applyYears(filter *edgar.IndexFilter, year string,
+func applyYears(filter *sec.IndexFilter, year string,
 	fromYear, toYear int,
 ) error {
 	if strings.TrimSpace(year) != "" {
@@ -356,11 +356,11 @@ func applyYears(filter *edgar.IndexFilter, year string,
 		return nil
 	}
 
-	if fromYear != 0 && (fromYear < edgar.EarliestYear || fromYear > 9999) {
+	if fromYear != 0 && (fromYear < sec.EarliestYear || fromYear > 9999) {
 		return errors.New("--from-year must be a valid EDGAR year")
 	}
 
-	if toYear != 0 && (toYear < edgar.EarliestYear || toYear > 9999) {
+	if toYear != 0 && (toYear < sec.EarliestYear || toYear > 9999) {
 		return errors.New("--to-year must be a valid EDGAR year")
 	}
 
@@ -462,7 +462,7 @@ func ClassifyError(ctx context.Context, err error) error {
 		return xerr.Wrap(xerr.NotFound, "LOCAL_DATA_NOT_FOUND",
 			"required local data was not found", err)
 	default:
-		if httpError, ok := errors.AsType[*edgar.HTTPError](err); ok {
+		if httpError, ok := errors.AsType[*sec.HTTPError](err); ok {
 			return xerr.Wrap(xerr.Unavailable, "EDGAR_REJECTED_REQUEST",
 				"EDGAR rejected the request", err).WithDetails(map[string]any{
 				"url": httpError.URL, "status_code": httpError.StatusCode,

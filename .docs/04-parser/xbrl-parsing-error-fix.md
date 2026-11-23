@@ -165,7 +165,8 @@ parser-only normalized copy of the affected XML, with the original bytes,
 normalization rules, and diagnostics retained for lineage.
 
 Tiny malformed fixtures now live in
-`internal/edgar/testdata/malformed-xbrl/`. They preserve the failure patterns
+`internal/ingest/sec/testdata/malformed-xbrl/`. They preserve the failure
+patterns
 without copying full SEC filings into the test suite. Tests assert both sides:
 the strict XML reader rejects the malformed bytes, while submission parsing can
 normalize reviewed patterns in memory and parse them successfully.

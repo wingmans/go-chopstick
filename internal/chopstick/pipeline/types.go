@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 )
 
 const (
@@ -30,7 +30,7 @@ type SubmissionConfig struct {
 	Drain       bool
 	MaxAttempts int
 	Failures    FailureStore
-	RequestGate *edgar.RequestGate
+	RequestGate *sec.RequestGate
 }
 
 // ExtractionConfig configures the serial filing-extraction worker.
@@ -52,5 +52,5 @@ type OwnershipConfig struct {
 	Drain            bool
 	MaxAttempts      int
 	Failures         FailureStore
-	RequestGate      *edgar.RequestGate
+	RequestGate      *sec.RequestGate
 }

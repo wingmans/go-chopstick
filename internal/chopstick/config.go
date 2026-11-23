@@ -13,7 +13,7 @@ import (
 	"wingman.com/chopstick/internal/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/edgar"
+	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/transport"
 )
 
@@ -53,12 +53,12 @@ type Config struct {
 // parsing. Command-line adapters may override the returned typed values.
 func ConfigFromEnvironment() (Config, error) {
 	fromYear, err := environmentInt("EDGAR_FROM_YEAR",
-		edgar.EarliestPipelineYear)
+		sec.EarliestPipelineYear)
 	if err != nil {
 		return Config{}, err
 	}
 
-	forms, err := edgar.ValidateSupportedFormTypes(strings.Split(
+	forms, err := sec.ValidateSupportedFormTypes(strings.Split(
 		environmentValue("EDGAR_FORM_TYPES",
 			"10-K,10-K/A,10-Q,10-Q/A,8-K,8-K/A"), ",",
 	))
@@ -136,9 +136,9 @@ func (c *Config) Validate() error {
 		return errors.New("poll interval must be positive")
 	case c.MaxAttempts <= 0:
 		return errors.New("maximum attempts must be positive")
-	case c.FromYear < edgar.EarliestPipelineYear:
+	case c.FromYear < sec.EarliestPipelineYear:
 		return fmt.Errorf("from year must be %d or later",
-			edgar.EarliestPipelineYear)
+			sec.EarliestPipelineYear)
 	case len(c.FormTypes) == 0:
 		return errors.New("at least one supported form type is required")
 	}
