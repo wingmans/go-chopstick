@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"wingman.com/chopstick/internal/artifacts"
+	"wingman.com/chopstick/internal/edgar/artifacts"
 )
 
 //go:embed viewer/index.html viewer/viewer.css viewer/viewer.js

@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	filingview "wingman.com/chopstick/internal/filing"
-	"wingman.com/chopstick/internal/parser"
+	filingview "wingman.com/chopstick/internal/edgar/filing"
+	"wingman.com/chopstick/internal/edgar/parser"
 )
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {

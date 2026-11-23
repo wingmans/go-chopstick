@@ -55,18 +55,18 @@ generate:
 check-generated: generate
 	$(SQLC) vet
 	@test -z "$$(git status --short --untracked-files=all -- \
-		internal/chopstick/pipeline/dbgen \
+		internal/edgar/pipeline/dbgen \
 		internal/market/store/dbgen \
-		internal/filing/store/dbgen \
-		internal/news/dbgen \
-		internal/mirror/dbgen)" || { \
+		internal/edgar/filing/store/dbgen \
+		internal/edgar/news/dbgen \
+		internal/edgar/mirror/dbgen)" || { \
 		echo 'generated database code is out of date' >&2; \
 		git status --short --untracked-files=all -- \
-			internal/chopstick/pipeline/dbgen \
+			internal/edgar/pipeline/dbgen \
 			internal/market/store/dbgen \
-			internal/filing/store/dbgen \
-			internal/news/dbgen \
-			internal/mirror/dbgen; \
+			internal/edgar/filing/store/dbgen \
+			internal/edgar/news/dbgen \
+			internal/edgar/mirror/dbgen; \
 		exit 1; \
 	}
 

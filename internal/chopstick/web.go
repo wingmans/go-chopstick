@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/platform/appdata"
-	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/news"
+	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
+	"wingman.com/chopstick/internal/edgar/news"
 	"wingman.com/chopstick/internal/web"
 )
 

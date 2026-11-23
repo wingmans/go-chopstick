@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	"wingman.com/chopstick/internal/platform/appdata"
-	"wingman.com/chopstick/internal/chopstick/pipeline"
+	"wingman.com/chopstick/internal/edgar/pipeline"
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/ownership"
+	"wingman.com/chopstick/internal/edgar/ownership"
 	"wingman.com/chopstick/internal/platform/transport"
 	"wingman.com/chopstick/internal/platform/xerr"
 )

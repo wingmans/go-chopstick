@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 
-	filingview "wingman.com/chopstick/internal/filing"
-	dividendview "wingman.com/chopstick/internal/filing/dividend"
-	filingstore "wingman.com/chopstick/internal/filing/store"
-	"wingman.com/chopstick/internal/parser"
+	filingview "wingman.com/chopstick/internal/edgar/filing"
+	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
+	filingstore "wingman.com/chopstick/internal/edgar/filing/store"
+	"wingman.com/chopstick/internal/edgar/parser"
 )
 
 // SQLiteStore reads normalized views from SQLite and keeps raw inspection

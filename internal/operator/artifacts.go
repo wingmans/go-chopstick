@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/artifacts"
-	"wingman.com/chopstick/internal/parser"
+	"wingman.com/chopstick/internal/edgar/artifacts"
+	"wingman.com/chopstick/internal/edgar/parser"
 	"wingman.com/chopstick/internal/web/artifactviewer"
 )
 

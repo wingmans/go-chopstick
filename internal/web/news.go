@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/news"
+	"wingman.com/chopstick/internal/edgar/news"
 )
 
 // DownloadRequester submits one explicit filing acquisition request.

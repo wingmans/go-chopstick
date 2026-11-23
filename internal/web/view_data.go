@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	filingview "wingman.com/chopstick/internal/filing"
-	dividendview "wingman.com/chopstick/internal/filing/dividend"
-	"wingman.com/chopstick/internal/news"
-	ownershipstore "wingman.com/chopstick/internal/ownership/store"
-	"wingman.com/chopstick/internal/parser"
+	filingview "wingman.com/chopstick/internal/edgar/filing"
+	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
+	"wingman.com/chopstick/internal/edgar/news"
+	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
+	"wingman.com/chopstick/internal/edgar/parser"
 	filingstore "wingman.com/chopstick/internal/web/store"
 )
 

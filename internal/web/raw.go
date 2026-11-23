@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/parser"
+	"wingman.com/chopstick/internal/edgar/parser"
 )
 
 func (s *Server) rawAPIFiling(w http.ResponseWriter, r *http.Request) {

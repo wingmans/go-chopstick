@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/platform/appdata"
-	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
+	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
 	"wingman.com/chopstick/internal/ingest/sec"
 	marketyahoo "wingman.com/chopstick/internal/market"
 	operator "wingman.com/chopstick/internal/operator"

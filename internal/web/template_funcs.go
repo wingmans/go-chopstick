@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"strings"
 
-	filingview "wingman.com/chopstick/internal/filing"
+	filingview "wingman.com/chopstick/internal/edgar/filing"
 )
 
 // formatFactValue formats a filingview.FactValue for display, including handling units like USD and per share.

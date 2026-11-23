@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/ownership"
-	ownershipstore "wingman.com/chopstick/internal/ownership/store"
+	"wingman.com/chopstick/internal/edgar/ownership"
+	ownershipstore "wingman.com/chopstick/internal/edgar/ownership/store"
 )
 
 func TestOwnershipViewerUsesSelectedCompanySet(t *testing.T) {

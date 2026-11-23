@@ -12,12 +12,12 @@ import (
 	"testing"
 
 	"wingman.com/chopstick/internal/constituents"
-	filingview "wingman.com/chopstick/internal/filing"
-	dividendview "wingman.com/chopstick/internal/filing/dividend"
-	filingnormalize "wingman.com/chopstick/internal/filing/normalize"
-	filingstore "wingman.com/chopstick/internal/filing/store"
-	"wingman.com/chopstick/internal/news"
-	"wingman.com/chopstick/internal/parser"
+	filingview "wingman.com/chopstick/internal/edgar/filing"
+	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
+	filingnormalize "wingman.com/chopstick/internal/edgar/filing/normalize"
+	filingstore "wingman.com/chopstick/internal/edgar/filing/store"
+	"wingman.com/chopstick/internal/edgar/news"
+	"wingman.com/chopstick/internal/edgar/parser"
 )
 
 type goldenDetailResults struct {

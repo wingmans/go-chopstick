@@ -246,7 +246,7 @@ execution and lifecycle.
 
 ### 2. Keep Atom and index readers concrete
 
-- Reuse `internal/chopstick/ingest` for selecting and reading quarterly TSV
+- Reuse `internal/edgar/ingest` for selecting and reading quarterly TSV
   files.
 - Convert index records into the existing `pipeline.Event` contract.
 - Save events through `pipeline.Store` so deduplication and outbox publication

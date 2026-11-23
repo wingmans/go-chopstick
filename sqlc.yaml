@@ -3,12 +3,12 @@ version: "2"
 sql:
   - name: polling
     engine: sqlite
-    schema: internal/chopstick/pipeline/sql/schema.sql
-    queries: internal/chopstick/pipeline/sql/queries.sql
+    schema: internal/edgar/pipeline/sql/schema.sql
+    queries: internal/edgar/pipeline/sql/queries.sql
     gen:
       go:
         package: dbgen
-        out: internal/chopstick/pipeline/dbgen
+        out: internal/edgar/pipeline/dbgen
         sql_package: database/sql
         emit_empty_slices: true
         emit_prepared_queries: true
@@ -30,12 +30,12 @@ sql:
         omit_unused_structs: true
   - name: analysis
     engine: sqlite
-    schema: internal/filing/store/sql/schema.sql
-    queries: internal/filing/store/sql/queries.sql
+    schema: internal/edgar/filing/store/sql/schema.sql
+    queries: internal/edgar/filing/store/sql/queries.sql
     gen:
       go:
         package: dbgen
-        out: internal/filing/store/dbgen
+        out: internal/edgar/filing/store/dbgen
         sql_package: database/sql
         emit_empty_slices: true
         emit_prepared_queries: true
@@ -44,12 +44,12 @@ sql:
           cik: CIK
   - name: news
     engine: sqlite
-    schema: internal/news/sql/schema.sql
-    queries: internal/news/sql/queries.sql
+    schema: internal/edgar/news/sql/schema.sql
+    queries: internal/edgar/news/sql/queries.sql
     gen:
       go:
         package: dbgen
-        out: internal/news/dbgen
+        out: internal/edgar/news/dbgen
         sql_package: database/sql
         emit_empty_slices: true
         emit_prepared_queries: true
@@ -58,12 +58,12 @@ sql:
           cik: CIK
   - name: mirror
     engine: sqlite
-    schema: internal/mirror/sql/schema.sql
-    queries: internal/mirror/sql/queries.sql
+    schema: internal/edgar/mirror/sql/schema.sql
+    queries: internal/edgar/mirror/sql/queries.sql
     gen:
       go:
         package: dbgen
-        out: internal/mirror/dbgen
+        out: internal/edgar/mirror/dbgen
         sql_package: database/sql
         emit_empty_slices: true
         emit_prepared_queries: true

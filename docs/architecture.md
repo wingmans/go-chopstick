@@ -27,7 +27,7 @@ outbox. Application scheduling, deduplication, persistence, and publication
 remain below `internal/chopstick`; SEC protocol and source-record handling live
 below `internal/ingest/sec`.
 
-`internal/chopstick/pipeline` owns the durable filing event, deduplication,
+`internal/edgar/pipeline` owns the durable filing event, deduplication,
 outbox, NATS delivery, failure state, and serial workers. Its files expose the
 application flow: selection, submission acquisition, filing extraction,
 ownership consumption, and news projection. Each step has one worker.
@@ -44,14 +44,14 @@ It currently selects Form 4/4A and structured `SCHEDULE 13D/G` submissions.
 The ownership package retains the broader form registry for explicit operator
 work and future pipeline scope.
 
-`internal/parser` produces source-level filing data. `internal/filing` owns
-the persisted normalized financial model, file I/O, history, and taxonomy.
-`internal/filing/normalize` constructs that model from parsed filings, while
-`internal/filing/quality` owns coverage, identity, and lint diagnostics.
-`internal/filing/process` coordinates synchronous filing extraction,
-`internal/filing/store` persists read models, and `internal/filing/dividend`
-owns the dividend projection. Ownership, market,
-and news keep their own feature packages and databases.
+`internal/edgar/parser` produces source-level filing data.
+`internal/edgar/filing` owns the persisted normalized financial model, file
+I/O, history, and taxonomy. `internal/edgar/filing/normalize` constructs that
+model from parsed filings, while `internal/edgar/filing/quality` owns coverage,
+identity, and lint diagnostics. `internal/edgar/filing/process` coordinates
+synchronous filing extraction, `internal/edgar/filing/store` persists read
+models, and `internal/edgar/filing/dividend` owns the dividend projection.
+Ownership, market, and news keep their own feature packages and databases.
 
 `internal/market` owns Yahoo synchronization, normalized CSV landing batches,
 watermarks, repair work, and market persistence. Only Yahoo HTTP and JSON
@@ -70,7 +70,7 @@ changing the constituent model or command workflow.
   handlers.
 - Ingest adapters do not own pipeline persistence or web presentation.
 - `internal/platform/transport` is the local CLI control connection.
-- `internal/chopstick/pipeline` owns NATS delivery for pipeline events.
+- `internal/edgar/pipeline` owns NATS delivery for pipeline events.
 - NATS remains an independently run local service.
 
 ## Storage and availability
@@ -85,8 +85,8 @@ deployment and protocol decisions are intentionally outside this boundary.
 ## Web routes
 
 `internal/web` owns all HTTP presentation, including the artifact viewer and
-its embedded assets. `internal/artifacts` owns extraction and generated bundle
-operations, but no HTTP handler.
+its embedded assets. `internal/edgar/artifacts` owns extraction and generated
+bundle operations, but no HTTP handler.
 
 The application shell links the public filings, ownership, news, and status
 modules. Company, filing, ownership-company, and raw-inspector pages are

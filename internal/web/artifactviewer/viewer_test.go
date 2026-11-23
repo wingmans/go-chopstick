@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"wingman.com/chopstick/internal/artifacts"
+	"wingman.com/chopstick/internal/edgar/artifacts"
 )
 
 func TestViewerServesBundleAndAssets(t *testing.T) {

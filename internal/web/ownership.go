@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"wingman.com/chopstick/internal/ownership"
+	"wingman.com/chopstick/internal/edgar/ownership"
 )
 
 func (s *Server) ownershipDirectory(w http.ResponseWriter, r *http.Request) {

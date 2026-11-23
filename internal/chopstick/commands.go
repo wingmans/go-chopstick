@@ -11,8 +11,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/chopstick/internal/chopstick/ingest"
-	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
+	"wingman.com/chopstick/internal/edgar/ingest"
+	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
 	"wingman.com/chopstick/internal/platform/transport"
 )
 

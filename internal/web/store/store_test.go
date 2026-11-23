@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	filingview "wingman.com/chopstick/internal/filing"
-	filingnormalize "wingman.com/chopstick/internal/filing/normalize"
-	"wingman.com/chopstick/internal/parser"
+	filingview "wingman.com/chopstick/internal/edgar/filing"
+	filingnormalize "wingman.com/chopstick/internal/edgar/filing/normalize"
+	"wingman.com/chopstick/internal/edgar/parser"
 )
 
 func TestJSONDirectoryListsViewSummaries(t *testing.T) {

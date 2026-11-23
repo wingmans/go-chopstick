@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	filingview "wingman.com/chopstick/internal/filing"
-	dividendview "wingman.com/chopstick/internal/filing/dividend"
-	"wingman.com/chopstick/internal/parser"
+	filingview "wingman.com/chopstick/internal/edgar/filing"
+	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
+	"wingman.com/chopstick/internal/edgar/parser"
 )
 
 // Store defines the read operations needed by the analytical web application.
