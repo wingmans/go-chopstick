@@ -58,13 +58,15 @@ check-generated: generate
 		internal/chopstick/pipeline/dbgen \
 		internal/market/store/dbgen \
 		internal/filing/store/dbgen \
-		internal/news/dbgen)" || { \
+		internal/news/dbgen \
+		internal/mirror/dbgen)" || { \
 		echo 'generated database code is out of date' >&2; \
 		git status --short --untracked-files=all -- \
 			internal/chopstick/pipeline/dbgen \
 			internal/market/store/dbgen \
 			internal/filing/store/dbgen \
-			internal/news/dbgen; \
+			internal/news/dbgen \
+			internal/mirror/dbgen; \
 		exit 1; \
 	}
 

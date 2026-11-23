@@ -56,3 +56,17 @@ sql:
         omit_unused_structs: true
         rename:
           cik: CIK
+  - name: mirror
+    engine: sqlite
+    schema: internal/mirror/sql/schema.sql
+    queries: internal/mirror/sql/queries.sql
+    gen:
+      go:
+        package: dbgen
+        out: internal/mirror/dbgen
+        sql_package: database/sql
+        emit_empty_slices: true
+        emit_prepared_queries: true
+        omit_unused_structs: true
+        rename:
+          cik: CIK
