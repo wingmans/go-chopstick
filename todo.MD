@@ -424,7 +424,7 @@ Keep the useful flat domain packages:
 - ownership, market, and news: their existing feature boundaries.
 - pipeline: finite filing processing workflows.
 Replace the misleading pollingworker boundary:
-- Move Atom fetching and periodic polling into internal/edgar/atom.
+- Move Atom fetching and periodic polling into internal/ingest/sec/atom.
 - Move filing lifecycle events, deduplication, outbox state, failures, and the
   polling SQLite schema into internal/filing/work.
 - Rename FilingEvent to work.Event and DedupeService to work.Store.
@@ -439,7 +439,7 @@ Make oversized packages readable without creating more services:
   API.
 - Split eventworker/worker.go into selection, download, processing,
   ownership, and shared-consumer files while retaining one package.
-- Remove the transitional parser aliases from internal/edgar after all
+- Remove the transitional parser aliases from internal/ingest/sec after all
   callers import internal/parser directly.
 Do not move every filing-related package beneath internal/filing. That would
 produce high import churn without reducing coupling.
