@@ -19,7 +19,9 @@ func TestProductionCodeDoesNotCreateDirectHTTPClients(t *testing.T) {
 		t.Fatal("resolve compliance test path")
 	}
 
-	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	root := filepath.Clean(filepath.Join(
+		filepath.Dir(filename), "..", "..", "..",
+	))
 
 	var violations []string
 
@@ -60,7 +62,7 @@ func TestProductionCodeDoesNotCreateDirectHTTPClients(t *testing.T) {
 	sort.Strings(violations)
 
 	if len(violations) > 0 {
-		t.Fatalf("production HTTP bypasses internal/outbound:\n%s",
+		t.Fatalf("production HTTP bypasses internal/platform/outbound:\n%s",
 			strings.Join(violations, "\n"))
 	}
 }

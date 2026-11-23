@@ -13,7 +13,7 @@ import (
 
 	"wingman.com/chopstick/internal/chopstick/ingest"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/transport"
+	"wingman.com/chopstick/internal/platform/transport"
 )
 
 type adminHandler struct {

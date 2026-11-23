@@ -13,7 +13,7 @@ import (
 	"time"
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
 )
 

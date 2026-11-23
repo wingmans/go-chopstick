@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/outbound"
+	"wingman.com/chopstick/internal/platform/outbound"
 )
 
 // Origin retrieves authoritative SEC submissions on confirmed mirror misses.

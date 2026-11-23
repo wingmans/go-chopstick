@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/ingest/ecb"
-	"wingman.com/chopstick/internal/outbound"
-	"wingman.com/chopstick/internal/xerr"
+	"wingman.com/chopstick/internal/platform/outbound"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 func main() {

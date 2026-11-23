@@ -11,7 +11,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 const (

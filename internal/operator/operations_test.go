@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/transport"
-	"wingman.com/chopstick/internal/xerr"
+	"wingman.com/chopstick/internal/platform/transport"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 func TestClassifyErrorIdentifiesNATSPublishTimeout(t *testing.T) {

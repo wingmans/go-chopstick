@@ -16,8 +16,8 @@ import (
 
 	"golang.org/x/net/html/charset"
 
-	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/outbound"
+	"wingman.com/chopstick/internal/platform/ctxlog"
+	"wingman.com/chopstick/internal/platform/outbound"
 )
 
 // Atom Feed XML Schema Mapping.

@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/chopstick"
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	filingview "wingman.com/chopstick/internal/filing"
 	filingworkflow "wingman.com/chopstick/internal/filing/process"
 	filingreport "wingman.com/chopstick/internal/filing/report"
@@ -19,7 +19,7 @@ import (
 	"wingman.com/chopstick/internal/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/ownership/importer"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
-	"wingman.com/chopstick/internal/transport"
+	"wingman.com/chopstick/internal/platform/transport"
 )
 
 // ErrEmptyStatus indicates that chopd returned no status payload.

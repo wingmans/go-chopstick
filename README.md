@@ -65,7 +65,8 @@ The main ownership rules are:
 - filing, market, ownership, and constituent transformations remain with their
   respective domains.
 - `internal/web` owns HTTP handlers, templates, assets, and viewers.
-- `internal/outbound` is the only production external HTTP-client factory.
+- `internal/platform/outbound` is the only production external HTTP-client
+  factory.
 
 See the [architecture guide](docs/architecture.md),
 [outbound gateway guide](docs/outbound-gateway.md), and

@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/outbound"
+	"wingman.com/chopstick/internal/platform/outbound"
 )
 
 // Backfill downloads the historical index, publishes discoveries, and drains

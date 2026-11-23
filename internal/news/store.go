@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/news/dbgen"
 )
 

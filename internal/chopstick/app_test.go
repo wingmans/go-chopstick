@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/chopstick/ingest"
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/transport"
+	"wingman.com/chopstick/internal/platform/transport"
 )
 
 func TestConfigFromEnvironment(t *testing.T) {

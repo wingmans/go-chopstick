@@ -17,7 +17,9 @@ return fmt.Errorf("read filing %s: %w", path, err)
 At a boundary, convert the final error into an `xerr.Error`:
 
 ```go
-return xerr.Wrap(xerr.Internal, "FILING_READ_FAILED", "could not read filing", err)
+return xerr.Wrap(
+    xerr.Internal, "FILING_READ_FAILED", "could not read filing", err,
+)
 ```
 
 The cause remains available through `errors.Is` and `errors.As`.
@@ -36,7 +38,10 @@ Details are operator-facing metadata. They are copied onto a new error and do
 not mutate the original:
 
 ```go
-return xerr.Wrap(xerr.Unavailable, "EDGAR_UNAVAILABLE", "EDGAR service is unavailable", err).
+return xerr.Wrap(
+    xerr.Unavailable, "EDGAR_UNAVAILABLE",
+    "EDGAR service is unavailable", err,
+).
     WithDetails(map[string]any{"url": requestURL})
 ```
 
@@ -44,8 +49,11 @@ Details are not intended for control flow and should not contain secrets.
 
 ## Boundary mappings
 
-- CLI: invalid input, missing local data, dependency failures, cancellation, timeout, or internal failure.
-- HTTP: `NOT_FOUND` to 404, invalid input to 400, unavailable dependencies to 503, and unexpected failures to 500.
-- Jobs and event consumers: retain the stable code and cause for retry or failure decisions.
+- CLI: invalid input, missing local data, dependency failures, cancellation,
+  timeout, or internal failure.
+- HTTP: `NOT_FOUND` to 404, invalid input to 400, unavailable dependencies to
+  503, and unexpected failures to 500.
+- Jobs and event consumers: retain the stable code and cause for retry or
+  failure decisions.
 
 Help output is a successful CLI path and should remain separate from errors.

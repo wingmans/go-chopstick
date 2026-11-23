@@ -69,7 +69,7 @@ changing the constituent model or command workflow.
 - Domain packages do not import commands, `operator`, `chopstick`, or web
   handlers.
 - Ingest adapters do not own pipeline persistence or web presentation.
-- `internal/transport` is the local CLI control connection.
+- `internal/platform/transport` is the local CLI control connection.
 - `internal/chopstick/pipeline` owns NATS delivery for pipeline events.
 - NATS remains an independently run local service.
 

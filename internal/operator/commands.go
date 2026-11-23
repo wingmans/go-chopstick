@@ -11,14 +11,14 @@ import (
 	"strconv"
 	"strings"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/constituents"
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
-	"wingman.com/chopstick/internal/transport"
-	"wingman.com/chopstick/internal/xerr"
+	"wingman.com/chopstick/internal/platform/transport"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 // ArtifactsConfig identifies one filing and an artifact operation.

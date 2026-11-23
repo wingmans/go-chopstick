@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"wingman.com/chopstick/internal/chopstick/pipeline/dbgen"
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 // Event represents the unified schema for both master.zip and RSS feeds.

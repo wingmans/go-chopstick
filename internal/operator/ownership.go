@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 	ownershipimporter "wingman.com/chopstick/internal/ownership/importer"

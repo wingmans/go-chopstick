@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/news"
 	"wingman.com/chopstick/internal/web"

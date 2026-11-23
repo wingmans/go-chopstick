@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/transport"
+	"wingman.com/chopstick/internal/platform/transport"
 )
 
 const (

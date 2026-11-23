@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/market/store/dbgen"
 )
 

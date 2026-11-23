@@ -17,7 +17,7 @@ import (
 	"wingman.com/chopstick/internal/constituents"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"
 	filingstore "wingman.com/chopstick/internal/web/store"
-	"wingman.com/chopstick/internal/xerr"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 //go:embed static/assets/* static/css/* static/script/*

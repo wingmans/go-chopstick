@@ -5,7 +5,7 @@ import (
 	"time"
 
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
 type Fetcher interface {

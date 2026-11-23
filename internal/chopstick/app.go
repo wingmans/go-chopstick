@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
+	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/chopstick/ingest"
 	pipeline "wingman.com/chopstick/internal/chopstick/pipeline"
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/outbound"
-	"wingman.com/chopstick/internal/transport"
+	"wingman.com/chopstick/internal/platform/outbound"
+	"wingman.com/chopstick/internal/platform/transport"
 )
 
 func Run(ctx context.Context, config Config, logger *slog.Logger) error {

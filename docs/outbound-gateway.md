@@ -46,10 +46,10 @@ start Docker; their first external request fails if the gateway is absent.
 
 ## Request path
 
-The concrete client in `internal/outbound` preserves the intended upstream
-host, path, query, method, body, and headers while connecting to the local
-gateway. The gateway validates the host, reserves a rate-limit slot, and
-creates the HTTPS connection to the upstream service.
+The concrete client in `internal/platform/outbound` preserves the intended
+upstream host, path, query, method, body, and headers while connecting to the
+local gateway. The gateway validates the host, reserves a rate-limit slot,
+and creates the HTTPS connection to the upstream service.
 
 The client retries `429 Too Many Requests` responses with bounded exponential
 backoff and jitter. It respects `Retry-After` up to the configured maximum

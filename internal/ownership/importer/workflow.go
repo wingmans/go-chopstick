@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/ownership"
 	ownershipstore "wingman.com/chopstick/internal/ownership/store"

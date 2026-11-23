@@ -13,10 +13,10 @@ import (
 
 	"github.com/alecthomas/kong"
 
-	"wingman.com/chopstick/internal/buildinfo"
+	"wingman.com/chopstick/internal/platform/buildinfo"
 	"wingman.com/chopstick/internal/chopstick"
-	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/envfile"
+	"wingman.com/chopstick/internal/platform/ctxlog"
+	"wingman.com/chopstick/internal/platform/envfile"
 )
 
 type daemonCLI struct {

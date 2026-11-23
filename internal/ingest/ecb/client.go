@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"wingman.com/chopstick/internal/xerr"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 const defaultBaseURL = "https://data-api.ecb.europa.eu"

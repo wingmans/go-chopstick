@@ -8,7 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"wingman.com/chopstick/internal/ingest/sec"
-	"wingman.com/chopstick/internal/outbound"
+	"wingman.com/chopstick/internal/platform/outbound"
 )
 
 // RunSubmission acquires authoritative raw submissions for selected filings.

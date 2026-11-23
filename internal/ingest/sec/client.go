@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/ctxlog"
-	"wingman.com/chopstick/internal/outbound"
+	"wingman.com/chopstick/internal/platform/ctxlog"
+	"wingman.com/chopstick/internal/platform/outbound"
 )
 
 const maxHTTPErrorBody = 4096

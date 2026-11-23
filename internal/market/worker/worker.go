@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	marketstore "wingman.com/chopstick/internal/market/store"
 )
 

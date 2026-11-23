@@ -15,7 +15,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/ownership"
 )
 

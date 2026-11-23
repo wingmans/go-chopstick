@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"wingman.com/chopstick/internal/appdata"
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/appdata"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	marketyahoo "wingman.com/chopstick/internal/market"
 )
 

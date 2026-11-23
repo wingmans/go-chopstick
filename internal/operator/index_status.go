@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/transport"
+	"wingman.com/chopstick/internal/platform/transport"
 )
 
 func renderIndexStatus(status transport.IndexStatusResponse) {

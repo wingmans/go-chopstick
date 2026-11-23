@@ -14,7 +14,7 @@ outside the application.
 
 - `chopd` remains one foreground monolith.
 - NATS and JetStream remain an independent local service.
-- The CLI uses `internal/transport` for application commands.
+- The CLI uses `internal/platform/transport` for application commands.
 - NATS carries filing pipeline events, not CLI control requests.
 - Atom and index ingestion are daemon-owned sources for the same pipeline.
 - Atom ingestion has exactly one active owner.
@@ -60,7 +60,7 @@ store, and outbox boundary, but they do not need a generic ingestion framework.
 ### Daemon control commands
 
 These commands inspect or affect the running application through
-`internal/transport`:
+`internal/platform/transport`:
 
 - `chop status`
 - `chop failures list`
@@ -226,7 +226,7 @@ a streaming command bus.
 ### 1. Wire index import as the first background operation
 
 - Add one explicit index-import request and response to
-  `internal/transport`.
+  `internal/platform/transport`.
 - Keep the TCP protocol as a small request and response switch.
 - Do not add a generic command envelope, handler registry, middleware stack,
   streaming protocol, or command bus abstraction.

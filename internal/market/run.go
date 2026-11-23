@@ -13,7 +13,7 @@ import (
 
 	sourceyahoo "wingman.com/chopstick/internal/ingest/yahoo"
 	marketstore "wingman.com/chopstick/internal/market/store"
-	"wingman.com/chopstick/internal/outbound"
+	"wingman.com/chopstick/internal/platform/outbound"
 )
 
 const (

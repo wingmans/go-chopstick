@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"wingman.com/chopstick/internal/ctxlog"
+	"wingman.com/chopstick/internal/platform/ctxlog"
 	filingview "wingman.com/chopstick/internal/filing"
 	dividendview "wingman.com/chopstick/internal/filing/dividend"
 	filingnormalize "wingman.com/chopstick/internal/filing/normalize"
