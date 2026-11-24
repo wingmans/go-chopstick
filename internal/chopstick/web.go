@@ -20,13 +20,13 @@ func runWeb(ctx context.Context, bus *pipeline.NATS, config Config,
 	roleCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	store, replay, err := news.Open(roleCtx, config.NewsDB)
+	store, err := news.OpenExisting(roleCtx, config.NewsDB)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = store.Close() }()
 
-	application, err := web.NewConfiguredServerWithDatabases(roleCtx,
+	application, err := web.OpenConfiguredServer(roleCtx,
 		config.ParsedDirectory, config.AnalysisDB, config.OwnershipDB,
 		appdata.Path("sets"), config.SetName, logger)
 	if err != nil {
@@ -41,7 +41,7 @@ func runWeb(ctx context.Context, bus *pipeline.NATS, config Config,
 	consumerErr := make(chan error, 1)
 	go func() {
 		consumerErr <- pipeline.ProjectNews(
-			roleCtx, bus, store, replay, logger,
+			roleCtx, bus, store, logger,
 		)
 	}()
 

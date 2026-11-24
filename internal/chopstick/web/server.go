@@ -72,20 +72,36 @@ func NewConfiguredServerWithDB(ctx context.Context, parsedDir, databasePath,
 func NewConfiguredServerWithDatabases(ctx context.Context, parsedDir,
 	databasePath, ownershipPath, setDir, setName string, logger *slog.Logger,
 ) (*Server, error) {
-	store, err := filingstore.NewSQLiteStore(ctx, parsedDir, databasePath)
+	return newConfiguredServer(ctx, parsedDir, databasePath, ownershipPath,
+		setDir, setName, logger, false)
+}
+
+// OpenConfiguredServer builds a dashboard from provisioned databases.
+func OpenConfiguredServer(ctx context.Context, parsedDir,
+	databasePath, ownershipPath, setDir, setName string, logger *slog.Logger,
+) (*Server, error) {
+	return newConfiguredServer(ctx, parsedDir, databasePath, ownershipPath,
+		setDir, setName, logger, true)
+}
+
+func newConfiguredServer(ctx context.Context, parsedDir,
+	databasePath, ownershipPath, setDir, setName string, logger *slog.Logger,
+	existing bool,
+) (*Server, error) {
+	openAnalysis := filingstore.NewSQLiteStore
+	if existing {
+		openAnalysis = filingstore.OpenSQLiteStore
+	}
+
+	store, err := openAnalysis(ctx, parsedDir, databasePath)
 	if err != nil {
 		return nil, err
 	}
 
 	var ownershipStore *ownershipstore.Store
-	if _, err := os.Stat(ownershipPath); err == nil {
-		ownershipStore, err = ownershipstore.Open(ctx, ownershipPath)
-		if err != nil {
-			_ = store.Close()
 
-			return nil, err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+	ownershipStore, err = ownershipstore.OpenExisting(ctx, ownershipPath)
+	if err != nil && (existing || !errors.Is(err, os.ErrNotExist)) {
 		_ = store.Close()
 
 		return nil, err

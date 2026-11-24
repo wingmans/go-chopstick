@@ -99,6 +99,42 @@ func (runner syncRunner) RunBatch(
 	return runner.runBatch(ctx, cfg, time.Time{})
 }
 
+// Sync runs bounded passes for work eligible at the start of the run.
+func (runner syncRunner) Sync(ctx context.Context, cfg syncConfig) (syncSummary, error) {
+	if err := runner.validate(cfg); err != nil {
+		return syncSummary{}, err
+	}
+
+	var total syncSummary
+
+	retryCutoff := runner.now()
+
+	for {
+		summary, err := runner.runBatch(ctx, cfg, retryCutoff)
+		addSummary(&total, summary)
+
+		if err != nil {
+			return total, err
+		}
+
+		items, err := runner.Store.PendingWork(
+			ctx,
+			cfg.Provider,
+			cfg.Securities,
+			cfg.BootstrapFrom,
+			cfg.Through,
+		)
+		if err != nil {
+			return total, err
+		}
+
+		total.Pending = len(items)
+		if len(items) == 0 || (summary.Attempted == 0 && summary.Recovered == 0) {
+			return total, nil
+		}
+	}
+}
+
 func (runner syncRunner) runBatch(ctx context.Context, cfg syncConfig, retryCutoff time.Time) (syncSummary, error) {
 	startedAt := runner.now()
 
@@ -270,42 +306,6 @@ func (runner syncRunner) runBatch(ctx context.Context, cfg syncConfig, retryCuto
 	}
 
 	return summary, nil
-}
-
-// Sync runs bounded passes for work eligible at the start of the run.
-func (runner syncRunner) Sync(ctx context.Context, cfg syncConfig) (syncSummary, error) {
-	if err := runner.validate(cfg); err != nil {
-		return syncSummary{}, err
-	}
-
-	var total syncSummary
-
-	retryCutoff := runner.now()
-
-	for {
-		summary, err := runner.runBatch(ctx, cfg, retryCutoff)
-		addSummary(&total, summary)
-
-		if err != nil {
-			return total, err
-		}
-
-		items, err := runner.Store.PendingWork(
-			ctx,
-			cfg.Provider,
-			cfg.Securities,
-			cfg.BootstrapFrom,
-			cfg.Through,
-		)
-		if err != nil {
-			return total, err
-		}
-
-		total.Pending = len(items)
-		if len(items) == 0 || (summary.Attempted == 0 && summary.Recovered == 0) {
-			return total, nil
-		}
-	}
 }
 
 func (runner syncRunner) validate(cfg syncConfig) error {

@@ -217,7 +217,7 @@ kept in source control.
 Run the Chop application in the foreground during development:
 
 ```bash
-make nats-start
+make setup
 make run
 ```
 

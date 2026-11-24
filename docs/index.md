@@ -28,11 +28,10 @@ rows pending for the next run.
 
 ## Development
 
-Start the existing project-local NATS service, then run `chopd` in the
-foreground:
+Provision the local dependencies, then run `chopd` in the foreground:
 
 ```bash
-make nats-start
+make setup
 make run
 ```
 
@@ -40,9 +39,14 @@ Use `make nats-status`, `make nats-stop`, and `make nats-reset` to inspect or
 manage the project-local development instance. Reset requires NATS to be
 stopped.
 
-`make run` starts and verifies the outbound gateway, then runs
-`go run ./cmd/chopd`. It does not start or supervise NATS and does not perform
-application operations.
+`make setup` starts local NATS, runs `./bin/chop setup` to create the
+application databases and JetStream resources, and tries to start the
+outbound gateway. Repeat setup after a local reset. With externally managed
+NATS, run `./bin/chop setup` against the configured server.
+
+`make run` requires SQLite and JetStream. A gateway failure produces a
+warning, and the viewers can still start. `./bin/chop doctor` reports local
+infrastructure and gateway health separately.
 
 The default instance runs the complete local monolith:
 
@@ -87,7 +91,8 @@ is process-local progress reporting, not a persistent job or scheduler model.
 The rebuild preserves downloaded filings, quarterly indexes, index ZIP files,
 constituent sets, ownership data, and market data. It removes rebuildable
 filing-analysis state, resets the EDGAR JetStream stream, and runs a finite
-backfill. NATS must be running, but `chopd` must be stopped.
+backfill. NATS must be running, but `chopd` must be stopped. Run
+`./bin/chop setup` after the rebuild to prepare the news projection.
 
 Atom and quarterly-index ingestion are application operations. The continuous
 Atom poller belongs to `chopd`. A quarterly-index import is submitted to the

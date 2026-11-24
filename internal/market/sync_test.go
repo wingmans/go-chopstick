@@ -100,6 +100,7 @@ func TestSyncCompletesRequestedUniverse(t *testing.T) {
 
 func TestSyncReturnsWithFailedWorkPending(t *testing.T) {
 	store, _, cfg, now := testRepository(t)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 

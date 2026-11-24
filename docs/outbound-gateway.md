@@ -50,9 +50,23 @@ make gateway-reset
 `make gateway-reset` replaces the local credentials and rebuilds the proxy.
 No gateway username or password needs to be configured manually.
 
-`make run` starts and verifies the gateway before starting `chopd`. It does
-not start NATS. Direct commands such as `go run ./cmd/chop backfill` do not
-start Docker; their first external request fails if the gateway is absent.
+`make setup` tries to start the gateway. `chopd` checks gateway health and
+credentials in the background and can serve viewers during a gateway outage.
+Price download commands require a working gateway. These gateway checks use
+a host denied by the allowlist and make no upstream request.
+
+To test actual upstream requests through the gateway, pass one or more HTTPS
+URLs to `chop doctor`. The command prints the HTTP status for each URL.
+
+```bash
+./bin/chop doctor \
+  --upstream https://www.sec.gov/files/company_tickers.json \
+  --upstream 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=5d&interval=1d'
+```
+
+An HTTP error can come from the gateway or the upstream. Use
+`make gateway-status` to check the gateway and inspect its logs for routing
+or authentication errors.
 
 ## Request path
 

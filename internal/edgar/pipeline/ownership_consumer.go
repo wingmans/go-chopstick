@@ -19,7 +19,12 @@ func RunOwnershipConsumer(ctx context.Context, bus *NATS, cfg OwnershipConfig,
 ) error {
 	timings := &ownershipTimings{}
 
-	store, err := ownershipstore.Open(ctx, cfg.DatabasePath)
+	open := ownershipstore.Open
+	if cfg.ExistingDatabase {
+		open = ownershipstore.OpenExisting
+	}
+
+	store, err := open(ctx, cfg.DatabasePath)
 	if err != nil {
 		return err
 	}

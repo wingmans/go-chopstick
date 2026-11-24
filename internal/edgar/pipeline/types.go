@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	filingstore "wingman.com/chopstick/internal/edgar/filing/store"
 	"wingman.com/chopstick/internal/ingest/sec"
 )
 
@@ -38,6 +39,7 @@ type ExtractionConfig struct {
 	FilingsDirectory string
 	ParsedDirectory  string
 	AnalysisDBPath   string
+	AnalysisStore    *filingstore.Store
 	Drain            bool
 	MaxAttempts      int
 	Failures         FailureStore
@@ -47,6 +49,7 @@ type ExtractionConfig struct {
 type OwnershipConfig struct {
 	FilingsDirectory string
 	DatabasePath     string
+	ExistingDatabase bool
 	UserAgent        string
 	BaseURL          string
 	Drain            bool

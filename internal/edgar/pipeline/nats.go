@@ -61,8 +61,9 @@ func (e *PublishAckTimeoutError) Unwrap() error {
 
 // NATS owns one connection and the JetStream context derived from it.
 type NATS struct {
-	connection *nats.Conn
-	jetstream  nats.JetStreamContext
+	connection            *nats.Conn
+	jetstream             nats.JetStreamContext
+	allowConsumerCreation bool
 }
 
 // Connect opens a NATS connection and ensures the EDGAR event stream exists.
@@ -72,11 +73,13 @@ func Connect(ctx context.Context, url string) (*NATS, error) {
 		return nil, err
 	}
 
-	if err := bus.ensureStream(); err != nil {
+	if err := bus.ensureStream(ctx); err != nil {
 		_ = bus.Close()
 
 		return nil, err
 	}
+
+	bus.allowConsumerCreation = true
 
 	return bus, nil
 }
@@ -140,8 +143,8 @@ func ResetStream(ctx context.Context, url string) error {
 }
 
 //nolint:funcorder // Kept beside Connect, which invokes it during construction.
-func (n *NATS) ensureStream() error {
-	if _, err := n.jetstream.StreamInfo(StreamName); err == nil {
+func (n *NATS) ensureStream(ctx context.Context) error {
+	if _, err := n.jetstream.StreamInfo(StreamName, nats.Context(ctx)); err == nil {
 		return nil
 	} else if !errors.Is(err, nats.ErrStreamNotFound) {
 		return fmt.Errorf("inspect JetStream stream: %w", err)
@@ -154,7 +157,7 @@ func (n *NATS) ensureStream() error {
 		Storage:    nats.FileStorage,
 		Discard:    nats.DiscardOld,
 		Duplicates: 24 * time.Hour,
-	})
+	}, nats.Context(ctx))
 	if err != nil {
 		return fmt.Errorf("create JetStream stream: %w", err)
 	}

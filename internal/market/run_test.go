@@ -3,6 +3,7 @@ package market
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -34,6 +35,42 @@ func TestDefaultTargetDateUsesNewYorkWallClock(t *testing.T) {
 
 	if got := DefaultTargetDate(after).Format(dateLayout); got != "2026-10-26" {
 		t.Fatalf("target at cutoff = %s", got)
+	}
+}
+
+func TestPriceStatusRequiresProvisionedDatabase(t *testing.T) {
+	root := t.TempDir()
+	cfg := Config{
+		Command: "status", ManifestPath: filepath.Join(root, "manifest.json"),
+		DatabasePath: filepath.Join(root, "market with spaces.db"),
+		BatchDir:     filepath.Join(root, "batches"),
+		From:         mustDate(t, "2020-01-01"), Through: mustDate(t, "2026-10-23"),
+	}
+
+	logger := slog.New(slog.DiscardHandler)
+
+	err := Run(t.Context(), cfg, io.Discard, logger, time.Now)
+	if err == nil || !strings.Contains(err.Error(), "./bin/chop setup --market --database '") {
+		t.Fatalf("status error = %v", err)
+	}
+
+	if _, err := os.Stat(cfg.DatabasePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("status created the market database: %v", err)
+	}
+
+	for range 2 {
+		if err := Setup(t.Context(), cfg.DatabasePath, cfg.BatchDir); err != nil {
+			t.Fatalf("setup market storage: %v", err)
+		}
+	}
+
+	store, err := marketstore.OpenExisting(t.Context(), cfg.DatabasePath)
+	if err != nil {
+		t.Fatalf("open provisioned market store: %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

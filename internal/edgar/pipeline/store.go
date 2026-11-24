@@ -11,6 +11,7 @@ import (
 
 	"wingman.com/chopstick/internal/edgar/pipeline/dbgen"
 	"wingman.com/chopstick/internal/platform/ctxlog"
+	"wingman.com/chopstick/internal/platform/sqlite"
 )
 
 // Event represents the unified schema for both master.zip and RSS feeds.
@@ -82,15 +83,40 @@ func NewStore(dbPath string) (*Store, error) {
 
 // Open opens the work database and applies its schema.
 func Open(ctx context.Context, dbPath string) (*Store, error) {
-	db, err := sql.Open(
-		"sqlite3",
-		dbPath+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate",
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open sqlite db: %w", err)
+	return open(ctx, dbPath, true)
+}
+
+// OpenExisting opens a provisioned polling database.
+func OpenExisting(ctx context.Context, dbPath string) (*Store, error) {
+	return open(ctx, dbPath, false)
+}
+
+func open(ctx context.Context, dbPath string, initialize bool) (*Store, error) {
+	const options = "_busy_timeout=5000&_txlock=immediate"
+
+	dsn := dbPath + "?_journal_mode=WAL&" + options
+	if !initialize {
+		existing, err := sqlite.ExistingDSN(dbPath, options)
+		if err != nil {
+			return nil, fmt.Errorf("open polling database: %w", err)
+		}
+
+		dsn = existing
 	}
 
-	created, err := createSchema(ctx, db)
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open polling database: %w", err)
+	}
+
+	var created bool
+
+	if initialize {
+		created, err = createSchema(ctx, db)
+	} else {
+		err = sqlite.CheckSchema(ctx, db, pollingSchemaVersion)
+	}
+
 	if err != nil {
 		_ = db.Close()
 

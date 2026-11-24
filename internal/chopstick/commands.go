@@ -108,7 +108,7 @@ func encodeCommandResponse(response transport.Response, responseErr error) []byt
 }
 
 func (h *adminHandler) status(ctx context.Context) (transport.Status, error) {
-	store, err := pipeline.Open(ctx, h.config.PollingDB)
+	store, err := pipeline.OpenExisting(ctx, h.config.PollingDB)
 	if err != nil {
 		return transport.Status{}, err
 	}
@@ -277,7 +277,7 @@ func (h *adminHandler) listFailures(ctx context.Context,
 		request.Limit = 50
 	}
 
-	store, err := pipeline.Open(ctx, h.config.PollingDB)
+	store, err := pipeline.OpenExisting(ctx, h.config.PollingDB)
 	if err != nil {
 		return nil, err
 	}
@@ -312,13 +312,13 @@ func (h *adminHandler) retryFailures(ctx context.Context,
 			errors.New("stage must be download, process, or ownership")
 	}
 
-	store, err := pipeline.Open(ctx, h.config.PollingDB)
+	store, err := pipeline.OpenExisting(ctx, h.config.PollingDB)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = store.Close() }()
 
-	bus, err := pipeline.Connect(ctx, h.config.NATSURL)
+	bus, err := pipeline.Inspect(ctx, h.config.NATSURL)
 	if err != nil {
 		return 0, err
 	}

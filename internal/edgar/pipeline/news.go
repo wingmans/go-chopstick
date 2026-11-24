@@ -18,23 +18,9 @@ const NewsDurable = "edgar-news-v2"
 
 // ProjectNews maintains the disposable news database from selection events.
 func ProjectNews(ctx context.Context, bus *NATS, store *news.Store,
-	replay bool, logger *slog.Logger,
+	logger *slog.Logger,
 ) error {
-	js := bus.JetStream()
-	if replay {
-		err := js.DeleteConsumer(StreamName, NewsDurable)
-		if err != nil && !errors.Is(err, nats.ErrConsumerNotFound) {
-			return fmt.Errorf("reset news consumer: %w", err)
-		}
-	}
-
-	subscription, err := js.PullSubscribe(
-		SelectionSubject+".>", NewsDurable,
-		nats.BindStream(StreamName),
-		nats.ManualAck(),
-		nats.AckExplicit(),
-		nats.DeliverAll(),
-	)
+	subscription, err := pullSubscription(bus, SelectionSubject+".>", NewsDurable)
 	if err != nil {
 		return fmt.Errorf("subscribe to selection events: %w", err)
 	}

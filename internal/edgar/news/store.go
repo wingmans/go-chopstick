@@ -9,6 +9,7 @@ import (
 
 	"wingman.com/chopstick/internal/edgar/news/dbgen"
 	"wingman.com/chopstick/internal/platform/ctxlog"
+	"wingman.com/chopstick/internal/platform/sqlite"
 )
 
 const maxSQLiteInteger = uint64(1<<63 - 1)
@@ -49,17 +50,44 @@ type Store struct {
 
 // Open opens the read model. The boolean reports whether it must be replayed.
 func Open(ctx context.Context, path string) (*Store, bool, error) {
-	db, err := sql.Open(
-		"sqlite3",
-		path+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate",
-	)
+	return open(ctx, path, true)
+}
+
+// OpenExisting opens a provisioned news database.
+func OpenExisting(ctx context.Context, path string) (*Store, error) {
+	store, _, err := open(ctx, path, false)
+
+	return store, err
+}
+
+func open(ctx context.Context, path string, initialize bool) (*Store, bool, error) {
+	const options = "_busy_timeout=5000&_txlock=immediate"
+
+	dsn := path + "?_journal_mode=WAL&" + options
+	if !initialize {
+		existing, err := sqlite.ExistingDSN(path, options)
+		if err != nil {
+			return nil, false, fmt.Errorf("open news database: %w", err)
+		}
+
+		dsn = existing
+	}
+
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, false, fmt.Errorf("open news database: %w", err)
 	}
 
 	db.SetMaxOpenConns(1)
 
-	created, err := createSchema(ctx, db)
+	var created bool
+
+	if initialize {
+		created, err = createSchema(ctx, db)
+	} else {
+		err = sqlite.CheckSchema(ctx, db, newsSchemaVersion)
+	}
+
 	if err != nil {
 		_ = db.Close()
 

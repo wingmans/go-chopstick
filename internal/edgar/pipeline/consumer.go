@@ -18,13 +18,15 @@ import (
 func pullSubscription(bus *NATS, subject, durable string) (
 	*nats.Subscription, error,
 ) {
-	subscription, err := bus.JetStream().PullSubscribe(subject, durable,
-		nats.BindStream(StreamName),
-		nats.ManualAck(),
-		nats.AckExplicit(),
-		nats.AckWait(30*time.Minute),
-		nats.DeliverAll(),
-	)
+	options := []nats.SubOpt{nats.Bind(StreamName, durable), nats.ManualAck()}
+	if bus.allowConsumerCreation {
+		options = []nats.SubOpt{
+			nats.BindStream(StreamName), nats.ManualAck(), nats.AckExplicit(),
+			nats.AckWait(30 * time.Minute), nats.DeliverAll(),
+		}
+	}
+
+	subscription, err := bus.JetStream().PullSubscribe(subject, durable, options...)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe %s: %w", subject, err)
 	}

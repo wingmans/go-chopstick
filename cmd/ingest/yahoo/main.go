@@ -17,6 +17,7 @@ import (
 	marketyahoo "wingman.com/chopstick/internal/market"
 	"wingman.com/chopstick/internal/platform/appdata"
 	"wingman.com/chopstick/internal/platform/ctxlog"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 type tickerFlags []string
@@ -53,6 +54,12 @@ func realMain() int {
 	if err := run(ctx, os.Args[1:], os.Stdout, logger, time.Now); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
+		}
+
+		if preflight, ok := errors.AsType[*xerr.PreflightError](err); ok {
+			fmt.Fprintln(os.Stderr, preflight)
+
+			return 1
 		}
 
 		logger.Error("Yahoo market-data command failed", "error", err)

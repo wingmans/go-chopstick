@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	filingstore "wingman.com/chopstick/internal/edgar/filing/store"
 	"wingman.com/chopstick/internal/edgar/ingest"
 	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
 	"wingman.com/chopstick/internal/ingest/sec"
@@ -17,11 +18,7 @@ import (
 )
 
 func Run(ctx context.Context, config Config, logger *slog.Logger) error {
-	if err := config.Validate(); err != nil {
-		return err
-	}
-
-	if err := ensureParentDirectories(config); err != nil {
+	if err := CheckInfrastructure(ctx, config); err != nil {
 		return err
 	}
 
@@ -31,17 +28,24 @@ func Run(ctx context.Context, config Config, logger *slog.Logger) error {
 	}
 	defer func() { _ = lock.Close() }()
 
-	bootstrap, err := pipeline.Connect(ctx, config.NATSURL)
-	if err != nil {
-		return err
-	}
-
-	if err := bootstrap.Close(); err != nil {
-		return err
-	}
+	logger.Info("starting Chop application",
+		"address", config.HTTPAddress,
+		"command_address", config.CommandAddress,
+		"nats_url", NATSAddress(config.NATSURL),
+		"set", config.SetName,
+		"financial_forms", config.FormTypes,
+		"ownership_forms", AutomaticOwnershipFormTypes(),
+		"on_demand_forms", []string{"S-1", "S-1/A"},
+	)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	go func() {
+		if err := outbound.Check(ctx); err != nil && ctx.Err() == nil {
+			logger.Warn("outbound gateway unavailable; downloads may fail", "error", err)
+		}
+	}()
 
 	requestGate := sec.NewRequestGate()
 
@@ -147,7 +151,7 @@ func runRole(ctx context.Context, role string, config Config,
 	logger = logger.With("role", role)
 	ctx = ctxlog.WithLogger(ctx, logger)
 
-	bus, err := pipeline.Connect(ctx, config.NATSURL)
+	bus, err := pipeline.Inspect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}
@@ -166,7 +170,7 @@ func runRole(ctx context.Context, role string, config Config,
 			FormTypes: config.FormTypes,
 		}, logger)
 	case "submission":
-		failures, openErr := pipeline.Open(
+		failures, openErr := pipeline.OpenExisting(
 			ctx, config.PollingDB,
 		)
 		if openErr != nil {
@@ -180,7 +184,7 @@ func runRole(ctx context.Context, role string, config Config,
 			Failures: failures, RequestGate: requestGate,
 		}, logger)
 	case "extraction":
-		failures, openErr := pipeline.Open(
+		failures, openErr := pipeline.OpenExisting(
 			ctx, config.PollingDB,
 		)
 		if openErr != nil {
@@ -188,14 +192,20 @@ func runRole(ctx context.Context, role string, config Config,
 		}
 		defer func() { _ = failures.Close() }()
 
+		analysis, err := filingstore.OpenExisting(ctx, config.AnalysisDB)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = analysis.Close() }()
+
 		return pipeline.RunExtraction(ctx, bus, pipeline.ExtractionConfig{
 			FilingsDirectory: config.FilingsDirectory,
 			ParsedDirectory:  config.ParsedDirectory,
-			AnalysisDBPath:   config.AnalysisDB,
+			AnalysisStore:    analysis,
 			MaxAttempts:      config.MaxAttempts, Failures: failures,
 		}, logger)
 	case "ownership":
-		failures, openErr := pipeline.Open(
+		failures, openErr := pipeline.OpenExisting(
 			ctx, config.PollingDB,
 		)
 		if openErr != nil {
@@ -206,7 +216,8 @@ func runRole(ctx context.Context, role string, config Config,
 		return pipeline.RunOwnershipConsumer(ctx, bus, pipeline.OwnershipConfig{
 			FilingsDirectory: config.FilingsDirectory,
 			DatabasePath:     config.OwnershipDB, UserAgent: config.UserAgent,
-			BaseURL: config.BaseURL, MaxAttempts: config.MaxAttempts,
+			ExistingDatabase: true,
+			BaseURL:          config.BaseURL, MaxAttempts: config.MaxAttempts,
 			Failures: failures, RequestGate: requestGate,
 		}, logger)
 	case "web":

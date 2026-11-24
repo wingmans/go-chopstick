@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"wingman.com/chopstick/internal/chopstick"
 	operator "wingman.com/chopstick/internal/chopstick/operator"
 	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
 	"wingman.com/chopstick/internal/ingest/sec"
@@ -454,11 +455,58 @@ func (c *taxonomyCoverageCLI) Run(ctx context.Context) error {
 }
 
 func (c *doctorCLI) Run(ctx context.Context, runtime *commandRuntime) error {
+	config, err := c.config()
+	if err != nil {
+		return err
+	}
+
+	config.MasterPath = c.Master
+
 	return operator.Doctor(ctx, operator.DoctorConfig{
-		NATSURL: c.NATSURL, PollingDB: c.PollingDB,
-		NewsDB: c.NewsDB, MasterPath: c.Master,
-		HTTPAddress: webAddressFromEnvironment(), Verbose: runtime.Verbose,
+		Config: config, Verbose: runtime.Verbose, Upstreams: c.Upstream,
 	})
+}
+
+func (c *setupCLI) Run(ctx context.Context) error {
+	if c.Market {
+		if err := marketyahoo.Setup(ctx, c.Database, c.BatchDir); err != nil {
+			return err
+		}
+
+		fmt.Println("Market database and batch directory are ready.")
+
+		return nil
+	}
+
+	config, err := c.config()
+	if err != nil {
+		return err
+	}
+
+	if err := chopstick.Setup(ctx, config); err != nil {
+		return err
+	}
+
+	fmt.Println("Chopstick infrastructure is ready. Start it with make run.")
+
+	return nil
+}
+
+func (options infrastructureOptions) config() (chopstick.Config, error) {
+	config, err := chopstick.ConfigFromEnvironment()
+	if err != nil {
+		return chopstick.Config{}, chopstick.ConfigurationError(err)
+	}
+
+	config.NATSURL = options.NATSURL
+	config.PollingDB = options.PollingDB
+	config.NewsDB = options.NewsDB
+	config.AnalysisDB = options.AnalysisDB
+	config.OwnershipDB = options.OwnershipDB
+	config.FilingsDirectory = options.FilingsDir
+	config.ParsedDirectory = options.ParsedDir
+
+	return config, nil
 }
 
 func (c *statusCLI) Run(ctx context.Context) error {

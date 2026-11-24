@@ -1,12 +1,18 @@
 # Inspect market data
 
-Use the Chop CLI for the normal Yahoo price workflow:
+Initialize a new market database and batch directory before running the
+normal Yahoo price workflow:
 
 ```bash
-chop prices status
-chop prices fetch
-chop prices sync
+./bin/chop setup --market
+./bin/chop prices status
+./bin/chop prices fetch
+./bin/chop prices sync
 ```
+
+Use the same `--database` and `--batch-dir` flags for setup and sync when you
+keep a separate database or batch directory. Market setup requires no NATS
+connection.
 
 `sync` works through the manifest and exits when it runs out of eligible work.
 Its summary reports how many requests were attempted, how many failed, and

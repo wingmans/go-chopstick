@@ -23,6 +23,7 @@ type cli struct {
 	Prices    pricesCLI    `cmd:"" group:"market" help:"Manage Yahoo market prices."`
 
 	Doctor   doctorCLI   `cmd:"" group:"operations" help:"Validate local dependencies."`
+	Setup    setupCLI    `cmd:"" group:"operations" help:"Initialize application infrastructure."`
 	Status   statusCLI   `cmd:"" group:"operations" help:"Show live application status."`
 	Rebuild  rebuildCLI  `cmd:"" group:"operations" help:"Rebuild disposable state."`
 	Failures failuresCLI `cmd:"" group:"operations" help:"Inspect and retry failures."`
@@ -251,11 +252,29 @@ type taxonomyCoverageCLI struct {
 	taxonomyOptions `embed:""`
 }
 
+type infrastructureOptions struct {
+	NATSURL     string `default:"${nats_url}"     help:"NATS server URL."             name:"nats-url"    placeholder:"url"`
+	PollingDB   string `default:"${polling_db}"   help:"Pipeline state database."     placeholder:"path"`
+	NewsDB      string `default:"${news_db}"      help:"Disposable news database."    placeholder:"path"`
+	AnalysisDB  string `default:"${analysis_db}"  help:"Analysis database."           placeholder:"path"`
+	OwnershipDB string `default:"${ownership_db}" help:"Ownership database."          placeholder:"path"`
+	FilingsDir  string `default:"${filings_dir}"  help:"Downloaded filing directory." placeholder:"path"`
+	ParsedDir   string `default:"${parsed_dir}"   help:"Parsed filing directory."     placeholder:"path"`
+}
+
 type doctorCLI struct {
-	NATSURL   string `default:"${nats_url}"   help:"NATS server URL."          name:"nats-url"    placeholder:"url"`
-	PollingDB string `default:"${polling_db}" help:"Pipeline state database."  placeholder:"path"`
-	NewsDB    string `default:"${news_db}"    help:"Disposable news database." placeholder:"path"`
-	Master    string `default:"${master}"     help:"Stitched master index."    placeholder:"path"`
+	infrastructureOptions `embed:""`
+
+	Master   string   `default:"${master}"                                      help:"Stitched master index." placeholder:"path"`
+	Upstream []string `help:"Probe this HTTPS URL via the gateway. Repeatable." name:"upstream"               placeholder:"url"`
+}
+
+type setupCLI struct {
+	infrastructureOptions `embed:""`
+
+	Market   bool   `help:"Initialize only the market database and batch directory."`
+	Database string `default:"${market_db}"                                          help:"Market SQLite database."     placeholder:"path"`
+	BatchDir string `default:"${market_batch_dir}"                                   help:"Market CSV batch directory." placeholder:"path"`
 }
 
 type statusCLI struct {

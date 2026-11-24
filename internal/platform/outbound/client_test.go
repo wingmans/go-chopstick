@@ -115,6 +115,7 @@ func TestClientRejectsPartialGatewayCredentials(t *testing.T) {
 	response, err := client.Do(request)
 	if err == nil {
 		_ = response.Body.Close()
+
 		t.Fatal("request succeeded with partial gateway credentials")
 	}
 

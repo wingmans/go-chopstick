@@ -2,7 +2,6 @@ package operator
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -10,12 +9,11 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/nats-io/nats.go"
-	"wingman.com/chopstick/internal/constituents"
-	pipeline "wingman.com/chopstick/internal/edgar/pipeline"
+	"wingman.com/chopstick/internal/chopstick"
 	"wingman.com/chopstick/internal/ingest/sec"
 	"wingman.com/chopstick/internal/platform/appdata"
+	"wingman.com/chopstick/internal/platform/outbound"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 type doctorReport struct {
@@ -44,61 +42,35 @@ func runDoctor(ctx context.Context, cfg DoctorConfig) error {
 	fmt.Println()
 
 	report := doctorReport{}
-	if strings.TrimSpace(environmentValue(edgarUserAgentEnv,
-		defaultUserAgent)) == "" {
-		report.check("FAIL", "configuration", "SEC user agent is empty")
+
+	infrastructureErr := chopstick.CheckInfrastructure(ctx, cfg.Config)
+	if infrastructureErr == nil {
+		report.check("OK", "infrastructure", "SQLite, NATS, and JetStream are ready")
 	} else {
-		report.check("OK", "configuration", "SEC user agent configured")
+		report.check("FAIL", "infrastructure", "see errors and hints below")
 	}
 
-	checkConfiguredSet(&report)
-
-	if forms, err := configuredFormTypes(); err != nil {
-		report.check("FAIL", "form types", err.Error())
+	if cfg.SetName == "" {
+		report.check("WARN", "constituent set", "not configured; historical backfill requires EDGAR_SET")
 	} else {
-		report.check("OK", "form types", strings.Join(forms, ","))
+		report.check("OK", "constituent set", cfg.SetName)
 	}
 
 	if _, err := os.Stat(cfg.MasterPath); err == nil {
 		report.check("OK", "master index", cfg.MasterPath)
 	} else if errors.Is(err, os.ErrNotExist) {
-		report.check("WARN", "master index", "missing; run 'chop index'")
+		report.check("WARN", "master index", "missing; run './bin/chop index'")
 	} else {
-		report.check("FAIL", "master index", err.Error())
+		report.check("WARN", "master index", err.Error())
 	}
 
-	checkSQLite(ctx, &report, cfg.PollingDB, "polling DB", []string{"processed_accessions", "polling_outbox"})
-	checkOptionalSQLiteTable(ctx, &report, cfg.PollingDB, "work_failures")
-	checkSQLite(ctx, &report, cfg.NewsDB, "viewer DB", []string{"feed_items"})
-
-	bus, err := pipeline.Inspect(ctx, cfg.NATSURL)
-	if err != nil {
-		report.check("FAIL", "NATS", "unavailable; start local NATS")
-
-		if cfg.Verbose {
-			fmt.Printf("       detail         %v\n", err)
-		}
+	if err := outbound.Check(ctx); err != nil {
+		report.check("WARN", "gateway", err.Error())
 	} else {
-		defer func() { _ = bus.Close() }()
-
-		report.check("OK", "NATS", "connected to "+cfg.NATSURL)
-
-		if _, err := bus.JetStream().StreamInfo(pipeline.StreamName); err != nil {
-			if errors.Is(err, nats.ErrStreamNotFound) {
-				report.check("WARN", "JetStream",
-					"EDGAR_EVENTS will be created by chopd")
-			} else {
-				report.check("FAIL", "JetStream", err.Error())
-			}
-		} else {
-			report.check("OK", "JetStream", "EDGAR_EVENTS is available")
-			checkConsumer(&report, bus, pipeline.SubmissionDurable)
-			checkConsumer(&report, bus, pipeline.ExtractionDurable)
-			checkConsumer(&report, bus, pipeline.SelectionDurable)
-			checkConsumer(&report, bus, pipeline.OwnershipDurable)
-			checkConsumer(&report, bus, pipeline.NewsDurable)
-		}
+		report.check("OK", "gateway", "health and credentials verified")
 	}
+
+	checkUpstreams(ctx, &report, cfg.Upstreams, cfg.UserAgent)
 
 	if cfg.Verbose {
 		printResolvedConfiguration(cfg)
@@ -108,134 +80,41 @@ func runDoctor(ctx context.Context, cfg DoctorConfig) error {
 	fmt.Println()
 	fmt.Printf("Result: %d failure(s), %d warning(s)\n", report.failures, report.warnings)
 
+	if infrastructureErr != nil {
+		return infrastructureErr
+	}
+
 	if report.failures > 0 {
-		return errors.New("doctor found failed checks")
+		return &xerr.PreflightError{
+			Title: "One or more upstream probes failed",
+			Hints: []string{"Check the local gateway and its logs:", "  make gateway-status"},
+		}
 	}
 
 	return ctx.Err()
 }
 
-// checkSQLite checks the existence and schema of a SQLite database, reporting results to the doctorReport.
-func checkSQLite(ctx context.Context, report *doctorReport,
-	path, component string,
-	tables []string,
-) {
-	if _, err := os.Stat(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			report.check("WARN", component,
-				path+" does not exist; start chopd")
-		} else {
-			report.check("FAIL", component, err.Error())
-		}
-
-		return
-	}
-
-	db, err := openSQLiteReadOnly(ctx, path)
-	if err != nil {
-		report.check("FAIL", component, err.Error())
-
-		return
-	}
-	defer func() { _ = db.Close() }()
-
-	for _, table := range tables {
-		var found int
-
-		err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master
-			WHERE type = 'table' AND name = ?`, table).Scan(&found)
-		if err != nil || found == 0 {
-			report.check("FAIL", component,
-				"missing table "+table+"; start chopd")
-
-			return
-		}
-	}
-
-	report.check("OK", component, path)
-}
-
-// checkOptionalSQLiteTable checks for the existence of an optional table in a SQLite database,
-// reporting a warning to the doctorReport if the table is missing.
-func checkOptionalSQLiteTable(ctx context.Context, report *doctorReport,
-	path, table string,
-) {
-	if _, err := os.Stat(path); err != nil {
-		return
-	}
-
-	db, err := openSQLiteReadOnly(ctx, path)
-	if err != nil {
-		return
-	}
-	defer func() { _ = db.Close() }()
-
-	var found int
-
-	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master
-		WHERE type = 'table' AND name = ?`, table).Scan(&found)
-	if err == nil && found == 0 {
-		report.check("WARN", "schema",
-			table+" will be created by the next worker start")
-	}
-}
-
-func checkConsumer(report *doctorReport, bus *pipeline.NATS, durable string) {
-	_, err := bus.JetStream().ConsumerInfo(pipeline.StreamName, durable)
-
-	switch {
-	case errors.Is(err, nats.ErrConsumerNotFound):
-		report.check("WARN", "consumer",
-			durable+" has not been created; start chopd")
-	case err != nil:
-		report.check("FAIL", "consumer", durable+": "+err.Error())
-	default:
-		report.check("OK", "consumer", durable)
-	}
-}
-
-func checkConfiguredSet(report *doctorReport) {
-	setName := environmentValue(edgarSetEnv, "")
-	if setName == "" {
-		report.check("WARN", "constituent set",
-			"not configured; historical backfill requires EDGAR_SET")
-
-		return
-	}
-
-	path := appdata.Path("sets", setName+".json")
-
-	set, err := constituents.LoadJSON(path)
-	if err != nil {
-		report.check("FAIL", "constituent set", err.Error())
-
-		return
-	}
-
-	report.check("OK", "constituent set", fmt.Sprintf(
-		"%s (%d members)", path, len(set.Members)))
-}
-
 func printResolvedConfiguration(cfg DoctorConfig) {
-	fromYear, _ := environmentFromYear()
-	baseURL := environmentValue(edgarBaseURLEnv, sec.DefaultBaseURL)
-	forms, _ := configuredFormTypes()
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = sec.DefaultBaseURL
+	}
 
 	fmt.Println()
 	fmt.Println("Configuration")
 	fmt.Printf("  set               %s\n", environmentValue(edgarSetEnv,
 		"not configured"))
-	fmt.Printf("  from year         %d\n", fromYear)
-	fmt.Printf("  form types        %s\n", strings.Join(forms, ","))
+	fmt.Printf("  from year         %d\n", cfg.FromYear)
+	fmt.Printf("  form types        %s\n", strings.Join(cfg.FormTypes, ","))
 	fmt.Printf("  parser supports   %s\n", strings.Join(sec.SupportedFormTypes(), ","))
 	fmt.Printf("  SEC archives      %s\n", baseURL)
-	fmt.Printf("  SEC user agent    %s\n", environmentValue(edgarUserAgentEnv, defaultUserAgent))
-	fmt.Printf("  NATS              %s\n", cfg.NATSURL)
+	fmt.Printf("  SEC user agent    %s\n", cfg.UserAgent)
+	fmt.Printf("  NATS              %s\n", chopstick.NATSAddress(cfg.NATSURL))
 	fmt.Printf("  web URL           %s (served by chopd)\n",
 		httpURL(cfg.HTTPAddress))
 	fmt.Printf("  data directory    %s\n", appdata.Root())
-	fmt.Printf("  filings cache     %s\n", appdata.Path("cache", "filings"))
-	fmt.Printf("  parsed filings    %s\n", appdata.Path("parsed"))
+	fmt.Printf("  filings cache     %s\n", cfg.FilingsDirectory)
+	fmt.Printf("  parsed filings    %s\n", cfg.ParsedDirectory)
 	fmt.Printf("  temp artifacts    %s\n", appdata.Path("tmp", "artifacts"))
 	fmt.Printf("  constituent sets  %s\n", appdata.Path("sets"))
 
@@ -246,7 +125,8 @@ func printResolvedConfiguration(cfg DoctorConfig) {
 
 	fmt.Printf("  polling DB        %s\n", cfg.PollingDB)
 	fmt.Printf("  news DB           %s\n", cfg.NewsDB)
-	fmt.Printf("  analysis DB       %s\n", appdata.Path("analysis.db"))
+	fmt.Printf("  analysis DB       %s\n", cfg.AnalysisDB)
+	fmt.Printf("  ownership DB      %s\n", cfg.OwnershipDB)
 	fmt.Printf("  master index      %s\n", cfg.MasterPath)
 	fmt.Printf("  event log         %s\n", appdata.Path("logs", "sec.log"))
 	fmt.Printf("  log level         %s\n", environmentValue("LOGLEVEL", "info"))
@@ -414,27 +294,4 @@ func runRetryFailures(ctx context.Context, cfg FailureRetryConfig) error {
 	fmt.Printf("Requeued %d %s failure(s)\n", count, cfg.Stage)
 
 	return nil
-}
-
-// openSQLiteReadOnly opens a SQLite database in read-only mode, returning an error if the database cannot be accessed.
-// It ensures that the database file exists and that a connection can be successfully established.
-func openSQLiteReadOnly(ctx context.Context, path string) (*sql.DB, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, err
-	}
-
-	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&_busy_timeout=5000"
-
-	db, err := sql.Open("sqlite3", dsn)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-
-		return nil, fmt.Errorf("ping database: %w", err)
-	}
-
-	return db, nil
 }

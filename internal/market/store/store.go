@@ -16,6 +16,7 @@ import (
 
 	"wingman.com/chopstick/internal/market/store/dbgen"
 	"wingman.com/chopstick/internal/platform/ctxlog"
+	"wingman.com/chopstick/internal/platform/sqlite"
 )
 
 const dateLayout = "2006-01-02"
@@ -95,26 +96,52 @@ type syncState struct {
 
 // Open opens or creates the market-data tables in the given SQLite database.
 func Open(ctx context.Context, path string) (*Store, error) {
+	return open(ctx, path, true)
+}
+
+// OpenExisting opens a provisioned market database.
+func OpenExisting(ctx context.Context, path string) (*Store, error) {
+	return open(ctx, path, false)
+}
+
+func open(ctx context.Context, path string, initialize bool) (*Store, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, errors.New("market database path is required")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return nil, fmt.Errorf("create market database directory: %w", err)
+	if initialize {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			return nil, fmt.Errorf("create market database directory: %w", err)
+		}
 	}
 
-	db, err := sql.Open(
-		"sqlite3",
-		path+"?_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate"+
-			"&_foreign_keys=on",
-	)
+	const options = "_busy_timeout=5000&_txlock=immediate&_foreign_keys=on"
+
+	dsn := path + "?_journal_mode=WAL&" + options
+	if !initialize {
+		existing, err := sqlite.ExistingDSN(path, options)
+		if err != nil {
+			return nil, fmt.Errorf("open market database: %w", err)
+		}
+
+		dsn = existing
+	}
+
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open market database: %w", err)
 	}
 
 	db.SetMaxOpenConns(1)
 
-	created, err := createSchema(ctx, db)
+	var created bool
+
+	if initialize {
+		created, err = createSchema(ctx, db)
+	} else {
+		err = sqlite.CheckSchema(ctx, db, marketSchemaVersion)
+	}
+
 	if err != nil {
 		_ = db.Close()
 

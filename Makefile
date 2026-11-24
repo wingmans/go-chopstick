@@ -1,4 +1,5 @@
-.PHONY: help deps generate check-generated build run test lint docs-pdf clean \
+.PHONY: help deps generate check-generated build setup run test lint docs-pdf clean \
+	nats-start nats-stop nats-status nats-reset \
 	gateway-start gateway-stop gateway-status gateway-reset
 
 .DEFAULT_GOAL := help
@@ -9,7 +10,7 @@ TEMPL ?= .tools/bin/templ
 CHOP_GATEWAY_DIR ?= ../go-proxy-app/throttling
 CHOP_GATEWAY_RULES := $(CURDIR)/infra/outbound.rules
 CHOP_GATEWAY_IMAGE ?= go-proxy-app-throttling:0.1.0
-CHOP_GATEWAY_CREDENTIALS := $(CURDIR)/data/run/outbound-gateway.env
+CHOP_GATEWAY_CREDENTIALS := $(abspath $(or $(CHOPSTICK_DATA_DIR),data))/run/outbound-gateway.env
 
 help:
 	@printf '%s\n' \
@@ -21,6 +22,7 @@ help:
 		'  generate                Generate checked-in database code' \
 		'  check-generated         Verify generated database code' \
 		'  build                   Build all command binaries' \
+		'  setup                   Start local dependencies and initialize Chopstick' \
 		'  run                     Run chopd in the foreground' \
 		'  test                    Run the Go test suite' \
 		'  lint                    Run golangci-lint with auto-fixes' \
@@ -81,8 +83,13 @@ build: generate
 	go build -o $(BIN_DIR)/constituents ./cmd/ingest/constituents
 	go build -o $(BIN_DIR)/yahoo-prices ./cmd/ingest/yahoo
 
+setup: build
+	$(MAKE) nats-start
+	./$(BIN_DIR)/chop setup
+	@$(MAKE) gateway-start || printf '%s\n' \
+		'warning: Viewers can run. For downloads, retry with: make gateway-start'
+
 run: generate
-	$(MAKE) gateway-start
 	go run ./cmd/chopd
 
 lint: generate

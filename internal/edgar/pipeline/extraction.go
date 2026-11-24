@@ -34,6 +34,7 @@ func RunExtraction(ctx context.Context, bus *NATS, cfg ExtractionConfig,
 					Directory:        cfg.ParsedDirectory,
 					FilingsDirectory: cfg.FilingsDirectory,
 					AnalysisDBPath:   cfg.AnalysisDBPath,
+					AnalysisStore:    cfg.AnalysisStore,
 					FormType:         event.FormType,
 				})
 			if err != nil {

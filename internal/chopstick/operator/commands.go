@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"wingman.com/chopstick/internal/chopstick"
 	"wingman.com/chopstick/internal/constituents"
 	"wingman.com/chopstick/internal/edgar/ownership"
 	"wingman.com/chopstick/internal/edgar/pipeline"
@@ -70,12 +71,10 @@ func Artifacts(ctx context.Context, cfg ArtifactsConfig) error {
 
 // DoctorConfig contains paths and dependencies checked by Doctor.
 type DoctorConfig struct {
-	NATSURL     string
-	PollingDB   string
-	NewsDB      string
-	MasterPath  string
-	HTTPAddress string
-	Verbose     bool
+	chopstick.Config
+
+	Verbose   bool
+	Upstreams []string
 }
 
 // Doctor validates local configuration and dependencies.

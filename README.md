@@ -24,23 +24,24 @@ Install the pinned development tools and create the local environment file:
 make deps
 ```
 
-Start the independent NATS service, then run the application:
+Provision the local dependencies, then run the application:
 
 ```bash
-make nats-start
+make setup
 make run
 ```
 
-`make run` starts and verifies the mandatory local outbound gateway before it
-starts `chopd`. External HTTPS requests never fall back to a direct
-connection.
+`make setup` starts NATS and initializes the application databases and
+JetStream resources. It also tries to start the outbound gateway.
+`make run` requires the databases and JetStream. The viewers can run while
+the gateway or an upstream provider is unavailable.
 
 Use another terminal for operator commands:
 
 ```bash
-go run ./cmd/chop doctor
-go run ./cmd/chop status
-go run ./cmd/chop failures list
+./bin/chop doctor
+./bin/chop status
+./bin/chop failures list
 ```
 
 Common source-code checks are:

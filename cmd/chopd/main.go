@@ -17,6 +17,7 @@ import (
 	"wingman.com/chopstick/internal/platform/buildinfo"
 	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/platform/envfile"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 type daemonCLI struct {
@@ -56,7 +57,7 @@ func runMain(args []string) int {
 
 	config, err := chopstick.ConfigFromEnvironment()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, chopstick.ConfigurationError(err))
 
 		return 1
 	}
@@ -126,12 +127,6 @@ func runMain(args []string) int {
 
 	applyCLI(&config, cli)
 
-	if err := config.Validate(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-
-		return 1
-	}
-
 	if err := run(config); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 
@@ -164,19 +159,13 @@ func run(config chopstick.Config) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	logger.Info("starting Chop application",
-		"address", config.HTTPAddress,
-		"command_address", config.CommandAddress,
-		"nats_url", config.NATSURL,
-		"set", config.SetName,
-		"financial_forms", config.FormTypes,
-		"ownership_forms", chopstick.AutomaticOwnershipFormTypes(),
-		"on_demand_forms", []string{"S-1", "S-1/A"},
-	)
-
 	if err := chopstick.Run(ctx, config, logger); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return nil
+		}
+
+		if preflight, ok := errors.AsType[*xerr.PreflightError](err); ok {
+			return preflight
 		}
 
 		return fmt.Errorf("run Chop application: %w", err)

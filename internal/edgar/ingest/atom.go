@@ -31,7 +31,7 @@ func RunAtom(ctx context.Context, cfg AtomConfig) error {
 
 	go emitLogs(ctx, logger, out)
 
-	store, err := pipeline.Open(ctx, cfg.DBPath)
+	store, err := pipeline.OpenExisting(ctx, cfg.DBPath)
 	if err != nil {
 		return err
 	}

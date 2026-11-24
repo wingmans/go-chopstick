@@ -61,16 +61,22 @@ func reconcileMasterIndex(ctx context.Context, config Config,
 		return nil
 	}
 
-	bus, err := pipeline.Connect(ctx, config.NATSURL)
+	bus, err := pipeline.Inspect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = bus.Close() }()
 
-	return discover(ctx, bus, config, logger)
+	store, err := pipeline.OpenExisting(ctx, config.PollingDB)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+
+	return discover(ctx, bus, store, config, logger)
 }
 
-func discover(ctx context.Context, bus *pipeline.NATS, config Config,
+func discover(ctx context.Context, bus *pipeline.NATS, store *pipeline.Store, config Config,
 	logger *slog.Logger,
 ) error {
 	ctx = ctxlog.WithLogger(ctx, logger)
@@ -80,12 +86,6 @@ func discover(ctx context.Context, bus *pipeline.NATS, config Config,
 		return fmt.Errorf("open master index: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-
-	store, err := pipeline.Open(ctx, config.PollingDB)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = store.Close() }()
 
 	reader := sec.NewIndexReader(file, sec.IndexFilter{
 		FromYear: config.FromYear,

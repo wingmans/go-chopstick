@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -61,9 +62,7 @@ type config struct {
 }
 
 // Run executes one Yahoo market-data operation.
-func Run(ctx context.Context, cfg Config, output io.Writer,
-	logger *slog.Logger, now func() time.Time,
-) error {
+func Run(ctx context.Context, cfg Config, output io.Writer, logger *slog.Logger, now func() time.Time) error {
 	if err := validateConfig(cfg); err != nil {
 		return err
 	}
@@ -77,9 +76,10 @@ func Run(ctx context.Context, cfg Config, output io.Writer,
 		syncTimeout: cfg.SyncTimeout,
 	}
 
-	store, err := marketstore.Open(ctx, internal.databasePath)
+	store, err := marketstore.OpenExisting(ctx, internal.databasePath)
 	if err != nil {
-		return err
+		return storageError(internal, fmt.Sprintf("SQLite database at %s: %v",
+			internal.databasePath, err))
 	}
 	defer func() { _ = store.Close() }()
 
@@ -90,6 +90,21 @@ func Run(ctx context.Context, cfg Config, output io.Writer,
 	batches, err := newCSVBatchStore(internal.batchDir)
 	if err != nil {
 		return err
+	}
+
+	if internal.command == "fetch" || internal.command == "sync" {
+		info, err := os.Stat(batches.root)
+		if err != nil {
+			return storageError(internal, fmt.Sprintf("batch directory %s: %v", batches.root, err))
+		}
+
+		if !info.IsDir() {
+			return storageError(internal, batches.root+" is not a directory")
+		}
+
+		if err := outbound.Check(ctx); err != nil {
+			return gatewayError(err)
+		}
 	}
 
 	securities, err := loadSecurities(internal)

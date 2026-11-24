@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"wingman.com/chopstick/internal/chopstick"
 	"wingman.com/chopstick/internal/edgar/pipeline"
 	"wingman.com/chopstick/internal/platform/appdata"
+	"wingman.com/chopstick/internal/platform/outbound"
 	"wingman.com/chopstick/internal/platform/transport"
 	"wingman.com/chopstick/internal/platform/xerr"
 )
@@ -60,28 +64,48 @@ func TestPathSizeAndFormatBytes(t *testing.T) {
 	}
 }
 
-func TestCheckConfiguredSetReportsMissingFile(t *testing.T) {
+func TestConfigurationReportsMissingSet(t *testing.T) {
 	t.Setenv(appdata.EnvName, t.TempDir())
 	t.Setenv(edgarSetEnv, "missing")
 
-	report := doctorReport{}
-	checkConfiguredSet(&report)
-
-	if report.failures != 1 {
-		t.Fatalf("failures = %d, want 1", report.failures)
+	if _, err := chopstick.ConfigFromEnvironment(); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("resolve configuration: got %v, want missing set error", err)
 	}
 }
 
-func TestOpenSQLiteReadOnlyDoesNotCreateDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "missing.db")
+func TestUpstreamProbeReportsHTTPStatusThroughGateway(t *testing.T) {
+	t.Setenv(appdata.EnvName, t.TempDir())
+	t.Setenv(outbound.GatewayUserEnv, "probe-user")
+	t.Setenv(outbound.GatewayPassEnv, "probe-password")
 
-	if _, err := openSQLiteReadOnly(t.Context(), path); !errors.Is(err,
-		os.ErrNotExist) {
-		t.Fatalf("openSQLiteReadOnly() error = %v, want os.ErrNotExist", err)
-	}
+	gateway := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		user, password, ok := request.BasicAuth()
+		if !ok || user != "probe-user" || password != "probe-password" || request.Host != "configured.example" {
+			response.WriteHeader(http.StatusUnauthorized)
 
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("read-only inspection created database: %v", err)
+			return
+		}
+
+		if request.URL.Path == "/unavailable" {
+			response.WriteHeader(http.StatusBadGateway)
+
+			return
+		}
+
+		response.WriteHeader(http.StatusOK)
+	}))
+	defer gateway.Close()
+
+	t.Setenv(outbound.GatewayURLEnv, gateway.URL)
+
+	report := doctorReport{}
+	checkUpstreams(t.Context(), &report, []string{
+		"https://configured.example/ready",
+		"https://configured.example/unavailable",
+	}, "test admin@example.com")
+
+	if report.ok != 1 || report.failures != 1 {
+		t.Fatalf("upstream probe report = %+v", report)
 	}
 }
 

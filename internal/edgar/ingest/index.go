@@ -123,7 +123,7 @@ func RunIndex(ctx context.Context, config Config, logger *slog.Logger) error {
 		return nil
 	}
 
-	store, err := pipeline.Open(ctx, config.PollingDB)
+	store, err := pipeline.OpenExisting(ctx, config.PollingDB)
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func RunIndex(ctx context.Context, config Config, logger *slog.Logger) error {
 		return fmt.Errorf("record index import: %w", err)
 	}
 
-	bus, err := pipeline.Connect(ctx, config.NATSURL)
+	bus, err := pipeline.Inspect(ctx, config.NATSURL)
 	if err != nil {
 		return err
 	}

@@ -12,11 +12,13 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"wingman.com/chopstick/internal/chopstick"
 	operator "wingman.com/chopstick/internal/chopstick/operator"
 	"wingman.com/chopstick/internal/platform/buildinfo"
 	"wingman.com/chopstick/internal/platform/ctxlog"
 	"wingman.com/chopstick/internal/platform/envfile"
 	"wingman.com/chopstick/internal/platform/outbound"
+	"wingman.com/chopstick/internal/platform/xerr"
 )
 
 func main() {
@@ -32,7 +34,7 @@ func runMain(args []string) int {
 
 	defaults, err := commandDefaultsFromEnvironment()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, chopstick.ConfigurationError(err))
 
 		return 1
 	}
@@ -83,6 +85,12 @@ func runMain(args []string) int {
 	started := time.Now()
 
 	if err := runCommand(parsed, ctx, runtime); err != nil {
+		if preflight, ok := errors.AsType[*xerr.PreflightError](err); ok {
+			fmt.Fprintln(os.Stderr, preflight)
+
+			return 1
+		}
+
 		err = operator.ClassifyError(ctx, err)
 		if errors.Is(err, context.Canceled) {
 			logger.Info("shutdown requested")

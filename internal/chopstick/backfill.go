@@ -70,8 +70,14 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 	}
 	defer func() { _ = bus.Close() }()
 
+	failures, err := pipeline.Open(ctx, config.PollingDB)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = failures.Close() }()
+
 	if err := runBackfillStage(logger, "discovery", func() error {
-		return discover(ctx, bus, config, logger.With("role", "discover"))
+		return discover(ctx, bus, failures, config, logger.With("role", "discover"))
 	}); err != nil {
 		return fmt.Errorf("discover stage: %w", err)
 	}
@@ -84,14 +90,6 @@ func backfill(ctx context.Context, config Config, logger *slog.Logger) error {
 	}); err != nil {
 		return fmt.Errorf("select stage: %w", err)
 	}
-
-	failures, err := pipeline.Open(
-		ctx, config.PollingDB,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = failures.Close() }()
 
 	if err := runBackfillStage(logger, "download", func() error {
 		return pipeline.RunSubmission(ctx, bus, pipeline.SubmissionConfig{
