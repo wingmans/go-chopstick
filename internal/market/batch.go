@@ -136,7 +136,6 @@ func writeBatchRows(ctx context.Context, writer *csv.Writer, item marketstore.Wo
 
 		record := []string{
 			batchRecordPrice,
-			item.Security.ID,
 			item.Security.Symbol,
 			price.Date.UTC().Format(dateLayout),
 			"USD",
@@ -162,7 +161,6 @@ func writeBatchRows(ctx context.Context, writer *csv.Writer, item marketstore.Wo
 
 		record := []string{
 			batchRecordAction,
-			item.Security.ID,
 			item.Security.Symbol,
 			action.Date.UTC().Format(dateLayout),
 			"USD",
@@ -230,14 +228,13 @@ func (store *csvBatchStore) Read(ctx context.Context, item marketstore.WorkItem,
 			)
 		}
 
-		if record[1] != item.Security.ID ||
-			record[2] != item.Security.Symbol || record[4] != "USD" {
+		if record[1] != item.Security.Symbol || record[3] != "USD" {
 			return nil, nil, fmt.Errorf(
 				"yahoo CSV batch identity mismatch on line %d", line,
 			)
 		}
 
-		date, err := time.Parse(dateLayout, record[3])
+		date, err := time.Parse(dateLayout, record[2])
 		if err != nil {
 			return nil, nil, fmt.Errorf(
 				"parse Yahoo CSV batch date on line %d: %w", line, err,
@@ -478,12 +475,12 @@ func recoveryChain(
 }
 
 func parseBatchPrice(record []string, date time.Time) (marketstore.Price, error) {
-	if record[8] != "" || record[9] != "" || record[10] != "" ||
-		record[11] != "" || record[12] != "" {
+	if record[7] != "" || record[8] != "" || record[9] != "" ||
+		record[10] != "" || record[11] != "" {
 		return marketstore.Price{}, errors.New("price has action values")
 	}
 
-	openValue, openValid, err := parseOptionalPriceFloat("open", record[5])
+	openValue, openValid, err := parseOptionalPriceFloat("open", record[4])
 	if err != nil {
 		return marketstore.Price{}, err
 	}
@@ -493,12 +490,12 @@ func parseBatchPrice(record []string, date time.Time) (marketstore.Price, error)
 		open = &openValue
 	}
 
-	closeValue, err := parseRequiredFloat("close", record[6])
+	closeValue, err := parseRequiredFloat("close", record[5])
 	if err != nil {
 		return marketstore.Price{}, err
 	}
 
-	adjustedClose, err := parseRequiredFloat("adjusted close", record[7])
+	adjustedClose, err := parseRequiredFloat("adjusted close", record[6])
 	if err != nil {
 		return marketstore.Price{}, err
 	}
@@ -512,43 +509,43 @@ func parseBatchPrice(record []string, date time.Time) (marketstore.Price, error)
 }
 
 func parseBatchAction(record []string, date time.Time) (marketstore.CorporateAction, error) {
-	if record[5] != "" || record[6] != "" || record[7] != "" {
+	if record[4] != "" || record[5] != "" || record[6] != "" {
 		return marketstore.CorporateAction{}, errors.New(
 			"corporate action has price values",
 		)
 	}
 
-	if record[12] == "" {
+	if record[11] == "" {
 		return marketstore.CorporateAction{}, errors.New(
 			"corporate action has no source ID",
 		)
 	}
 
 	action := marketstore.CorporateAction{
-		SourceID: record[12],
+		SourceID: record[11],
 		Date:     date,
-		Type:     record[8],
+		Type:     record[7],
 	}
 
 	var err error
 
 	switch action.Type {
 	case "dividend":
-		action.Amount, err = parseRequiredFloat("dividend amount", record[9])
-		if err == nil && (record[10] != "" || record[11] != "") {
+		action.Amount, err = parseRequiredFloat("dividend amount", record[8])
+		if err == nil && (record[9] != "" || record[10] != "") {
 			err = errors.New("dividend has split values")
 		}
 	case "split":
-		if record[9] != "" {
+		if record[8] != "" {
 			err = errors.New("split has a dividend amount")
 
 			break
 		}
 
-		action.Numerator, err = parseRequiredFloat("split numerator", record[10])
+		action.Numerator, err = parseRequiredFloat("split numerator", record[9])
 		if err == nil {
 			action.Denominator, err = parseRequiredFloat(
-				"split denominator", record[11],
+				"split denominator", record[10],
 			)
 		}
 	default:
@@ -591,7 +588,6 @@ func parseOptionalPriceFloat(name, value string) (float64, bool, error) {
 func batchCSVHeader() []string {
 	return []string{
 		"record_type",
-		"security_id",
 		"symbol",
 		"date",
 		"currency",

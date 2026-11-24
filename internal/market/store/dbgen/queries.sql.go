@@ -13,7 +13,7 @@ import (
 const advanceSyncState = `-- name: AdvanceSyncState :exec
 INSERT INTO market_sync_state (
     provider,
-    security_id,
+    symbol,
     bootstrap_complete,
     covered_from,
     covered_through,
@@ -34,7 +34,7 @@ INSERT INTO market_sync_state (
     0,
     ?8
 )
-ON CONFLICT(provider, security_id) DO UPDATE SET
+ON CONFLICT(provider, symbol) DO UPDATE SET
     bootstrap_complete = 1,
     covered_from = CASE
         WHEN excluded.covered_from IS NULL
@@ -81,7 +81,7 @@ ON CONFLICT(provider, security_id) DO UPDATE SET
 
 type AdvanceSyncStateParams struct {
 	Provider               string
-	SecurityID             string
+	Symbol                 string
 	CoveredFrom            sql.NullString
 	CoveredThrough         sql.NullString
 	ObservedFrom           sql.NullString
@@ -93,7 +93,7 @@ type AdvanceSyncStateParams struct {
 func (q *Queries) AdvanceSyncState(ctx context.Context, arg AdvanceSyncStateParams) error {
 	_, err := q.exec(ctx, q.advanceSyncStateStmt, advanceSyncState,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.CoveredFrom,
 		arg.CoveredThrough,
 		arg.ObservedFrom,
@@ -107,7 +107,7 @@ func (q *Queries) AdvanceSyncState(ctx context.Context, arg AdvanceSyncStatePara
 const claimWork = `-- name: ClaimWork :execresult
 INSERT INTO market_sync_state (
     provider,
-    security_id,
+    symbol,
     lease_until,
     updated_at
 ) VALUES (
@@ -116,7 +116,7 @@ INSERT INTO market_sync_state (
     ?3,
     ?4
 )
-ON CONFLICT(provider, security_id) DO UPDATE SET
+ON CONFLICT(provider, symbol) DO UPDATE SET
     lease_until = excluded.lease_until,
     updated_at = excluded.updated_at
 WHERE market_sync_state.lease_until IS NULL
@@ -125,7 +125,7 @@ WHERE market_sync_state.lease_until IS NULL
 
 type ClaimWorkParams struct {
 	Provider   string
-	SecurityID string
+	Symbol     string
 	LeaseUntil sql.NullString
 	UpdatedAt  string
 }
@@ -133,7 +133,7 @@ type ClaimWorkParams struct {
 func (q *Queries) ClaimWork(ctx context.Context, arg ClaimWorkParams) (sql.Result, error) {
 	return q.exec(ctx, q.claimWorkStmt, claimWork,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.LeaseUntil,
 		arg.UpdatedAt,
 	)
@@ -143,16 +143,16 @@ const clearReconciliation = `-- name: ClearReconciliation :exec
 UPDATE market_sync_state
 SET reconciliation_required = 0
 WHERE provider = ?1
-  AND security_id = ?2
+  AND symbol = ?2
 `
 
 type ClearReconciliationParams struct {
-	Provider   string
-	SecurityID string
+	Provider string
+	Symbol   string
 }
 
 func (q *Queries) ClearReconciliation(ctx context.Context, arg ClearReconciliationParams) error {
-	_, err := q.exec(ctx, q.clearReconciliationStmt, clearReconciliation, arg.Provider, arg.SecurityID)
+	_, err := q.exec(ctx, q.clearReconciliationStmt, clearReconciliation, arg.Provider, arg.Symbol)
 	return err
 }
 
@@ -160,7 +160,7 @@ const completeCoveredRepairs = `-- name: CompleteCoveredRepairs :exec
 UPDATE market_repairs
 SET completed_at = ?1
 WHERE provider = ?2
-  AND security_id = ?3
+  AND symbol = ?3
   AND completed_at IS NULL
   AND from_date >= ?4
   AND through_date <= ?5
@@ -169,7 +169,7 @@ WHERE provider = ?2
 type CompleteCoveredRepairsParams struct {
 	CompletedAt sql.NullString
 	Provider    string
-	SecurityID  string
+	Symbol      string
 	FromDate    string
 	ThroughDate string
 }
@@ -178,7 +178,7 @@ func (q *Queries) CompleteCoveredRepairs(ctx context.Context, arg CompleteCovere
 	_, err := q.exec(ctx, q.completeCoveredRepairsStmt, completeCoveredRepairs,
 		arg.CompletedAt,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.FromDate,
 		arg.ThroughDate,
 	)
@@ -189,7 +189,7 @@ const completeRepair = `-- name: CompleteRepair :exec
 UPDATE market_repairs
 SET completed_at = ?1
 WHERE provider = ?2
-  AND security_id = ?3
+  AND symbol = ?3
   AND from_date = ?4
   AND through_date = ?5
 `
@@ -197,7 +197,7 @@ WHERE provider = ?2
 type CompleteRepairParams struct {
 	CompletedAt sql.NullString
 	Provider    string
-	SecurityID  string
+	Symbol      string
 	FromDate    string
 	ThroughDate string
 }
@@ -206,7 +206,7 @@ func (q *Queries) CompleteRepair(ctx context.Context, arg CompleteRepairParams) 
 	_, err := q.exec(ctx, q.completeRepairStmt, completeRepair,
 		arg.CompletedAt,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.FromDate,
 		arg.ThroughDate,
 	)
@@ -216,16 +216,16 @@ func (q *Queries) CompleteRepair(ctx context.Context, arg CompleteRepairParams) 
 const deleteActions = `-- name: DeleteActions :exec
 DELETE FROM market_corporate_actions
 WHERE provider = ?1
-  AND security_id = ?2
+  AND symbol = ?2
 `
 
 type DeleteActionsParams struct {
-	Provider   string
-	SecurityID string
+	Provider string
+	Symbol   string
 }
 
 func (q *Queries) DeleteActions(ctx context.Context, arg DeleteActionsParams) error {
-	_, err := q.exec(ctx, q.deleteActionsStmt, deleteActions, arg.Provider, arg.SecurityID)
+	_, err := q.exec(ctx, q.deleteActionsStmt, deleteActions, arg.Provider, arg.Symbol)
 	return err
 }
 
@@ -234,17 +234,17 @@ SELECT EXISTS(
     SELECT 1
     FROM market_prices
     WHERE provider = ?1
-      AND security_id = ?2
+      AND symbol = ?2
 )
 `
 
 type HasPricesParams struct {
-	Provider   string
-	SecurityID string
+	Provider string
+	Symbol   string
 }
 
 func (q *Queries) HasPrices(ctx context.Context, arg HasPricesParams) (bool, error) {
-	row := q.queryRow(ctx, q.hasPricesStmt, hasPrices, arg.Provider, arg.SecurityID)
+	row := q.queryRow(ctx, q.hasPricesStmt, hasPrices, arg.Provider, arg.Symbol)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -263,12 +263,12 @@ SELECT
     state.lease_until
 FROM market_sync_state state
 WHERE state.provider = ?1
-  AND state.security_id = ?2
+  AND state.symbol = ?2
 `
 
 type LoadSyncStateParams struct {
-	Provider   string
-	SecurityID string
+	Provider string
+	Symbol   string
 }
 
 type LoadSyncStateRow struct {
@@ -284,7 +284,7 @@ type LoadSyncStateRow struct {
 }
 
 func (q *Queries) LoadSyncState(ctx context.Context, arg LoadSyncStateParams) (LoadSyncStateRow, error) {
-	row := q.queryRow(ctx, q.loadSyncStateStmt, loadSyncState, arg.Provider, arg.SecurityID)
+	row := q.queryRow(ctx, q.loadSyncStateStmt, loadSyncState, arg.Provider, arg.Symbol)
 	var i LoadSyncStateRow
 	err := row.Scan(
 		&i.BootstrapComplete,
@@ -304,14 +304,14 @@ const marketAction = `-- name: MarketAction :one
 SELECT action_date, action_type, amount, numerator, denominator
 FROM market_corporate_actions
 WHERE provider = ?1
-  AND security_id = ?2
+  AND symbol = ?2
   AND source_id = ?3
 `
 
 type MarketActionParams struct {
-	Provider   string
-	SecurityID string
-	SourceID   string
+	Provider string
+	Symbol   string
+	SourceID string
 }
 
 type MarketActionRow struct {
@@ -323,7 +323,7 @@ type MarketActionRow struct {
 }
 
 func (q *Queries) MarketAction(ctx context.Context, arg MarketActionParams) (MarketActionRow, error) {
-	row := q.queryRow(ctx, q.marketActionStmt, marketAction, arg.Provider, arg.SecurityID, arg.SourceID)
+	row := q.queryRow(ctx, q.marketActionStmt, marketAction, arg.Provider, arg.Symbol, arg.SourceID)
 	var i MarketActionRow
 	err := row.Scan(
 		&i.ActionDate,
@@ -339,15 +339,15 @@ const pendingRepair = `-- name: PendingRepair :one
 SELECT from_date, through_date
 FROM market_repairs
 WHERE provider = ?1
-  AND security_id = ?2
+  AND symbol = ?2
   AND completed_at IS NULL
 ORDER BY from_date
 LIMIT 1
 `
 
 type PendingRepairParams struct {
-	Provider   string
-	SecurityID string
+	Provider string
+	Symbol   string
 }
 
 type PendingRepairRow struct {
@@ -356,7 +356,7 @@ type PendingRepairRow struct {
 }
 
 func (q *Queries) PendingRepair(ctx context.Context, arg PendingRepairParams) (PendingRepairRow, error) {
-	row := q.queryRow(ctx, q.pendingRepairStmt, pendingRepair, arg.Provider, arg.SecurityID)
+	row := q.queryRow(ctx, q.pendingRepairStmt, pendingRepair, arg.Provider, arg.Symbol)
 	var i PendingRepairRow
 	err := row.Scan(&i.FromDate, &i.ThroughDate)
 	return i, err
@@ -365,18 +365,18 @@ func (q *Queries) PendingRepair(ctx context.Context, arg PendingRepairParams) (P
 const queueRepair = `-- name: QueueRepair :exec
 INSERT INTO market_repairs (
     provider,
-    security_id,
+    symbol,
     from_date,
     through_date,
     created_at
 ) VALUES (?, ?, ?, ?, ?)
-ON CONFLICT(provider, security_id, from_date, through_date)
+ON CONFLICT(provider, symbol, from_date, through_date)
 DO UPDATE SET completed_at = NULL
 `
 
 type QueueRepairParams struct {
 	Provider    string
-	SecurityID  string
+	Symbol      string
 	FromDate    string
 	ThroughDate string
 	CreatedAt   string
@@ -385,7 +385,7 @@ type QueueRepairParams struct {
 func (q *Queries) QueueRepair(ctx context.Context, arg QueueRepairParams) error {
 	_, err := q.exec(ctx, q.queueRepairStmt, queueRepair,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.FromDate,
 		arg.ThroughDate,
 		arg.CreatedAt,
@@ -396,13 +396,13 @@ func (q *Queries) QueueRepair(ctx context.Context, arg QueueRepairParams) error 
 const recordFailure = `-- name: RecordFailure :exec
 INSERT INTO market_sync_state (
     provider,
-    security_id,
+    symbol,
     next_attempt_at,
     failure_count,
     last_error,
     updated_at
 ) VALUES (?, ?, ?, ?, ?, ?)
-ON CONFLICT(provider, security_id) DO UPDATE SET
+ON CONFLICT(provider, symbol) DO UPDATE SET
     next_attempt_at = excluded.next_attempt_at,
     failure_count = excluded.failure_count,
     last_error = excluded.last_error,
@@ -412,7 +412,7 @@ ON CONFLICT(provider, security_id) DO UPDATE SET
 
 type RecordFailureParams struct {
 	Provider      string
-	SecurityID    string
+	Symbol        string
 	NextAttemptAt sql.NullString
 	FailureCount  int64
 	LastError     sql.NullString
@@ -422,7 +422,7 @@ type RecordFailureParams struct {
 func (q *Queries) RecordFailure(ctx context.Context, arg RecordFailureParams) error {
 	_, err := q.exec(ctx, q.recordFailureStmt, recordFailure,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.NextAttemptAt,
 		arg.FailureCount,
 		arg.LastError,
@@ -434,30 +434,30 @@ func (q *Queries) RecordFailure(ctx context.Context, arg RecordFailureParams) er
 const registerSecurity = `-- name: RegisterSecurity :exec
 INSERT INTO market_securities (
     provider,
-    security_id,
     symbol,
+    cik,
     name,
     updated_at
 ) VALUES (?, ?, ?, ?, ?)
-ON CONFLICT(provider, security_id) DO UPDATE SET
-    symbol = excluded.symbol,
+ON CONFLICT(provider, symbol) DO UPDATE SET
+    cik = excluded.cik,
     name = excluded.name,
     updated_at = excluded.updated_at
 `
 
 type RegisterSecurityParams struct {
-	Provider   string
-	SecurityID string
-	Symbol     string
-	Name       string
-	UpdatedAt  string
+	Provider  string
+	Symbol    string
+	Cik       string
+	Name      string
+	UpdatedAt string
 }
 
 func (q *Queries) RegisterSecurity(ctx context.Context, arg RegisterSecurityParams) error {
 	_, err := q.exec(ctx, q.registerSecurityStmt, registerSecurity,
 		arg.Provider,
-		arg.SecurityID,
 		arg.Symbol,
+		arg.Cik,
 		arg.Name,
 		arg.UpdatedAt,
 	)
@@ -467,7 +467,7 @@ func (q *Queries) RegisterSecurity(ctx context.Context, arg RegisterSecurityPara
 const upsertAction = `-- name: UpsertAction :exec
 INSERT INTO market_corporate_actions (
     provider,
-    security_id,
+    symbol,
     source_id,
     action_date,
     action_type,
@@ -488,7 +488,7 @@ INSERT INTO market_corporate_actions (
     ?9,
     ?10
 )
-ON CONFLICT(provider, security_id, source_id) DO UPDATE SET
+ON CONFLICT(provider, symbol, source_id) DO UPDATE SET
     action_date = excluded.action_date,
     action_type = excluded.action_type,
     amount = excluded.amount,
@@ -510,7 +510,7 @@ ON CONFLICT(provider, security_id, source_id) DO UPDATE SET
 
 type UpsertActionParams struct {
 	Provider     string
-	SecurityID   string
+	Symbol       string
 	SourceID     string
 	ActionDate   string
 	ActionType   string
@@ -524,7 +524,7 @@ type UpsertActionParams struct {
 func (q *Queries) UpsertAction(ctx context.Context, arg UpsertActionParams) error {
 	_, err := q.exec(ctx, q.upsertActionStmt, upsertAction,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.SourceID,
 		arg.ActionDate,
 		arg.ActionType,
@@ -540,7 +540,7 @@ func (q *Queries) UpsertAction(ctx context.Context, arg UpsertActionParams) erro
 const upsertPrice = `-- name: UpsertPrice :exec
 INSERT INTO market_prices (
     provider,
-    security_id,
+    symbol,
     observation_date,
     currency,
     open,
@@ -557,7 +557,7 @@ INSERT INTO market_prices (
     ?6,
     ?7
 )
-ON CONFLICT(provider, security_id, observation_date) DO UPDATE SET
+ON CONFLICT(provider, symbol, observation_date) DO UPDATE SET
     currency = excluded.currency,
     open = excluded.open,
     close = excluded.close,
@@ -567,7 +567,7 @@ ON CONFLICT(provider, security_id, observation_date) DO UPDATE SET
 
 type UpsertPriceParams struct {
 	Provider        string
-	SecurityID      string
+	Symbol          string
 	ObservationDate string
 	Open            sql.NullFloat64
 	Close           float64
@@ -578,7 +578,7 @@ type UpsertPriceParams struct {
 func (q *Queries) UpsertPrice(ctx context.Context, arg UpsertPriceParams) error {
 	_, err := q.exec(ctx, q.upsertPriceStmt, upsertPrice,
 		arg.Provider,
-		arg.SecurityID,
+		arg.Symbol,
 		arg.ObservationDate,
 		arg.Open,
 		arg.Close,

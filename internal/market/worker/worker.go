@@ -11,7 +11,14 @@ import (
 	"wingman.com/chopstick/internal/platform/ctxlog"
 )
 
-const defaultLeaseDuration = 15 * time.Minute
+const (
+	defaultLeaseDuration = 15 * time.Minute
+
+	// Seven calendar days covers weekends, market holidays, weather closures,
+	// and the four-session September 2001 exchange closure. A larger hole in
+	// an otherwise active series is safer to retry than to mark as covered.
+	maxPriceGap = 7 * 24 * time.Hour
+)
 
 // Repository stores work state and downloaded observations.
 type Repository interface {
@@ -211,6 +218,18 @@ func (runner Runner) RunBatch(
 		summary.Attempted++
 
 		result, fetchErr := runner.fetch(ctx, item)
+		if fetchErr == nil {
+			fetchErr = validateFetchedPrices(item, result.Prices)
+			if fetchErr != nil {
+				ctxlog.FromContext(ctx).Error(
+					"Yahoo market-data coverage validation failed",
+					"ticker", item.Security.Symbol,
+					"work_type", item.Kind,
+					"error", fetchErr,
+				)
+			}
+		}
+
 		if fetchErr != nil {
 			summary.Failed++
 			if err := runner.fail(ctx, item, fetchErr); err != nil {
@@ -232,6 +251,10 @@ func (runner Runner) RunBatch(
 				item,
 				path,
 			)
+		}
+
+		if batchErr == nil {
+			batchErr = validateFetchedPrices(item, result.Prices)
 		}
 
 		if batchErr != nil {
@@ -365,6 +388,12 @@ func (runner Runner) recover(
 	recoveredItem.From = recovery.From
 	recoveredItem.Through = recovery.Through
 
+	if err := validateFetchedPrices(recoveredItem, recovery.Prices); err != nil {
+		return Recovery{}, false, fmt.Errorf(
+			"validate retained market CSV coverage: %w", err,
+		)
+	}
+
 	if _, err := runner.Repository.Save(
 		ctx,
 		recoveredItem,
@@ -378,6 +407,101 @@ func (runner Runner) recover(
 	}
 
 	return recovery, true, nil
+}
+
+func validateFetchedPrices(
+	item marketstore.WorkItem,
+	prices []marketstore.Price,
+) error {
+	from := calendarDate(item.From)
+	through := calendarDate(item.Through)
+
+	if len(prices) == 0 {
+		if through.Sub(from) > maxPriceGap {
+			return fmt.Errorf(
+				"%s returned no prices from %s through %s",
+				item.Security.Symbol,
+				from.Format(time.DateOnly),
+				through.Format(time.DateOnly),
+			)
+		}
+
+		return nil
+	}
+
+	first := calendarDate(prices[0].Date)
+	if first.Before(from) || first.After(through) {
+		return fmt.Errorf(
+			"%s returned price date %s outside %s through %s",
+			item.Security.Symbol,
+			first.Format(time.DateOnly),
+			from.Format(time.DateOnly),
+			through.Format(time.DateOnly),
+		)
+	}
+
+	if item.Kind != marketstore.WorkBootstrap &&
+		item.Kind != marketstore.WorkReconcile &&
+		first.Sub(from) > maxPriceGap {
+		return fmt.Errorf(
+			"%s price series skips work start: %s to %s",
+			item.Security.Symbol,
+			from.Format(time.DateOnly),
+			first.Format(time.DateOnly),
+		)
+	}
+
+	previous := first
+
+	for index := 1; index < len(prices); index++ {
+		current := calendarDate(prices[index].Date)
+		if !current.After(previous) {
+			return fmt.Errorf(
+				"%s price dates are duplicate or unordered at %s",
+				item.Security.Symbol,
+				current.Format(time.DateOnly),
+			)
+		}
+
+		if current.After(through) {
+			return fmt.Errorf(
+				"%s returned price date %s after work target %s",
+				item.Security.Symbol,
+				current.Format(time.DateOnly),
+				through.Format(time.DateOnly),
+			)
+		}
+
+		if current.Sub(previous) > maxPriceGap {
+			return fmt.Errorf(
+				"%s price series has a suspicious gap from %s to %s",
+				item.Security.Symbol,
+				previous.Format(time.DateOnly),
+				current.Format(time.DateOnly),
+			)
+		}
+
+		previous = current
+	}
+
+	if through.Sub(previous) > maxPriceGap {
+		return fmt.Errorf(
+			"%s price series is stale after %s through requested date %s",
+			item.Security.Symbol,
+			previous.Format(time.DateOnly),
+			through.Format(time.DateOnly),
+		)
+	}
+
+	return nil
+}
+
+func calendarDate(value time.Time) time.Time {
+	value = value.UTC()
+
+	return time.Date(
+		value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC,
+	)
 }
 
 func (runner Runner) fetch(

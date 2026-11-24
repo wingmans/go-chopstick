@@ -17,7 +17,7 @@ func TestWorkLifecycle(t *testing.T) {
 	from := testDate(t, "2020-01-01")
 	through := testDate(t, "2026-10-23")
 	security := Security{
-		ID: "0000789019", Symbol: "MSFT", Name: "Microsoft Corporation",
+		CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft Corporation",
 	}
 
 	if err := store.RegisterSecurities(
@@ -121,7 +121,7 @@ func TestRepairFailureAndDataLossRemainDetectable(t *testing.T) {
 	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
 	from := testDate(t, "2020-01-01")
 	through := testDate(t, "2026-10-23")
-	security := Security{ID: "0000320193", Symbol: "AAPL", Name: "Apple Inc."}
+	security := Security{CIK: "0000320193", Symbol: "AAPL", Name: "Apple Inc."}
 
 	if err := store.RegisterSecurities(
 		ctx, "yahoo", []Security{security}, now,
@@ -160,13 +160,69 @@ func TestRepairFailureAndDataLossRemainDetectable(t *testing.T) {
 	}
 
 	if _, err := store.db.ExecContext(ctx, `DELETE FROM market_prices
-		WHERE provider = 'yahoo' AND security_id = ?`, security.ID); err != nil {
+		WHERE provider = 'yahoo' AND symbol = ?`, security.Symbol); err != nil {
 		t.Fatalf("delete prices: %v", err)
 	}
 
 	work = requireWork(t, store, security, from, through, WorkBootstrap)
 	if work.FailureCount != 1 {
 		t.Fatalf("bootstrap after data loss lost failure state: %+v", work)
+	}
+}
+
+func TestRegisterSecuritiesUpdatesIssuerMetadata(t *testing.T) {
+	store := testStore(t)
+	ctx := t.Context()
+	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	from := testDate(t, "2020-01-01")
+	through := testDate(t, "2026-11-20")
+	original := Security{
+		CIK: "0000034088", Symbol: "XOM", Name: "Exxon Mobil Corporation",
+	}
+
+	if err := store.RegisterSecurities(
+		ctx, "yahoo", []Security{original}, now,
+	); err != nil {
+		t.Fatalf("register original security: %v", err)
+	}
+
+	work := requireWork(t, store, original, from, through, WorkBootstrap)
+	if _, err := store.Save(ctx, work, []Price{{
+		Date: through, Open: new(10.0), Close: 11, AdjustedClose: 9,
+	}}, nil, now); err != nil {
+		t.Fatalf("save original security: %v", err)
+	}
+
+	transitioned := []Security{{
+		CIK: "0002115436", Symbol: "XOM", Name: "ExxonMobil Holdings Corp",
+	}}
+	if err := store.RegisterSecurities(
+		ctx, "yahoo", transitioned, now.Add(time.Hour),
+	); err != nil {
+		t.Fatalf("register transitioned security: %v", err)
+	}
+
+	if pending := pendingWork(
+		t, store, transitioned[0], from, through,
+	); len(pending) != 0 {
+		t.Fatalf("pending work after issuer transition = %+v", pending)
+	}
+
+	var cik, name string
+	if err := store.db.QueryRowContext(ctx, `SELECT cik, name
+		FROM market_securities
+		WHERE provider = 'yahoo' AND symbol = ?`,
+		original.Symbol,
+	).Scan(&cik, &name); err != nil {
+		t.Fatalf("read transitioned security: %v", err)
+	}
+
+	if cik != transitioned[0].CIK {
+		t.Fatalf("transitioned security CIK = %q", cik)
+	}
+
+	if name != "ExxonMobil Holdings Corp" {
+		t.Fatalf("transitioned security name = %q", name)
 	}
 }
 
@@ -237,7 +293,7 @@ func TestMarketSchemaRecordsCurrentVersion(t *testing.T) {
 func TestSaveAllowsMissingPriceOpen(t *testing.T) {
 	store := testStore(t)
 	now := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
-	security := Security{ID: "msft", Symbol: "MSFT", Name: "Microsoft"}
+	security := Security{CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft"}
 
 	if err := store.RegisterSecurities(
 		t.Context(), "yahoo", []Security{security}, now,

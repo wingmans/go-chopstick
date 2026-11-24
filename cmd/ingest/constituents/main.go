@@ -66,12 +66,14 @@ func run(args []string) error {
 	client := outbound.NewClient(30 * time.Second)
 	ctx := context.Background()
 
-	tickers, err := sec.FetchCompanies(ctx, client, tickerURL, userAgent)
+	companies, err := sec.FetchCompaniesByCIK(
+		ctx, client, tickerURL, userAgent,
+	)
 	if err != nil {
 		return err
 	}
 
-	memberTickers, err := wikipedia.FetchMembership(
+	members, err := wikipedia.FetchMembership(
 		ctx, client, wikipediaURL, userAgent,
 	)
 	if err != nil {
@@ -82,25 +84,28 @@ func run(args []string) error {
 		Name:    "sp500",
 		AsOf:    time.Now().UTC().Format("2006-01-02"),
 		Source:  wikipediaURL,
-		Members: make([]constituents.Member, 0, len(memberTickers)),
+		Members: make([]constituents.Member, 0, len(members)),
 	}
-	for _, ticker := range memberTickers {
-		if ticker == "SYMBOL" {
-			continue
+	for _, member := range members {
+		var company sec.Company
+
+		for _, candidate := range companies[member.CIK] {
+			if constituents.NormalizeTicker(candidate.Ticker) == member.Ticker {
+				company = candidate
+
+				break
+			}
 		}
 
-		company, ok := tickers[constituents.NormalizeTicker(ticker)]
-		if !ok {
-			return fmt.Errorf("ticker %s was not found in SEC company ticker data", ticker)
-		}
-
-		cik, err := constituents.NormalizeCIK(company.CIK.String())
-		if err != nil {
-			return fmt.Errorf("ticker %s: %w", ticker, err)
+		if company.CIK == "" {
+			return fmt.Errorf(
+				"wikipedia identity %s %s was not found in SEC company data",
+				member.Ticker, member.CIK,
+			)
 		}
 
 		set.Members = append(set.Members, constituents.Member{
-			CIK: cik, Ticker: constituents.NormalizeTicker(ticker),
+			CIK: member.CIK, Ticker: member.Ticker,
 			Name: company.Title,
 		})
 	}

@@ -13,11 +13,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"wingman.com/chopstick/internal/platform/appdata"
+	"wingman.com/chopstick/internal/platform/envfile"
 )
 
 const (
 	DefaultGatewayURL = "http://127.0.0.1:8090"
 	GatewayURLEnv     = "CHOP_OUTBOUND_GATEWAY_URL"
+	GatewayUserEnv    = "CHOP_OUTBOUND_GATEWAY_USER"
+	GatewayPassEnv    = "CHOP_OUTBOUND_GATEWAY_PASS"
 
 	defaultMaxRetries = 4
 	defaultBaseDelay  = 250 * time.Millisecond
@@ -27,11 +32,25 @@ const (
 // NewClient returns a concrete HTTP client that can reach external HTTPS
 // services only through the configured gateway.
 func NewClient(timeout time.Duration) *http.Client {
-	return newClient(timeout, gatewayURLFromEnvironment())
+	loadErr := envfile.Load(appdata.Path(
+		"run", "outbound-gateway.env",
+	))
+
+	return newClientWithError(
+		timeout, gatewayURLFromEnvironment(), loadErr,
+	)
 }
 
 func newClient(timeout time.Duration, rawGatewayURL string) *http.Client {
+	return newClientWithError(timeout, rawGatewayURL, nil)
+}
+
+func newClientWithError(
+	timeout time.Duration, rawGatewayURL string, loadErr error,
+) *http.Client {
 	gatewayURL, configErr := parseGatewayURL(rawGatewayURL)
+	user, password, credentialsErr := gatewayCredentialsFromEnvironment()
+	configErr = errors.Join(loadErr, configErr, credentialsErr)
 
 	return &http.Client{
 		Timeout: timeout,
@@ -39,6 +58,8 @@ func newClient(timeout time.Duration, rawGatewayURL string) *http.Client {
 			next: &gatewayTransport{
 				gatewayURL: gatewayURL,
 				configErr:  configErr,
+				user:       user,
+				password:   password,
 				next:       directTransport(),
 			},
 			maxRetries: defaultMaxRetries,
@@ -47,6 +68,24 @@ func newClient(timeout time.Duration, rawGatewayURL string) *http.Client {
 			jitter:     randomJitter,
 		},
 	}
+}
+
+func gatewayCredentialsFromEnvironment() (string, string, error) {
+	user := strings.TrimSpace(os.Getenv(GatewayUserEnv))
+	password := strings.TrimSpace(os.Getenv(GatewayPassEnv))
+
+	if user == "" && password == "" {
+		return "", "", nil
+	}
+
+	if user == "" || password == "" {
+		return "", "", fmt.Errorf(
+			"%s and %s must be configured together",
+			GatewayUserEnv, GatewayPassEnv,
+		)
+	}
+
+	return user, password, nil
 }
 
 func directTransport() *http.Transport {
@@ -97,6 +136,8 @@ func parseGatewayURL(value string) (*url.URL, error) {
 type gatewayTransport struct {
 	gatewayURL *url.URL
 	configErr  error
+	user       string
+	password   string
 	next       http.RoundTripper
 }
 
@@ -125,7 +166,11 @@ func (t *gatewayTransport) RoundTrip(
 	forwarded.URL.Scheme = t.gatewayURL.Scheme
 	forwarded.URL.Host = t.gatewayURL.Host
 	forwarded.URL.User = nil
+
 	forwarded.Host = request.URL.Hostname()
+	if t.user != "" {
+		forwarded.SetBasicAuth(t.user, t.password)
+	}
 
 	return t.next.RoundTrip(forwarded)
 }

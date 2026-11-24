@@ -8,6 +8,19 @@ chop prices fetch
 chop prices sync
 ```
 
+Downloaded price series fail closed when Yahoo returns duplicate, unordered,
+stale, or suspiciously discontinuous observations. Failed coverage validation
+does not advance the synchronization watermark; the work remains pending for
+retry and inspection with `chop prices status`.
+
+CSV batches contain two record types. All `price` rows are written first,
+followed by `action` rows for dividends and splits. Inspect the first column
+before interpreting adjacent dates as price continuity.
+
+Yahoo series are identified by provider and symbol. CIK and company name are
+current manifest metadata, so an issuer transition updates them without
+creating a second price series.
+
 `fetch` attempts at most 25 symbols by default. Use repeated `--ticker` flags
 to limit any command to specific manifest members:
 
@@ -36,7 +49,7 @@ SELECT
     MIN(observation_date) AS earliest,
     MAX(observation_date) AS latest,
     COUNT(*) AS prices,
-    COUNT(DISTINCT security_id) AS securities
+    COUNT(DISTINCT symbol) AS securities
 FROM market_prices
 WHERE provider = 'yahoo';
 ```
@@ -52,7 +65,7 @@ SELECT
 FROM market_securities AS s
 JOIN market_prices AS p
   ON p.provider = s.provider
- AND p.security_id = s.security_id
+ AND p.symbol = s.symbol
 WHERE s.provider = 'yahoo'
   AND s.symbol = 'MSFT'
 GROUP BY s.symbol;
@@ -69,7 +82,7 @@ SELECT
 FROM market_sync_state AS w
 JOIN market_securities AS s
   ON s.provider = w.provider
- AND s.security_id = w.security_id
+ AND s.symbol = w.symbol
 WHERE w.provider = 'yahoo'
 ORDER BY s.symbol
 LIMIT 20;
@@ -83,3 +96,16 @@ FROM market_sync_state
 WHERE provider = 'yahoo'
   AND (observed_from IS NULL OR observed_from > '2020-01-01');
 ```
+
+## Future pricing pipeline work
+
+Add trusted exchange calendars so the pricing pipeline can validate individual
+expected trading sessions, not only suspicious multi-day gaps. Associate each
+security with its listing exchange and retain a versioned local calendar with
+its source and retrieval date.
+
+After each synchronization, compare observations with the expected sessions.
+Queue missing sessions for repair. If a second fetch still has no observation,
+record a visible exception for legitimate trading halts, suspensions, or other
+security-specific no-trade events instead of silently treating the date as
+covered.

@@ -172,7 +172,7 @@ WITH metrics AS (
   SELECT
     (SELECT COUNT(*) FROM market_securities
       WHERE provider = 'yahoo') AS securities,
-    (SELECT COUNT(DISTINCT security_id) FROM market_prices
+    (SELECT COUNT(DISTINCT symbol) FROM market_prices
       WHERE provider = 'yahoo') AS priced,
     (SELECT COUNT(*) FROM market_prices
       WHERE provider = 'yahoo') AS prices,

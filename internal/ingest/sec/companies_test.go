@@ -52,4 +52,53 @@ func TestFetchCompaniesIndexesNormalizedTickers(t *testing.T) {
 	if company.CIK.String() != "1067983" {
 		t.Fatalf("CIK = %q", company.CIK.String())
 	}
+
+	byCIK, err := FetchCompaniesByCIK(
+		context.Background(), client, "https://sec.test/companies", "test-agent",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	byCIKCompanies := byCIK["0001067983"]
+	if len(byCIKCompanies) != 1 || byCIKCompanies[0].Ticker != "BRK-B" {
+		t.Fatalf("companies by CIK = %+v", byCIKCompanies)
+	}
+}
+
+func TestFetchCompaniesRejectsDuplicateTickerIdentity(t *testing.T) {
+	t.Parallel()
+
+	body := `{
+      "0":{"cik_str":34088,"ticker":"XOM","title":"Exxon Mobil"},
+      "1":{"cik_str":2115436,"ticker":"XOM","title":"ExxonMobil Holdings"}
+    }`
+	client := &http.Client{Transport: roundTripFunc(
+		func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Header:     make(http.Header),
+			}, nil
+		},
+	)}
+
+	_, err := FetchCompanies(
+		context.Background(), client, "https://sec.test/companies", "test-agent",
+	)
+	if err == nil || !strings.Contains(err.Error(), "duplicate ticker XOM") {
+		t.Fatalf("duplicate ticker error = %v", err)
+	}
+
+	companies, err := FetchCompaniesByCIK(
+		context.Background(), client, "https://sec.test/companies", "test-agent",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(companies) != 2 {
+		t.Fatalf("companies by CIK = %+v", companies)
+	}
 }

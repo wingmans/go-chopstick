@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,130 @@ func TestSyncRecoversCSVBeforeFetching(t *testing.T) {
 	}
 }
 
+func TestRunBatchRejectsSuspiciousPriceGap(t *testing.T) {
+	store, security, cfg, now := testRepository(t)
+	fetcher := &testFetcher{result: FetchResult{
+		Prices: []marketstore.Price{
+			testPrice(time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)),
+			testPrice(cfg.Through),
+		},
+	}}
+	batches := &testBatches{}
+	runner := Runner{
+		Repository: store,
+		Fetcher:    fetcher,
+		Batches:    batches,
+		Now:        func() time.Time { return now },
+	}
+
+	summary, err := runner.RunBatch(t.Context(), cfg)
+	if err != nil {
+		t.Fatalf("run batch: %v", err)
+	}
+
+	if summary.Failed != 1 || summary.Completed != 0 {
+		t.Fatalf("summary = %+v", summary)
+	}
+
+	if len(batches.result.Prices) != 0 {
+		t.Fatalf("invalid prices reached batch storage: %+v", batches.result)
+	}
+
+	items, err := store.PendingWork(
+		t.Context(), cfg.Provider, []marketstore.Security{security},
+		cfg.BootstrapFrom, cfg.Through,
+	)
+	if err != nil {
+		t.Fatalf("pending work: %v", err)
+	}
+
+	if len(items) != 1 ||
+		!strings.Contains(items[0].LastError, "suspicious gap") {
+		t.Fatalf("pending work = %+v", items)
+	}
+}
+
+func TestValidateFetchedPrices(t *testing.T) {
+	from := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	item := marketstore.WorkItem{
+		Kind:     marketstore.WorkIncremental,
+		From:     from,
+		Through:  from.AddDate(0, 0, 20),
+		Security: marketstore.Security{Symbol: "AAPL"},
+	}
+
+	tests := []struct {
+		name    string
+		prices  []marketstore.Price
+		wantErr string
+	}{
+		{
+			name: "continuous",
+			prices: []marketstore.Price{
+				testPrice(from.AddDate(0, 0, 2)),
+				testPrice(from.AddDate(0, 0, 6)),
+				testPrice(from.AddDate(0, 0, 13)),
+				testPrice(from.AddDate(0, 0, 20)),
+			},
+		},
+		{
+			name: "missing middle",
+			prices: []marketstore.Price{
+				testPrice(from),
+				testPrice(from.AddDate(0, 0, 8)),
+				testPrice(from.AddDate(0, 0, 20)),
+			},
+			wantErr: "suspicious gap",
+		},
+		{
+			name: "stale tail",
+			prices: []marketstore.Price{
+				testPrice(from),
+				testPrice(from.AddDate(0, 0, 7)),
+			},
+			wantErr: "is stale",
+		},
+		{
+			name: "skipped incremental start",
+			prices: []marketstore.Price{
+				testPrice(from.AddDate(0, 0, 8)),
+				testPrice(from.AddDate(0, 0, 15)),
+				testPrice(from.AddDate(0, 0, 20)),
+			},
+			wantErr: "skips work start",
+		},
+		{
+			name: "unordered",
+			prices: []marketstore.Price{
+				testPrice(from),
+				testPrice(from),
+				testPrice(from.AddDate(0, 0, 20)),
+			},
+			wantErr: "duplicate or unordered",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateFetchedPrices(item, test.prices)
+			if test.wantErr == "" && err != nil {
+				t.Fatalf("validate prices: %v", err)
+			}
+
+			if test.wantErr != "" &&
+				(err == nil || !strings.Contains(err.Error(), test.wantErr)) {
+				t.Fatalf("error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func testPrice(date time.Time) marketstore.Price {
+	return marketstore.Price{
+		Date: date, Open: new(10.0), Close: 11, AdjustedClose: 9,
+	}
+}
+
 func testRepository(
 	t *testing.T,
 ) (*marketstore.Store, marketstore.Security, Config, time.Time) {
@@ -146,7 +271,7 @@ func testRepository(
 
 	now := time.Date(2026, 10, 26, 21, 0, 0, 0, time.UTC)
 	security := marketstore.Security{
-		ID: "0000789019:MSFT", Symbol: "MSFT", Name: "Microsoft",
+		CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft",
 	}
 
 	if err := store.RegisterSecurities(

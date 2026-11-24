@@ -17,10 +17,9 @@ var (
 )
 
 type member struct {
-	SecurityID string `json:"security_id,omitempty"`
-	CIK        string `json:"cik"`
-	Ticker     string `json:"ticker"`
-	Name       string `json:"name"`
+	CIK    string `json:"cik"`
+	Ticker string `json:"ticker"`
+	Name   string `json:"name"`
 }
 
 type constituentManifest struct {
@@ -91,14 +90,12 @@ func validateManifest(manifest *constituentManifest) error {
 	}
 
 	seenTickers := make(map[string]struct{}, len(manifest.Members))
-	seenSecurityIDs := make(map[string]struct{}, len(manifest.Members))
 
 	for index := range manifest.Members {
 		item := &manifest.Members[index]
 		item.CIK = strings.TrimSpace(item.CIK)
 		item.Ticker = strings.ToUpper(strings.TrimSpace(item.Ticker))
 		item.Name = strings.TrimSpace(item.Name)
-		item.SecurityID = strings.TrimSpace(item.SecurityID)
 
 		if item.CIK == "" || item.Ticker == "" || item.Name == "" {
 			return fmt.Errorf("member %d has an empty cik, ticker, or name", index)
@@ -112,20 +109,11 @@ func validateManifest(manifest *constituentManifest) error {
 			return fmt.Errorf("member %d has invalid ticker %q", index, item.Ticker)
 		}
 
-		if item.SecurityID == "" {
-			item.SecurityID = item.CIK + ":" + item.Ticker
-		}
-
 		if _, exists := seenTickers[item.Ticker]; exists {
 			return fmt.Errorf("duplicate ticker %s", item.Ticker)
 		}
 
-		if _, exists := seenSecurityIDs[item.SecurityID]; exists {
-			return fmt.Errorf("duplicate security_id %s", item.SecurityID)
-		}
-
 		seenTickers[item.Ticker] = struct{}{}
-		seenSecurityIDs[item.SecurityID] = struct{}{}
 	}
 
 	return nil

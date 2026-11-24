@@ -34,9 +34,9 @@ const (
 	WorkRepair WorkKind = "repair"
 )
 
-// Security maps a stable security ID to one provider symbol.
+// Security identifies one provider symbol and its current SEC issuer.
 type Security struct {
-	ID     string
+	CIK    string
 	Symbol string
 	Name   string
 }
@@ -163,11 +163,11 @@ func (store *Store) RegisterSecurities(ctx context.Context, provider string, sec
 		if err := queries.RegisterSecurity(
 			ctx,
 			dbgen.RegisterSecurityParams{
-				Provider:   provider,
-				SecurityID: security.ID,
-				Symbol:     security.Symbol,
-				Name:       security.Name,
-				UpdatedAt:  formatTime(now),
+				Provider:  provider,
+				Symbol:    security.Symbol,
+				Cik:       security.CIK,
+				Name:      security.Name,
+				UpdatedAt: formatTime(now),
 			},
 		); err != nil {
 			return fmt.Errorf("register security %s: %w", security.Symbol, err)
@@ -235,12 +235,12 @@ func pendingSecurity(
 	bootstrapFrom time.Time,
 	through time.Time,
 ) (WorkItem, bool, error) {
-	state, err := store.loadSyncState(ctx, provider, security.ID)
+	state, err := store.loadSyncState(ctx, provider, security.Symbol)
 	if err != nil {
 		return WorkItem{}, false, err
 	}
 
-	hasPrices, err := store.hasPrices(ctx, provider, security.ID)
+	hasPrices, err := store.hasPrices(ctx, provider, security.Symbol)
 	if err != nil {
 		return WorkItem{}, false, err
 	}
@@ -292,7 +292,7 @@ func pendingSecurity(
 func (store *Store) Claim(ctx context.Context, item WorkItem, now time.Time, leaseUntil time.Time) (bool, error) {
 	result, err := store.queries.ClaimWork(ctx, dbgen.ClaimWorkParams{
 		Provider:   item.Provider,
-		SecurityID: item.Security.ID,
+		Symbol:     item.Security.Symbol,
 		LeaseUntil: validString(formatTime(leaseUntil)),
 		UpdatedAt:  formatTime(now),
 	})
@@ -326,7 +326,7 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 	for _, price := range prices {
 		if err := queries.UpsertPrice(ctx, dbgen.UpsertPriceParams{
 			Provider:        item.Provider,
-			SecurityID:      item.Security.ID,
+			Symbol:          item.Security.Symbol,
 			ObservationDate: formatDate(price.Date),
 			Open:            nullablePrice(price.Open),
 			Close:           price.Close,
@@ -350,7 +350,7 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 
 	if err := queries.AdvanceSyncState(ctx, dbgen.AdvanceSyncStateParams{
 		Provider:               item.Provider,
-		SecurityID:             item.Security.ID,
+		Symbol:                 item.Security.Symbol,
 		CoveredFrom:            coveredFrom,
 		CoveredThrough:         validString(formatDate(item.Through)),
 		ObservedFrom:           nullDate(observedFrom),
@@ -366,8 +366,8 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 		if err := queries.ClearReconciliation(
 			ctx,
 			dbgen.ClearReconciliationParams{
-				Provider:   item.Provider,
-				SecurityID: item.Security.ID,
+				Provider: item.Provider,
+				Symbol:   item.Security.Symbol,
 			},
 		); err != nil {
 			return false, fmt.Errorf("complete reconciliation for %s: %w",
@@ -380,7 +380,7 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 		if err := queries.CompleteRepair(ctx, dbgen.CompleteRepairParams{
 			CompletedAt: validString(formatTime(now)),
 			Provider:    item.Provider,
-			SecurityID:  item.Security.ID,
+			Symbol:      item.Security.Symbol,
 			FromDate:    formatDate(item.From),
 			ThroughDate: formatDate(item.Through),
 		}); err != nil {
@@ -393,7 +393,7 @@ func (store *Store) Save(ctx context.Context, item WorkItem, prices []Price, act
 			dbgen.CompleteCoveredRepairsParams{
 				CompletedAt: validString(formatTime(now)),
 				Provider:    item.Provider,
-				SecurityID:  item.Security.ID,
+				Symbol:      item.Security.Symbol,
 				FromDate:    formatDate(item.From),
 				ThroughDate: formatDate(item.Through),
 			},
@@ -421,8 +421,8 @@ func saveActions(
 ) (bool, error) {
 	if item.Kind == WorkBootstrap || item.Kind == WorkReconcile {
 		if err := queries.DeleteActions(ctx, dbgen.DeleteActionsParams{
-			Provider:   item.Provider,
-			SecurityID: item.Security.ID,
+			Provider: item.Provider,
+			Symbol:   item.Security.Symbol,
 		}); err != nil {
 			return false, fmt.Errorf("replace actions for %s: %w",
 				item.Security.Symbol, err)
@@ -446,7 +446,7 @@ func saveActions(
 
 		if err := queries.UpsertAction(ctx, dbgen.UpsertActionParams{
 			Provider:     item.Provider,
-			SecurityID:   item.Security.ID,
+			Symbol:       item.Security.Symbol,
 			SourceID:     action.SourceID,
 			ActionDate:   formatDate(action.Date),
 			ActionType:   action.Type,
@@ -471,9 +471,9 @@ func actionDiffers(
 	action CorporateAction,
 ) (bool, error) {
 	stored, err := queries.MarketAction(ctx, dbgen.MarketActionParams{
-		Provider:   item.Provider,
-		SecurityID: item.Security.ID,
-		SourceID:   action.SourceID,
+		Provider: item.Provider,
+		Symbol:   item.Security.Symbol,
+		SourceID: action.SourceID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return true, nil
@@ -508,7 +508,7 @@ func (store *Store) Fail(
 
 	err := store.queries.RecordFailure(ctx, dbgen.RecordFailureParams{
 		Provider:      item.Provider,
-		SecurityID:    item.Security.ID,
+		Symbol:        item.Security.Symbol,
 		NextAttemptAt: validString(formatTime(now.Add(delay))),
 		FailureCount:  int64(failureCount),
 		LastError:     validString(message),
@@ -529,7 +529,7 @@ func (store *Store) QueueRepair(ctx context.Context, provider string, security S
 
 	err := store.queries.QueueRepair(ctx, dbgen.QueueRepairParams{
 		Provider:    provider,
-		SecurityID:  security.ID,
+		Symbol:      security.Symbol,
 		FromDate:    formatDate(from),
 		ThroughDate: formatDate(through),
 		CreatedAt:   formatTime(now),
@@ -541,18 +541,18 @@ func (store *Store) QueueRepair(ctx context.Context, provider string, security S
 	return nil
 }
 
-// loadSyncState loads the current synchronization state for a given provider and security ID.
-func (store *Store) loadSyncState(ctx context.Context, provider string, securityID string) (syncState, error) {
+// loadSyncState loads the current synchronization state for a given provider and provider symbol.
+func (store *Store) loadSyncState(ctx context.Context, provider string, symbol string) (syncState, error) {
 	stored, err := store.queries.LoadSyncState(
 		ctx,
 		dbgen.LoadSyncStateParams{
-			Provider:   provider,
-			SecurityID: securityID,
+			Provider: provider,
+			Symbol:   symbol,
 		},
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.syncStateWithRepair(ctx, syncState{}, provider,
-			securityID)
+			symbol)
 	}
 
 	if err != nil {
@@ -571,20 +571,20 @@ func (store *Store) loadSyncState(ctx context.Context, provider string, security
 		lastError:              stored.LastError.String,
 	}
 
-	return store.syncStateWithRepair(ctx, state, provider, securityID)
+	return store.syncStateWithRepair(ctx, state, provider, symbol)
 }
 
 func (store *Store) syncStateWithRepair(
 	ctx context.Context,
 	state syncState,
 	provider string,
-	securityID string,
+	symbol string,
 ) (syncState, error) {
 	repair, err := store.queries.PendingRepair(
 		ctx,
 		dbgen.PendingRepairParams{
-			Provider:   provider,
-			SecurityID: securityID,
+			Provider: provider,
+			Symbol:   symbol,
 		},
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -604,11 +604,11 @@ func (store *Store) syncStateWithRepair(
 func (store *Store) hasPrices(
 	ctx context.Context,
 	provider string,
-	securityID string,
+	symbol string,
 ) (bool, error) {
 	exists, err := store.queries.HasPrices(ctx, dbgen.HasPricesParams{
-		Provider:   provider,
-		SecurityID: securityID,
+		Provider: provider,
+		Symbol:   symbol,
 	})
 	if err != nil {
 		return false, fmt.Errorf("check stored market prices: %w", err)
@@ -618,10 +618,10 @@ func (store *Store) hasPrices(
 }
 
 func validateSecurity(security Security) error {
-	if strings.TrimSpace(security.ID) == "" ||
+	if strings.TrimSpace(security.CIK) == "" ||
 		strings.TrimSpace(security.Symbol) == "" ||
 		strings.TrimSpace(security.Name) == "" {
-		return errors.New("security ID, symbol, and name are required")
+		return errors.New("security CIK, symbol, and name are required")
 	}
 
 	return nil

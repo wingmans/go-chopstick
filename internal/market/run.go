@@ -198,7 +198,7 @@ func marketSecurities(members []member) []marketstore.Security {
 	securities := make([]marketstore.Security, 0, len(members))
 	for _, item := range members {
 		securities = append(securities, marketstore.Security{
-			ID: item.SecurityID, Symbol: item.Ticker, Name: item.Name,
+			CIK: item.CIK, Symbol: item.Ticker, Name: item.Name,
 		})
 	}
 

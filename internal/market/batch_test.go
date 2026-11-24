@@ -1,6 +1,7 @@
 package market
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -17,7 +18,7 @@ func TestCSVBatchStoreRoundTrip(t *testing.T) {
 
 	item := marketstore.WorkItem{
 		Security: marketstore.Security{
-			ID: "0000789019:MSFT", Symbol: "MSFT", Name: "Microsoft",
+			CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft",
 		},
 		Kind:    marketstore.WorkBootstrap,
 		From:    mustDate(t, "2024-01-01"),
@@ -64,6 +65,16 @@ func TestCSVBatchStoreRoundTrip(t *testing.T) {
 		t.Fatalf("batch path = %q, want %q", path, wantPath)
 	}
 
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read CSV batch file: %v", err)
+	}
+
+	if !strings.HasPrefix(string(contents),
+		"record_type,symbol,date,currency,open,close,adjusted_close,") {
+		t.Fatalf("unexpected CSV batch header: %q", contents)
+	}
+
 	gotPrices, gotActions, err := store.Read(t.Context(), item, path)
 	if err != nil {
 		t.Fatalf("read CSV batch: %v", err)
@@ -87,7 +98,7 @@ func TestCSVBatchStoreRejectsWrongIdentity(t *testing.T) {
 
 	item := marketstore.WorkItem{
 		Security: marketstore.Security{
-			ID: "0000789019:MSFT", Symbol: "MSFT", Name: "Microsoft",
+			CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft",
 		},
 		Kind:    marketstore.WorkIncremental,
 		From:    mustDate(t, "2024-01-02"),
@@ -120,7 +131,7 @@ func TestCSVBatchStoreRecoversContiguousPrefix(t *testing.T) {
 	}
 
 	security := marketstore.Security{
-		ID: "0000789019:MSFT", Symbol: "MSFT", Name: "Microsoft",
+		CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft",
 	}
 	bootstrap := marketstore.WorkItem{
 		Security: security,

@@ -10,6 +10,12 @@ The default gateway address is `http://127.0.0.1:8090`. Override it with
 different address. There is no configuration that falls back to a direct
 external connection.
 
+The development lifecycle generates disposable Basic Auth credentials in
+`data/run/outbound-gateway.env`. The proxy receives the username and password
+hash, while Chopstick loads the username and plaintext password automatically.
+The ignored runtime file is a development coordination mechanism, not a local
+confidentiality boundary.
+
 ## Policy
 
 Chopstick owns [the gateway policy](../infra/outbound.rules). Its initial
@@ -29,7 +35,7 @@ it. Restart the gateway with `make gateway-start` to apply a policy change.
 The gateway source checkout defaults to:
 
 ```text
-../../wingmans/go-proxy-app/throttling
+../go-proxy-app/throttling
 ```
 
 Override `CHOP_GATEWAY_DIR` when the checkout is elsewhere. Manage it with:
@@ -38,7 +44,11 @@ Override `CHOP_GATEWAY_DIR` when the checkout is elsewhere. Manage it with:
 make gateway-start
 make gateway-status
 make gateway-stop
+make gateway-reset
 ```
+
+`make gateway-reset` replaces the local credentials and rebuilds the proxy.
+No gateway username or password needs to be configured manually.
 
 `make run` starts and verifies the gateway before starting `chopd`. It does
 not start NATS. Direct commands such as `go run ./cmd/chop backfill` do not

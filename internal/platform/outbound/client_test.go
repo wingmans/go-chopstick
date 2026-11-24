@@ -61,6 +61,68 @@ func TestClientRewritesRequestToGateway(t *testing.T) {
 	}
 }
 
+func TestClientAuthenticatesToGateway(t *testing.T) {
+	t.Setenv(GatewayUserEnv, "generated-user")
+	t.Setenv(GatewayPassEnv, "generated-password")
+
+	var received *http.Request
+
+	gateway := httptest.NewServer(http.HandlerFunc(func(
+		response http.ResponseWriter, request *http.Request,
+	) {
+		received = request.Clone(request.Context())
+
+		response.WriteHeader(http.StatusOK)
+	}))
+	defer gateway.Close()
+
+	client := newClient(time.Second, gateway.URL)
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		"https://api.example.com/value", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	if received == nil {
+		t.Fatal("gateway did not receive request")
+	}
+
+	user, password, ok := received.BasicAuth()
+	if !ok || user != "generated-user" || password != "generated-password" {
+		t.Fatalf("gateway Basic Auth = %q, %q, %t", user, password, ok)
+	}
+}
+
+func TestClientRejectsPartialGatewayCredentials(t *testing.T) {
+	t.Setenv(GatewayUserEnv, "generated-user")
+	t.Setenv(GatewayPassEnv, "")
+
+	client := newClient(time.Second, DefaultGatewayURL)
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		"https://api.example.com/value", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := client.Do(request)
+	if err == nil {
+		_ = response.Body.Close()
+		t.Fatal("request succeeded with partial gateway credentials")
+	}
+
+	if !strings.Contains(err.Error(), "must be configured together") {
+		t.Fatalf("request error = %v", err)
+	}
+}
+
 func TestClientRetriesTooManyRequests(t *testing.T) {
 	var attempts atomic.Int32
 

@@ -1,13 +1,15 @@
 .PHONY: help deps generate check-generated build run test lint docs-pdf clean \
-	gateway-start gateway-stop gateway-status
+	gateway-start gateway-stop gateway-status gateway-reset
 
 .DEFAULT_GOAL := help
 
 BIN_DIR := bin
 SQLC ?= .tools/bin/sqlc
 TEMPL ?= .tools/bin/templ
-CHOP_GATEWAY_DIR ?= ../../wingmans/go-proxy-app/throttling
+CHOP_GATEWAY_DIR ?= ../go-proxy-app/throttling
 CHOP_GATEWAY_RULES := $(CURDIR)/infra/outbound.rules
+CHOP_GATEWAY_IMAGE ?= go-proxy-app-throttling:0.1.0
+CHOP_GATEWAY_CREDENTIALS := $(CURDIR)/data/run/outbound-gateway.env
 
 help:
 	@printf '%s\n' \
@@ -34,6 +36,7 @@ help:
 		'  gateway-start           Start the outbound HTTP gateway' \
 		'  gateway-stop            Stop the outbound HTTP gateway' \
 		'  gateway-status          Show outbound gateway status' \
+		'  gateway-reset           Rebuild and rotate gateway credentials' \
 		'' \
 
 deps:
@@ -111,8 +114,19 @@ gateway-start:
 	@test -d "$(CHOP_GATEWAY_DIR)" || { \
 		echo 'gateway repository not found: $(CHOP_GATEWAY_DIR)' >&2; exit 1; \
 	}
-	$(MAKE) -C "$(CHOP_GATEWAY_DIR)" up \
-		RULES_FILE="$(CHOP_GATEWAY_RULES)"
+	$(MAKE) -C "$(CHOP_GATEWAY_DIR)" build \
+		PROXY_IMAGE="$(CHOP_GATEWAY_IMAGE)"
+	bash scripts/gateway-credentials.sh ensure \
+		"$(CHOP_GATEWAY_CREDENTIALS)"
+	@set -a; . "$(CHOP_GATEWAY_CREDENTIALS)"; set +a; \
+		proxy_hash="$$(docker run --rm "$(CHOP_GATEWAY_IMAGE)" \
+			caddy hash-password \
+			--plaintext "$$CHOP_OUTBOUND_GATEWAY_PASS")"; \
+		export PROXY_USER="$$CHOP_OUTBOUND_GATEWAY_USER"; \
+		export PROXY_HASH="$$proxy_hash"; \
+		$(MAKE) -C "$(CHOP_GATEWAY_DIR)" up \
+			RULES_FILE="$(CHOP_GATEWAY_RULES)" \
+			PROXY_IMAGE="$(CHOP_GATEWAY_IMAGE)"
 
 gateway-stop:
 	@test -d "$(CHOP_GATEWAY_DIR)" || { \
@@ -125,3 +139,9 @@ gateway-status:
 		echo 'gateway repository not found: $(CHOP_GATEWAY_DIR)' >&2; exit 1; \
 	}
 	$(MAKE) -C "$(CHOP_GATEWAY_DIR)" status
+
+gateway-reset:
+	$(MAKE) gateway-stop
+	bash scripts/gateway-credentials.sh rotate \
+		"$(CHOP_GATEWAY_CREDENTIALS)"
+	$(MAKE) gateway-start

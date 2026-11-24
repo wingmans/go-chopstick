@@ -19,7 +19,7 @@ import (
 	marketstore "wingman.com/chopstick/internal/market/store"
 )
 
-func TestManifestDerivesDistinctShareClassIDs(t *testing.T) {
+func TestManifestAllowsDistinctShareClassesForOneCIK(t *testing.T) {
 	manifest := constituentManifest{
 		Name: "index", AsOf: "2026-10-26", Source: "test",
 		Members: []member{
@@ -32,12 +32,8 @@ func TestManifestDerivesDistinctShareClassIDs(t *testing.T) {
 		t.Fatalf("validate manifest: %v", err)
 	}
 
-	first := manifest.Members[0].SecurityID
-
-	second := manifest.Members[1].SecurityID
-
-	if first == second || first == "" || second == "" {
-		t.Fatalf("derived security IDs = %q and %q", first, second)
+	if manifest.Members[0].Ticker == manifest.Members[1].Ticker {
+		t.Fatalf("share-class tickers were not distinct: %+v", manifest.Members)
 	}
 }
 
@@ -61,7 +57,7 @@ func TestExecuteFetchBootstrapsOneSecurity(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	security := marketstore.Security{
-		ID: "0000789019", Symbol: "MSFT", Name: "Microsoft Corporation",
+		CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft Corporation",
 	}
 
 	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
