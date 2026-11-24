@@ -307,8 +307,7 @@ The public workflow will be:
 Representative command responsibilities are:
 
 - `yahoo-prices fetch`: execute a bounded batch of due Yahoo work;
-- `yahoo-prices sync`: run bounded batches until the target is complete;
-- `yahoo-prices serve`: catch up, then sync daily after the US market session;
+- `yahoo-prices sync`: run bounded batches until no eligible work remains;
 - `yahoo-prices status`: list missing, stale, or deferred Yahoo work;
 - `yahoo-prices repair`: queue a historical interval for repair;
 - `stooq-prices fetch`: download Stooq provider candidate rows;

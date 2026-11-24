@@ -19,6 +19,24 @@ import (
 	marketstore "wingman.com/chopstick/internal/market/store"
 )
 
+func TestDefaultTargetDateUsesNewYorkWallClock(t *testing.T) {
+	location, err := time.LoadLocation(marketTimezone)
+	if err != nil {
+		t.Fatalf("load timezone: %v", err)
+	}
+
+	before := time.Date(2026, 10, 26, 20, 59, 0, 0, location)
+	after := time.Date(2026, 10, 26, 21, 0, 0, 0, location)
+
+	if got := DefaultTargetDate(before).Format(dateLayout); got != "2026-10-25" {
+		t.Fatalf("target before cutoff = %s", got)
+	}
+
+	if got := DefaultTargetDate(after).Format(dateLayout); got != "2026-10-26" {
+		t.Fatalf("target at cutoff = %s", got)
+	}
+}
+
 func TestManifestAllowsDistinctShareClassesForOneCIK(t *testing.T) {
 	manifest := constituentManifest{
 		Name: "index", AsOf: "2026-10-26", Source: "test",
@@ -112,6 +130,49 @@ func TestExecuteFetchBootstrapsOneSecurity(t *testing.T) {
 
 	if len(pending) != 0 {
 		t.Fatalf("pending after bootstrap = %+v", pending)
+	}
+}
+
+func TestExecuteSyncReportsTickerFailureAndSucceeds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	ctx := t.Context()
+	root := t.TempDir()
+
+	store, err := marketstore.Open(ctx, filepath.Join(root, "market.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	securities := []marketstore.Security{{
+		CIK: "0000789019", Symbol: "MSFT", Name: "Microsoft Corporation",
+	}}
+	if err := store.RegisterSecurities(ctx, providerYahoo, securities, time.Now()); err != nil {
+		t.Fatalf("register security: %v", err)
+	}
+
+	batches, err := newCSVBatchStore(filepath.Join(root, "batches"))
+	if err != nil {
+		t.Fatalf("create CSV batch store: %v", err)
+	}
+
+	logger := slog.New(slog.DiscardHandler)
+	client := sourceyahoo.NewClient(server.Client(), server.URL, logger)
+	cfg := config{from: mustDate(t, "2020-01-01"), to: mustDate(t, "2026-10-23")}
+
+	var output bytes.Buffer
+	if err := executeSync(ctx, &output, logger, store, batches, client, securities, cfg); err != nil {
+		t.Fatalf("execute sync: %v", err)
+	}
+
+	for _, want := range []string{"attempted 1", "failed 1", "1 symbols remain"} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("summary missing %q: %s", want, output.String())
+		}
 	}
 }
 

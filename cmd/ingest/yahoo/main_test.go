@@ -53,13 +53,9 @@ func TestRepairRequiresExplicitRangeAndTicker(t *testing.T) {
 	}
 }
 
-func TestServeRejectsFixedTargetDate(t *testing.T) {
-	_, err := parseConfig(
-		[]string{"serve", "--to", "2026-10-25"},
-		io.Discard,
-		time.Now(),
-	)
-	if err == nil || !strings.Contains(err.Error(), "derives --to") {
-		t.Fatalf("serve target error = %v", err)
+func TestParseConfigRejectsServe(t *testing.T) {
+	_, err := parseConfig([]string{"serve"}, io.Discard, time.Now())
+	if err == nil || !strings.Contains(err.Error(), `unknown command "serve"`) {
+		t.Fatalf("serve error = %v", err)
 	}
 }

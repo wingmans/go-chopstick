@@ -30,7 +30,7 @@ type cli struct {
 
 type pricesCLI struct {
 	Fetch  pricesFetchCLI  `cmd:"" help:"Fetch a bounded batch of pending prices."`
-	Sync   pricesSyncCLI   `cmd:"" help:"Synchronize pending prices through a date."`
+	Sync   pricesSyncCLI   `cmd:"" help:"Synchronize eligible prices through a date, then exit."`
 	Status pricesStatusCLI `cmd:"" help:"Show pending Yahoo price work."`
 	Repair pricesRepairCLI `cmd:"" help:"Queue a price range for repair."`
 }

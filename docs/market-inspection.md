@@ -8,6 +8,12 @@ chop prices fetch
 chop prices sync
 ```
 
+`sync` works through the manifest and exits when it runs out of eligible work.
+Its summary reports how many requests were attempted, how many failed, and
+how many symbols remain pending. Individual ticker failures still allow a
+successful exit. Schedule the next invocation externally to resume pending
+work.
+
 Downloaded price series fail closed when Yahoo returns duplicate, unordered,
 stale, or suspiciously discontinuous observations. Failed coverage validation
 does not advance the synchronization watermark; the work remains pending for

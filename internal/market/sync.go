@@ -1,5 +1,4 @@
-// Package worker runs bounded and continuous market-data synchronization.
-package worker
+package market
 
 import (
 	"context"
@@ -7,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	sourceyahoo "wingman.com/chopstick/internal/ingest/yahoo"
 	marketstore "wingman.com/chopstick/internal/market/store"
 	"wingman.com/chopstick/internal/platform/ctxlog"
 )
@@ -20,63 +20,24 @@ const (
 	maxPriceGap = 7 * 24 * time.Hour
 )
 
-// Repository stores work state and downloaded observations.
-type Repository interface {
-	PendingWork(
-		ctx context.Context,
-		provider string,
-		securities []marketstore.Security,
-		bootstrapFrom time.Time,
-		through time.Time,
-	) ([]marketstore.WorkItem, error)
-	Claim(
-		ctx context.Context,
-		item marketstore.WorkItem,
-		now time.Time,
-		leaseUntil time.Time,
-	) (bool, error)
-	Save(
-		ctx context.Context,
-		item marketstore.WorkItem,
-		prices []marketstore.Price,
-		actions []marketstore.CorporateAction,
-		now time.Time,
-	) (bool, error)
-	Fail(
-		ctx context.Context,
-		item marketstore.WorkItem,
-		workErr error,
-		now time.Time,
-	) error
-}
-
-// FetchResult is one normalized provider response.
-type FetchResult struct {
+// fetchResult is one normalized provider response.
+type fetchResult struct {
 	Prices  []marketstore.Price
 	Actions []marketstore.CorporateAction
 }
 
-// Fetcher retrieves one provider work range.
-type Fetcher interface {
+// priceFetcher retrieves one provider work range.
+type priceFetcher interface {
 	Fetch(
 		ctx context.Context,
 		ticker string,
 		from time.Time,
 		through time.Time,
-	) (FetchResult, error)
+	) (fetchResult, error)
 }
 
-// Recovery contains the usable prefix reconstructed from retained batches.
-type Recovery struct {
-	From    time.Time
-	Through time.Time
-	Prices  []marketstore.Price
-	Actions []marketstore.CorporateAction
-	Paths   []string
-}
-
-// BatchStore stages normalized observations and can recover a lost database.
-type BatchStore interface {
+// batchStore stages normalized observations and can recover a lost database.
+type batchStore interface {
 	Write(
 		ctx context.Context,
 		item marketstore.WorkItem,
@@ -91,11 +52,11 @@ type BatchStore interface {
 	Recover(
 		ctx context.Context,
 		item marketstore.WorkItem,
-	) (Recovery, error)
+	) (batchRecovery, error)
 }
 
-// Config describes one desired synchronization boundary.
-type Config struct {
+// syncConfig describes one desired synchronization boundary.
+type syncConfig struct {
 	Provider      string
 	Securities    []marketstore.Security
 	BootstrapFrom time.Time
@@ -105,8 +66,8 @@ type Config struct {
 	LeaseDuration time.Duration
 }
 
-// Summary reports the work performed by one bounded run.
-type Summary struct {
+// syncSummary reports the work performed by one bounded run.
+type syncSummary struct {
 	Pending      int
 	Attempted    int
 	Completed    int
@@ -118,26 +79,30 @@ type Summary struct {
 	NextEligible time.Time
 }
 
-// Runner coordinates provider fetches, CSV batches, and durable work state.
-type Runner struct {
-	Repository Repository
-	Fetcher    Fetcher
-	Batches    BatchStore
-	Now        func() time.Time
+// syncRunner coordinates provider fetches, CSV batches, and durable work state.
+type syncRunner struct {
+	Store   *marketstore.Store
+	Fetcher priceFetcher
+	Batches batchStore
+	Now     func() time.Time
 }
 
 // RunBatch performs one bounded pass over the currently pending work.
-func (runner Runner) RunBatch(
+func (runner syncRunner) RunBatch(
 	ctx context.Context,
-	cfg Config,
-) (Summary, error) {
+	cfg syncConfig,
+) (syncSummary, error) {
 	if err := runner.validate(cfg); err != nil {
-		return Summary{}, err
+		return syncSummary{}, err
 	}
 
+	return runner.runBatch(ctx, cfg, time.Time{})
+}
+
+func (runner syncRunner) runBatch(ctx context.Context, cfg syncConfig, retryCutoff time.Time) (syncSummary, error) {
 	startedAt := runner.now()
 
-	items, err := runner.Repository.PendingWork(
+	items, err := runner.Store.PendingWork(
 		ctx,
 		cfg.Provider,
 		cfg.Securities,
@@ -145,10 +110,10 @@ func (runner Runner) RunBatch(
 		cfg.Through,
 	)
 	if err != nil {
-		return Summary{}, err
+		return syncSummary{}, err
 	}
 
-	summary := Summary{Pending: len(items)}
+	summary := syncSummary{Pending: len(items)}
 	leaseDuration := cfg.LeaseDuration
 
 	if leaseDuration == 0 {
@@ -162,7 +127,12 @@ func (runner Runner) RunBatch(
 			break
 		}
 
-		if item.EligibleAt.After(now) || item.LeaseUntil.After(now) {
+		retryAt := now
+		if !retryCutoff.IsZero() {
+			retryAt = retryCutoff
+		}
+
+		if item.EligibleAt.After(retryAt) || item.LeaseUntil.After(now) {
 			summary.Deferred++
 			summary.NextEligible = earlier(
 				summary.NextEligible,
@@ -172,7 +142,7 @@ func (runner Runner) RunBatch(
 			continue
 		}
 
-		claimed, claimErr := runner.Repository.Claim(
+		claimed, claimErr := runner.Store.Claim(
 			ctx,
 			item,
 			now,
@@ -266,7 +236,7 @@ func (runner Runner) RunBatch(
 			continue
 		}
 
-		actionsChanged, saveErr := runner.Repository.Save(
+		actionsChanged, saveErr := runner.Store.Save(
 			ctx,
 			item,
 			result.Prices,
@@ -302,19 +272,25 @@ func (runner Runner) RunBatch(
 	return summary, nil
 }
 
-// Sync runs bounded passes until the requested universe is current.
-func (runner Runner) Sync(ctx context.Context, cfg Config) (Summary, error) {
-	var total Summary
+// Sync runs bounded passes for work eligible at the start of the run.
+func (runner syncRunner) Sync(ctx context.Context, cfg syncConfig) (syncSummary, error) {
+	if err := runner.validate(cfg); err != nil {
+		return syncSummary{}, err
+	}
+
+	var total syncSummary
+
+	retryCutoff := runner.now()
 
 	for {
-		summary, err := runner.RunBatch(ctx, cfg)
+		summary, err := runner.runBatch(ctx, cfg, retryCutoff)
 		addSummary(&total, summary)
 
 		if err != nil {
 			return total, err
 		}
 
-		items, err := runner.Repository.PendingWork(
+		items, err := runner.Store.PendingWork(
 			ctx,
 			cfg.Provider,
 			cfg.Securities,
@@ -326,25 +302,16 @@ func (runner Runner) Sync(ctx context.Context, cfg Config) (Summary, error) {
 		}
 
 		total.Pending = len(items)
-		if len(items) == 0 {
+		if len(items) == 0 || (summary.Attempted == 0 && summary.Recovered == 0) {
 			return total, nil
-		}
-
-		if summary.Attempted > 0 || summary.Recovered > 0 {
-			continue
-		}
-
-		wakeAt := nextEligible(items, runner.now())
-		if err := waitUntil(ctx, wakeAt); err != nil {
-			return total, err
 		}
 	}
 }
 
-func (runner Runner) validate(cfg Config) error {
+func (runner syncRunner) validate(cfg syncConfig) error {
 	switch {
-	case runner.Repository == nil:
-		return errors.New("market work repository is required")
+	case runner.Store == nil:
+		return errors.New("market store is required")
 	case runner.Fetcher == nil:
 		return errors.New("market fetcher is required")
 	case runner.Batches == nil:
@@ -366,22 +333,22 @@ func (runner Runner) validate(cfg Config) error {
 	}
 }
 
-func (runner Runner) now() time.Time {
+func (runner syncRunner) now() time.Time {
 	return runner.Now().UTC()
 }
 
-func (runner Runner) recover(
+func (runner syncRunner) recover(
 	ctx context.Context,
 	item marketstore.WorkItem,
 	now time.Time,
-) (Recovery, bool, error) {
+) (batchRecovery, bool, error) {
 	recovery, err := runner.Batches.Recover(ctx, item)
 	if err != nil {
-		return Recovery{}, false, err
+		return batchRecovery{}, false, err
 	}
 
 	if recovery.Through.IsZero() {
-		return Recovery{}, false, nil
+		return batchRecovery{}, false, nil
 	}
 
 	recoveredItem := item
@@ -389,19 +356,19 @@ func (runner Runner) recover(
 	recoveredItem.Through = recovery.Through
 
 	if err := validateFetchedPrices(recoveredItem, recovery.Prices); err != nil {
-		return Recovery{}, false, fmt.Errorf(
+		return batchRecovery{}, false, fmt.Errorf(
 			"validate retained market CSV coverage: %w", err,
 		)
 	}
 
-	if _, err := runner.Repository.Save(
+	if _, err := runner.Store.Save(
 		ctx,
 		recoveredItem,
 		recovery.Prices,
 		recovery.Actions,
 		now,
 	); err != nil {
-		return Recovery{}, false, fmt.Errorf(
+		return batchRecovery{}, false, fmt.Errorf(
 			"restore retained market CSV batches: %w", err,
 		)
 	}
@@ -409,10 +376,7 @@ func (runner Runner) recover(
 	return recovery, true, nil
 }
 
-func validateFetchedPrices(
-	item marketstore.WorkItem,
-	prices []marketstore.Price,
-) error {
+func validateFetchedPrices(item marketstore.WorkItem, prices []marketstore.Price) error {
 	from := calendarDate(item.From)
 	through := calendarDate(item.Through)
 
@@ -504,10 +468,7 @@ func calendarDate(value time.Time) time.Time {
 	)
 }
 
-func (runner Runner) fetch(
-	ctx context.Context,
-	item marketstore.WorkItem,
-) (FetchResult, error) {
+func (runner syncRunner) fetch(ctx context.Context, item marketstore.WorkItem) (fetchResult, error) {
 	ctxlog.FromContext(ctx).Info(
 		"fetching Yahoo market data",
 		"ticker", item.Security.Symbol,
@@ -534,12 +495,12 @@ func (runner Runner) fetch(
 	return result, err
 }
 
-func (runner Runner) fail(
+func (runner syncRunner) fail(
 	ctx context.Context,
 	item marketstore.WorkItem,
 	workErr error,
 ) error {
-	if err := runner.Repository.Fail(
+	if err := runner.Store.Fail(
 		ctx,
 		item,
 		workErr,
@@ -558,39 +519,7 @@ func (runner Runner) fail(
 	return nil
 }
 
-func nextEligible(items []marketstore.WorkItem, now time.Time) time.Time {
-	wakeAt := time.Time{}
-
-	for _, item := range items {
-		eligibleAt := later(item.EligibleAt, item.LeaseUntil)
-		if !eligibleAt.After(now) {
-			return now
-		}
-
-		wakeAt = earlier(wakeAt, eligibleAt)
-	}
-
-	return wakeAt
-}
-
-func waitUntil(ctx context.Context, wakeAt time.Time) error {
-	delay := time.Until(wakeAt)
-	if delay <= 0 {
-		return nil
-	}
-
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-func addSummary(total *Summary, next Summary) {
+func addSummary(total *syncSummary, next syncSummary) {
 	total.Attempted += next.Attempted
 	total.Completed += next.Completed
 	total.Failed += next.Failed
@@ -623,4 +552,55 @@ func later(left, right time.Time) time.Time {
 	}
 
 	return left
+}
+
+type yahooFetcher struct {
+	client *sourceyahoo.Client
+}
+
+func (fetcher yahooFetcher) Fetch(
+	ctx context.Context,
+	ticker string,
+	from time.Time,
+	through time.Time,
+) (fetchResult, error) {
+	result, err := fetcher.client.Fetch(ctx, ticker, from, through)
+	if err != nil {
+		return fetchResult{}, err
+	}
+
+	return fetchResult{
+		Prices:  marketPrices(result.Prices),
+		Actions: marketActions(result.Actions),
+	}, nil
+}
+
+func marketPrices(prices []sourceyahoo.Price) []marketstore.Price {
+	result := make([]marketstore.Price, 0, len(prices))
+	for _, price := range prices {
+		result = append(result, marketstore.Price{
+			Date:          price.Date,
+			Open:          price.Open,
+			Close:         price.Close,
+			AdjustedClose: price.AdjClose,
+		})
+	}
+
+	return result
+}
+
+func marketActions(actions []sourceyahoo.CorporateAction) []marketstore.CorporateAction {
+	result := make([]marketstore.CorporateAction, 0, len(actions))
+	for _, action := range actions {
+		result = append(result, marketstore.CorporateAction{
+			SourceID:    action.SourceID,
+			Date:        action.Date,
+			Type:        action.Type,
+			Amount:      action.Amount,
+			Numerator:   action.Numerator,
+			Denominator: action.Denominator,
+		})
+	}
+
+	return result
 }

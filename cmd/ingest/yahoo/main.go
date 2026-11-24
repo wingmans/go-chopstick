@@ -85,17 +85,17 @@ func parseConfig(args []string, output io.Writer,
 		writeUsage(output)
 
 		return marketyahoo.Config{}, errors.New(
-			"missing command: expected fetch, sync, serve, status, or repair",
+			"missing command: expected fetch, sync, status, or repair",
 		)
 	}
 
 	command := args[0]
-	if command != "fetch" && command != "sync" && command != "serve" &&
+	if command != "fetch" && command != "sync" &&
 		command != "status" && command != "repair" {
 		writeUsage(output)
 
 		return marketyahoo.Config{}, fmt.Errorf(
-			"unknown command %q: expected fetch, sync, serve, status, or repair",
+			"unknown command %q: expected fetch, sync, status, or repair",
 			command,
 		)
 	}
@@ -109,9 +109,7 @@ func parseConfig(args []string, output io.Writer,
 		tickers      tickerFlags
 		maxDuration  time.Duration
 		maxSymbols   int
-		schedule     string
 		syncTimeout  time.Duration
-		timezone     string
 	)
 
 	flags := flag.NewFlagSet("yahoo-prices "+command, flag.ContinueOnError)
@@ -126,8 +124,6 @@ func parseConfig(args []string, output io.Writer,
 	flags.IntVar(&maxSymbols, "max-symbols", marketyahoo.DefaultMaxSymbols, "maximum symbols attempted by fetch; zero disables the limit")
 	flags.DurationVar(&maxDuration, "max-duration", 0, "stop starting work after this duration; zero disables the limit")
 	flags.DurationVar(&syncTimeout, "sync-timeout", marketyahoo.DefaultSyncTimeout, "maximum duration of one sync cycle; zero disables the timeout")
-	flags.StringVar(&schedule, "schedule", marketyahoo.DefaultSchedule, "daily service start time in HH:MM")
-	flags.StringVar(&timezone, "timezone", marketyahoo.DefaultTimezone, "IANA timezone for the daily service")
 
 	if err := flags.Parse(args[1:]); err != nil {
 		return marketyahoo.Config{}, err
@@ -148,16 +144,6 @@ func parseConfig(args []string, output io.Writer,
 		return marketyahoo.Config{}, err
 	}
 
-	scheduleHour, scheduleMinute, err := parseSchedule(schedule)
-	if err != nil {
-		return marketyahoo.Config{}, err
-	}
-
-	if _, err := time.LoadLocation(timezone); err != nil {
-		return marketyahoo.Config{}, fmt.Errorf(
-			"invalid timezone %q: %w", timezone, err)
-	}
-
 	visited := make(map[string]bool)
 
 	flags.Visit(func(item *flag.Flag) { visited[item.Name] = true })
@@ -168,25 +154,18 @@ func parseConfig(args []string, output io.Writer,
 			"repair requires --ticker, --from, and --to")
 	}
 
-	if command == "serve" && visited["to"] {
-		return marketyahoo.Config{}, errors.New(
-			"serve derives --to from its daily schedule; do not set --to")
-	}
-
 	return marketyahoo.Config{
 		Command: command, ManifestPath: manifestPath,
 		DatabasePath: databasePath, BatchDir: batchDir,
 		From: from, Through: through, Tickers: tickers,
 		MaxSymbols: maxSymbols, MaxDuration: maxDuration,
-		SyncTimeout: syncTimeout, Schedule: schedule,
-		ScheduleHour: scheduleHour, ScheduleMinute: scheduleMinute,
-		Timezone: timezone,
+		SyncTimeout: syncTimeout,
 	}, nil
 }
 
 func writeUsage(output io.Writer) {
 	fmt.Fprintln(output,
-		"Usage: yahoo-prices <fetch|sync|serve|status|repair> [options]")
+		"Usage: yahoo-prices <fetch|sync|status|repair> [options]")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output,
 		"Land Yahoo prices and corporate actions in CSV, then import SQLite.")
@@ -205,13 +184,4 @@ func parseDate(name, value string) (time.Time, error) {
 	}
 
 	return parsed, nil
-}
-
-func parseSchedule(value string) (int, int, error) {
-	parsed, err := time.Parse("15:04", strings.TrimSpace(value))
-	if err != nil {
-		return 0, 0, fmt.Errorf("invalid schedule %q: %w", value, err)
-	}
-
-	return parsed.Hour(), parsed.Minute(), nil
 }

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	marketstore "wingman.com/chopstick/internal/market/store"
-	marketworker "wingman.com/chopstick/internal/market/worker"
 )
 
 const (
@@ -22,31 +21,13 @@ const (
 	batchRecordAction = "action"
 )
 
-type batchWriter interface {
-	Write(
-		ctx context.Context,
-		item marketstore.WorkItem,
-		prices []marketstore.Price,
-		actions []marketstore.CorporateAction,
-	) (string, error)
-}
-
-type batchReader interface {
-	Read(
-		ctx context.Context,
-		item marketstore.WorkItem,
-		path string,
-	) ([]marketstore.Price, []marketstore.CorporateAction, error)
-}
-
-// batchStore combines reading and writing capabilities for CSV batches.
-type batchStore interface {
-	batchWriter
-	batchReader
-	Recover(
-		ctx context.Context,
-		item marketstore.WorkItem,
-	) (marketworker.Recovery, error)
+// batchRecovery contains the usable prefix reconstructed from retained batches.
+type batchRecovery struct {
+	From    time.Time
+	Through time.Time
+	Prices  []marketstore.Price
+	Actions []marketstore.CorporateAction
+	Paths   []string
 }
 
 type csvBatchStore struct {
@@ -294,16 +275,16 @@ type storedBatch struct {
 func (store *csvBatchStore) Recover(
 	ctx context.Context,
 	item marketstore.WorkItem,
-) (marketworker.Recovery, error) {
+) (batchRecovery, error) {
 	directory := filepath.Join(store.root, item.Security.Symbol)
 
 	entries, err := os.ReadDir(directory)
 	if errors.Is(err, os.ErrNotExist) {
-		return marketworker.Recovery{}, nil
+		return batchRecovery{}, nil
 	}
 
 	if err != nil {
-		return marketworker.Recovery{}, fmt.Errorf(
+		return batchRecovery{}, fmt.Errorf(
 			"read Yahoo CSV batch directory: %w", err,
 		)
 	}
@@ -322,7 +303,7 @@ func (store *csvBatchStore) Recover(
 
 	selected, coveredFrom, coveredThrough := recoveryChain(item, batches)
 	if len(selected) == 0 {
-		return marketworker.Recovery{}, nil
+		return batchRecovery{}, nil
 	}
 
 	priceByDate := make(map[string]marketstore.Price)
@@ -332,7 +313,7 @@ func (store *csvBatchStore) Recover(
 	for _, batch := range selected {
 		prices, actions, err := store.Read(ctx, batch.item, batch.path)
 		if err != nil {
-			return marketworker.Recovery{}, fmt.Errorf(
+			return batchRecovery{}, fmt.Errorf(
 				"recover Yahoo CSV batch %s: %w", batch.path, err,
 			)
 		}
@@ -370,7 +351,7 @@ func (store *csvBatchStore) Recover(
 		return actions[left].SourceID < actions[right].SourceID
 	})
 
-	return marketworker.Recovery{
+	return batchRecovery{
 		From:    coveredFrom,
 		Through: coveredThrough,
 		Prices:  prices,

@@ -1,4 +1,4 @@
-package worker
+package market
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 )
 
 type testFetcher struct {
-	result FetchResult
+	result fetchResult
 	calls  int
 }
 
@@ -20,15 +20,15 @@ func (fetcher *testFetcher) Fetch(
 	_ string,
 	_ time.Time,
 	_ time.Time,
-) (FetchResult, error) {
+) (fetchResult, error) {
 	fetcher.calls++
 
 	return fetcher.result, nil
 }
 
 type testBatches struct {
-	result   FetchResult
-	recovery Recovery
+	result   fetchResult
+	recovery batchRecovery
 }
 
 func (batches *testBatches) Write(
@@ -37,7 +37,7 @@ func (batches *testBatches) Write(
 	prices []marketstore.Price,
 	actions []marketstore.CorporateAction,
 ) (string, error) {
-	batches.result = FetchResult{Prices: prices, Actions: actions}
+	batches.result = fetchResult{Prices: prices, Actions: actions}
 
 	return "batch.csv", nil
 }
@@ -53,7 +53,7 @@ func (batches *testBatches) Read(
 func (batches *testBatches) Recover(
 	_ context.Context,
 	_ marketstore.WorkItem,
-) (Recovery, error) {
+) (batchRecovery, error) {
 	return batches.recovery, nil
 }
 
@@ -66,15 +66,15 @@ func TestSyncCompletesRequestedUniverse(t *testing.T) {
 		Close:         11,
 		AdjustedClose: 9,
 	}
-	fetcher := &testFetcher{result: FetchResult{
+	fetcher := &testFetcher{result: fetchResult{
 		Prices: []marketstore.Price{price},
 	}}
 
-	runner := Runner{
-		Repository: store,
-		Fetcher:    fetcher,
-		Batches:    &testBatches{},
-		Now:        func() time.Time { return now },
+	runner := syncRunner{
+		Store:   store,
+		Fetcher: fetcher,
+		Batches: &testBatches{},
+		Now:     func() time.Time { return now },
 	}
 
 	summary, err := runner.Sync(ctx, cfg)
@@ -98,10 +98,33 @@ func TestSyncCompletesRequestedUniverse(t *testing.T) {
 	}
 }
 
+func TestSyncReturnsWithFailedWorkPending(t *testing.T) {
+	store, _, cfg, now := testRepository(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	fetcher := &testFetcher{}
+	runner := syncRunner{
+		Store:   store,
+		Fetcher: fetcher,
+		Batches: &testBatches{},
+		Now:     func() time.Time { return now },
+	}
+
+	summary, err := runner.Sync(ctx, cfg)
+	if err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+
+	if fetcher.calls != 1 || summary.Failed != 1 || summary.Pending != 1 {
+		t.Fatalf("fetch calls=%d summary=%+v", fetcher.calls, summary)
+	}
+}
+
 func TestSyncRecoversCSVBeforeFetching(t *testing.T) {
 	store, _, cfg, now := testRepository(t)
 	fetcher := &testFetcher{}
-	batches := &testBatches{recovery: Recovery{
+	batches := &testBatches{recovery: batchRecovery{
 		From:    cfg.BootstrapFrom,
 		Through: cfg.Through,
 		Prices: []marketstore.Price{{
@@ -113,11 +136,11 @@ func TestSyncRecoversCSVBeforeFetching(t *testing.T) {
 		Paths: []string{"bootstrap.csv"},
 	}}
 
-	runner := Runner{
-		Repository: store,
-		Fetcher:    fetcher,
-		Batches:    batches,
-		Now:        func() time.Time { return now },
+	runner := syncRunner{
+		Store:   store,
+		Fetcher: fetcher,
+		Batches: batches,
+		Now:     func() time.Time { return now },
 	}
 
 	summary, err := runner.Sync(t.Context(), cfg)
@@ -132,18 +155,18 @@ func TestSyncRecoversCSVBeforeFetching(t *testing.T) {
 
 func TestRunBatchRejectsSuspiciousPriceGap(t *testing.T) {
 	store, security, cfg, now := testRepository(t)
-	fetcher := &testFetcher{result: FetchResult{
+	fetcher := &testFetcher{result: fetchResult{
 		Prices: []marketstore.Price{
 			testPrice(time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)),
 			testPrice(cfg.Through),
 		},
 	}}
 	batches := &testBatches{}
-	runner := Runner{
-		Repository: store,
-		Fetcher:    fetcher,
-		Batches:    batches,
-		Now:        func() time.Time { return now },
+	runner := syncRunner{
+		Store:   store,
+		Fetcher: fetcher,
+		Batches: batches,
+		Now:     func() time.Time { return now },
 	}
 
 	summary, err := runner.RunBatch(t.Context(), cfg)
@@ -256,7 +279,7 @@ func testPrice(date time.Time) marketstore.Price {
 
 func testRepository(
 	t *testing.T,
-) (*marketstore.Store, marketstore.Security, Config, time.Time) {
+) (*marketstore.Store, marketstore.Security, syncConfig, time.Time) {
 	t.Helper()
 
 	store, err := marketstore.Open(
@@ -283,7 +306,7 @@ func testRepository(
 		t.Fatalf("register security: %v", err)
 	}
 
-	return store, security, Config{
+	return store, security, syncConfig{
 		Provider:      "yahoo",
 		Securities:    []marketstore.Security{security},
 		BootstrapFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
