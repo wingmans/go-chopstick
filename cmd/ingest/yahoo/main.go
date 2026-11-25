@@ -74,9 +74,7 @@ func realMain() int {
 	return 0
 }
 
-func run(ctx context.Context, args []string, stdout io.Writer,
-	logger *slog.Logger, now func() time.Time,
-) error {
+func run(ctx context.Context, args []string, stdout io.Writer, logger *slog.Logger, now func() time.Time) error {
 	cfg, err := parseConfig(args, stdout, now().UTC())
 	if err != nil {
 		return err
@@ -85,9 +83,7 @@ func run(ctx context.Context, args []string, stdout io.Writer,
 	return marketyahoo.Run(ctx, cfg, stdout, logger, now)
 }
 
-func parseConfig(args []string, output io.Writer,
-	now time.Time,
-) (marketyahoo.Config, error) {
+func parseConfig(args []string, output io.Writer, now time.Time) (marketyahoo.Config, error) {
 	if len(args) == 0 {
 		writeUsage(output)
 

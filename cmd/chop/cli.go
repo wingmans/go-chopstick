@@ -265,8 +265,19 @@ type infrastructureOptions struct {
 type doctorCLI struct {
 	infrastructureOptions `embed:""`
 
+	Set *string `help:"Override the constituent set for this invocation." placeholder:"name"`
+
+	Check  doctorCheckCLI  `cmd:"" default:"withargs"                          help:"Check local dependencies."`
+	Repair doctorRepairCLI `cmd:"" help:"Create missing local infrastructure."`
+}
+
+type doctorCheckCLI struct {
 	Master   string   `default:"${master}"                                      help:"Stitched master index." placeholder:"path"`
 	Upstream []string `help:"Probe this HTTPS URL via the gateway. Repeatable." name:"upstream"               placeholder:"url"`
+}
+
+type doctorRepairCLI struct {
+	DryRun bool `help:"Show the repair plan without applying it."`
 }
 
 type setupCLI struct {

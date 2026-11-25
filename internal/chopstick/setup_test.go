@@ -45,7 +45,7 @@ func TestSetupProvisionsWithoutStartupCreatingResources(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
 	err = Run(ctx, config, logger)
-	if err == nil || !strings.Contains(err.Error(), "hint:   ./bin/chop setup") ||
+	if err == nil || !strings.Contains(err.Error(), "hint:   ./bin/chop doctor repair --dry-run") ||
 		!strings.Contains(err.Error(), pipeline.StreamName) {
 		t.Fatalf("startup error = %v", err)
 	}
@@ -64,6 +64,19 @@ func TestSetupProvisionsWithoutStartupCreatingResources(t *testing.T) {
 		t.Fatalf("startup created JetStream stream: %v", err)
 	}
 
+	plan := PlanInfrastructureRepair(ctx, config)
+	if len(plan.Manual) != 0 || len(plan.Create) != 7 {
+		t.Fatalf("unexpected fresh repair plan: %+v", plan)
+	}
+
+	if _, err := os.Stat(config.AnalysisDB); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("repair preview created an analysis database: %v", err)
+	}
+
+	if _, err := bus.JetStream().StreamInfo(pipeline.StreamName); !errors.Is(err, nats.ErrStreamNotFound) {
+		t.Fatalf("repair preview created a stream: %v", err)
+	}
+
 	if _, err := bus.JetStream().AddStream(&nats.StreamConfig{
 		Name: pipeline.StreamName, Subjects: []string{"edgar.filing.>"},
 	}); err != nil {
@@ -74,6 +87,10 @@ func TestSetupProvisionsWithoutStartupCreatingResources(t *testing.T) {
 		t.Fatalf("expected setup to report incompatible stream: %v", err)
 	}
 
+	if plan := PlanInfrastructureRepair(ctx, config); len(plan.Manual) != 1 {
+		t.Fatalf("preview did not flag the incompatible stream: %+v", plan)
+	}
+
 	if _, err := os.Stat(config.PollingDB); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("incompatible stream allowed setup to create polling database: %v", err)
 	}
@@ -82,8 +99,8 @@ func TestSetupProvisionsWithoutStartupCreatingResources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Setup(ctx, config); err != nil {
-		t.Fatalf("setup: %v", err)
+	if err := RepairInfrastructure(ctx, config); err != nil {
+		t.Fatalf("repair: %v", err)
 	}
 
 	before, err := bus.JetStream().ConsumerInfo(pipeline.StreamName, pipeline.NewsDurable)
@@ -147,6 +164,7 @@ func verifyViewerStarts(t *testing.T, config Config, logger *slog.Logger) {
 			if err != nil {
 				continue
 			}
+
 			_ = response.Body.Close()
 
 			if response.StatusCode != http.StatusOK {

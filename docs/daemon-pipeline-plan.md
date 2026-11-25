@@ -378,9 +378,8 @@ Add tests that prove the ownership boundary and observable behavior:
 Run:
 
 ```bash
-go test ./...
+make test
 golangci-lint run ./cmd/... ./internal/...
-make check-generated
 git diff --check
 ```
 

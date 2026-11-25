@@ -37,6 +37,11 @@ func OpenExisting(ctx context.Context, path string) (*Store, error) {
 	return open(ctx, path, false)
 }
 
+// InspectSchema checks the schema of an existing analysis database.
+func InspectSchema(ctx context.Context, path string) error {
+	return sqlite.InspectSchema(ctx, path, analysisSchemaVersion)
+}
+
 func open(ctx context.Context, path string, initialize bool) (*Store, error) {
 	if path == "" {
 		return nil, errors.New("analysis database path is required")

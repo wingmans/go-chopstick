@@ -454,17 +454,30 @@ func (c *taxonomyCoverageCLI) Run(ctx context.Context) error {
 	return c.run(ctx, "coverage")
 }
 
-func (c *doctorCLI) Run(ctx context.Context, runtime *commandRuntime) error {
-	config, err := c.config()
+func (c *doctorCheckCLI) Run(ctx context.Context, runtime *commandRuntime, doctor *doctorCLI) error {
+	config, err := chopstick.ConfigForSet(doctor.Set)
 	if err != nil {
-		return err
+		return chopstick.ConfigurationError(err)
 	}
+
+	doctor.applyInfrastructure(&config)
 
 	config.MasterPath = c.Master
 
 	return operator.Doctor(ctx, operator.DoctorConfig{
 		Config: config, Verbose: runtime.Verbose, Upstreams: c.Upstream,
 	})
+}
+
+func (c *doctorRepairCLI) Run(ctx context.Context, doctor *doctorCLI) error {
+	config, err := chopstick.ConfigForSet(doctor.Set)
+	doctor.applyInfrastructure(&config)
+
+	if err == nil {
+		err = config.Validate()
+	}
+
+	return operator.RepairDoctor(ctx, os.Stdout, config, doctor.Set != nil, c.DryRun, err)
 }
 
 func (c *setupCLI) Run(ctx context.Context) error {
@@ -498,6 +511,12 @@ func (options infrastructureOptions) config() (chopstick.Config, error) {
 		return chopstick.Config{}, chopstick.ConfigurationError(err)
 	}
 
+	options.applyInfrastructure(&config)
+
+	return config, nil
+}
+
+func (options infrastructureOptions) applyInfrastructure(config *chopstick.Config) {
 	config.NATSURL = options.NATSURL
 	config.PollingDB = options.PollingDB
 	config.NewsDB = options.NewsDB
@@ -505,8 +524,6 @@ func (options infrastructureOptions) config() (chopstick.Config, error) {
 	config.OwnershipDB = options.OwnershipDB
 	config.FilingsDirectory = options.FilingsDir
 	config.ParsedDirectory = options.ParsedDir
-
-	return config, nil
 }
 
 func (c *statusCLI) Run(ctx context.Context) error {

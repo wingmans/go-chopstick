@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,12 +66,76 @@ func TestPathSizeAndFormatBytes(t *testing.T) {
 	}
 }
 
+func TestDoctorStorageShowsConfiguredPathsAndAlignedSizes(t *testing.T) {
+	t.Setenv(appdata.EnvName, t.TempDir())
+
+	config, err := chopstick.ConfigForSet(new(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config.AnalysisDB = appdata.Path("custom analysis.db")
+	if err := os.WriteFile(config.AnalysisDB, make([]byte, 1536), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var output bytes.Buffer
+	printStorageUsage(&output, DoctorConfig{Config: config})
+
+	lines := strings.Split(strings.TrimRight(output.String(), "\n"), "\n")
+	for _, line := range lines[2:] {
+		if len(line) != len(lines[1]) {
+			t.Errorf("storage size column is not aligned: %q", line)
+		}
+	}
+
+	report := output.String()
+	for _, want := range []string{config.AnalysisDB, "1.5 KiB", "not created"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("storage report missing %q:\n%s", want, report)
+		}
+	}
+
+	if strings.Contains(report, "1536 bytes") {
+		t.Errorf("storage report includes a raw byte count:\n%s", report)
+	}
+}
+
 func TestConfigurationReportsMissingSet(t *testing.T) {
 	t.Setenv(appdata.EnvName, t.TempDir())
 	t.Setenv(edgarSetEnv, "missing")
 
 	if _, err := chopstick.ConfigFromEnvironment(); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("resolve configuration: got %v, want missing set error", err)
+	}
+}
+
+func TestDoctorRepairDryRunReportsSettingsSeparately(t *testing.T) {
+	t.Setenv(appdata.EnvName, t.TempDir())
+	t.Setenv("EDGAR_SET", "other-set")
+
+	config, settingsErr := chopstick.ConfigForSet(new("missing"))
+	config.NATSURL = "nats://127.0.0.1:0"
+
+	var output bytes.Buffer
+	if err := RepairDoctor(t.Context(), &output, config, true, true, settingsErr); err == nil {
+		t.Fatal("expected invalid settings to block repair")
+	}
+
+	report := output.String()
+	for _, line := range []string{
+		"Infrastructure\n  Would create polling SQLite database",
+		"Settings\n  Constituent set: missing (from --set)",
+		"Invalid: constituent set",
+		"Dry run. No repairs applied.",
+	} {
+		if !strings.Contains(report, line) {
+			t.Errorf("report missing %q:\n%s", line, report)
+		}
+	}
+
+	if _, err := os.Stat(config.PollingDB); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dry run created a database: %v", err)
 	}
 }
 

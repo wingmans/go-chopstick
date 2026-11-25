@@ -22,6 +22,16 @@ import (
 
 // Setup provisions the application databases and JetStream resources.
 func Setup(ctx context.Context, config Config) error {
+	return setup(ctx, config, true)
+}
+
+// RepairInfrastructure provisions missing resources and preserves existing
+// JetStream consumers and their progress.
+func RepairInfrastructure(ctx context.Context, config Config) error {
+	return setup(ctx, config, false)
+}
+
+func setup(ctx context.Context, config Config, allowNewsReplay bool) error {
 	if err := config.Validate(); err != nil {
 		return ConfigurationError(err)
 	}
@@ -32,7 +42,7 @@ func Setup(ctx context.Context, config Config) error {
 	}
 	defer func() { _ = lock.Close() }()
 
-	if err := initializeInfrastructure(ctx, config); err != nil {
+	if err := initializeInfrastructure(ctx, config, allowNewsReplay); err != nil {
 		if errors.Is(err, pipeline.ErrIncompatibleResources) {
 			report := infrastructureError(config, []string{err.Error()}, false, err)
 			report.Title = "Chopstick setup failed"
@@ -49,7 +59,7 @@ func Setup(ctx context.Context, config Config) error {
 	return CheckInfrastructure(ctx, config)
 }
 
-func initializeInfrastructure(ctx context.Context, config Config) error {
+func initializeInfrastructure(ctx context.Context, config Config, allowNewsReplay bool) error {
 	// Reset a stale news cursor before creating a replacement projection. If
 	// setup stops between the two operations, a subsequent setup can retry.
 	info, err := os.Stat(config.NewsDB)
@@ -60,7 +70,7 @@ func initializeInfrastructure(ctx context.Context, config Config) error {
 	natsCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	if err := pipeline.Provision(natsCtx, config.NATSURL, info == nil || info.Size() == 0); err != nil {
+	if err := pipeline.Provision(natsCtx, config.NATSURL, info == nil || info.Size() == 0, allowNewsReplay); err != nil {
 		return fmt.Errorf("provision JetStream at %s: %w", NATSAddress(config.NATSURL), err)
 	}
 
@@ -79,10 +89,25 @@ func initializeInfrastructure(ctx context.Context, config Config) error {
 			continue
 		}
 
+		if !allowNewsReplay {
+			missing, err := needsDatabase(database.path)
+			if err != nil {
+				return err
+			}
+
+			if !missing {
+				continue
+			}
+		}
+
 		if err := openAndClose(ctx, database.path, database.initialize); err != nil {
 			return fmt.Errorf("initialize %s SQLite database at %s: %w",
 				database.label, database.path, err)
 		}
+	}
+
+	if !allowNewsReplay && info != nil && info.Size() > 0 {
+		return nil
 	}
 
 	projection, _, err := news.Open(ctx, config.NewsDB)
@@ -161,7 +186,7 @@ func infrastructureError(config Config, problems []string, needsSetup bool,
 	}
 
 	switch {
-	case localNATS && customFlags == "" && (needsSetup || natsUnavailable):
+	case localNATS && customFlags == "" && natsUnavailable:
 		report.Hints = append(report.Hints,
 			"Start local dependencies and provision missing resources:",
 			"  make setup")
@@ -176,8 +201,10 @@ func infrastructureError(config Config, problems []string, needsSetup bool,
 
 		if needsSetup {
 			report.Hints = append(report.Hints,
-				"Once the dependencies are available, provision the configured resources:",
-				"  ./bin/chop setup"+customFlags)
+				"Preview the repairs for the missing resources:",
+				"  ./bin/chop doctor repair --dry-run"+customFlags,
+				"Apply the repairs:",
+				"  ./bin/chop doctor repair"+customFlags)
 		}
 	}
 
@@ -219,14 +246,15 @@ type database struct {
 	path       string
 	open       func(context.Context, string) (io.Closer, error)
 	initialize func(context.Context, string) (io.Closer, error)
+	inspect    func(context.Context, string) error
 }
 
 func databases(config Config) []database {
 	return []database{
-		{"polling", config.PollingDB, opener(pipeline.OpenExisting), opener(pipeline.Open)},
-		{"news", config.NewsDB, opener(news.OpenExisting), nil},
-		{"analysis", config.AnalysisDB, opener(filingstore.OpenExisting), opener(filingstore.Open)},
-		{"ownership", config.OwnershipDB, opener(ownershipstore.OpenExisting), opener(ownershipstore.Open)},
+		{"polling", config.PollingDB, opener(pipeline.OpenExisting), opener(pipeline.Open), pipeline.InspectSchema},
+		{"news", config.NewsDB, opener(news.OpenExisting), nil, news.InspectSchema},
+		{"analysis", config.AnalysisDB, opener(filingstore.OpenExisting), opener(filingstore.Open), filingstore.InspectSchema},
+		{"ownership", config.OwnershipDB, opener(ownershipstore.OpenExisting), opener(ownershipstore.Open), ownershipstore.InspectSchema},
 	}
 }
 

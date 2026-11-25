@@ -14,6 +14,10 @@ import (
 // settings that would prevent Chopstick from delivering or receiving events.
 var ErrIncompatibleResources = errors.New("incompatible JetStream configuration")
 
+// ErrNewsReplayRequired indicates that an existing consumer has a cursor
+// that cannot be used with a replacement news database.
+var ErrNewsReplayRequired = errors.New("existing news consumer needs replay for the replacement database")
+
 func consumerConfigs() []nats.ConsumerConfig {
 	configs := []nats.ConsumerConfig{
 		{Durable: SelectionDurable, FilterSubject: DiscoverySubject + ".>"},
@@ -37,7 +41,7 @@ func consumerConfigs() []nats.ConsumerConfig {
 
 // Provision creates the EDGAR stream and any missing durable consumers.
 // Replay news when provisioning a replacement for a missing projection.
-func Provision(ctx context.Context, url string, replayNews bool) error {
+func Provision(ctx context.Context, url string, missingNews, allowNewsReplay bool) error {
 	bus, err := Inspect(ctx, url)
 	if err != nil {
 		return err
@@ -53,14 +57,19 @@ func Provision(ctx context.Context, url string, replayNews bool) error {
 	}
 
 	for _, cfg := range consumerConfigs() {
-		if replayNews && cfg.Durable == NewsDurable {
-			err := bus.jetstream.DeleteConsumer(StreamName, NewsDurable, nats.Context(ctx))
-			if err != nil && !errors.Is(err, nats.ErrConsumerNotFound) {
+		info, err := bus.jetstream.ConsumerInfo(StreamName, cfg.Durable, nats.Context(ctx))
+		if err == nil && cfg.Durable == NewsDurable && missingNews && info.Delivered.Stream > 0 {
+			if !allowNewsReplay {
+				return ErrNewsReplayRequired
+			}
+
+			if err := bus.jetstream.DeleteConsumer(StreamName, NewsDurable, nats.Context(ctx)); err != nil {
 				return fmt.Errorf("reset news consumer for replay: %w", err)
 			}
+
+			err = nats.ErrConsumerNotFound
 		}
 
-		info, err := bus.jetstream.ConsumerInfo(StreamName, cfg.Durable, nats.Context(ctx))
 		if errors.Is(err, nats.ErrConsumerNotFound) {
 			info, err = bus.jetstream.AddConsumer(StreamName, &cfg, nats.Context(ctx))
 		}
@@ -75,20 +84,39 @@ func Provision(ctx context.Context, url string, replayNews bool) error {
 
 // CheckResources verifies the stream and durable consumers used by chopd.
 func (n *NATS) CheckResources(ctx context.Context) error {
-	if err := n.checkStream(ctx); err != nil {
-		return err
+	issues := n.ResourceIssues(ctx)
+	failures := make([]error, len(issues))
+
+	for index, issue := range issues {
+		failures[index] = issue.Err
 	}
 
-	var failures []error
+	return errors.Join(failures...)
+}
+
+// ResourceIssue identifies a missing or incompatible JetStream resource.
+type ResourceIssue struct {
+	Name string
+	Err  error
+}
+
+// ResourceIssues inspects the configured stream and consumers without making
+// any changes.
+func (n *NATS) ResourceIssues(ctx context.Context) []ResourceIssue {
+	if err := n.checkStream(ctx); err != nil {
+		return []ResourceIssue{{Name: StreamName, Err: err}}
+	}
+
+	var issues []ResourceIssue
 
 	for _, cfg := range consumerConfigs() {
 		info, err := n.jetstream.ConsumerInfo(StreamName, cfg.Durable, nats.Context(ctx))
 		if err := checkConsumer(info, cfg, err); err != nil {
-			failures = append(failures, err)
+			issues = append(issues, ResourceIssue{Name: cfg.Durable, Err: err})
 		}
 	}
 
-	return errors.Join(failures...)
+	return issues
 }
 
 func (n *NATS) checkStream(ctx context.Context) error {

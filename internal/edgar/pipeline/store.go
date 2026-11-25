@@ -91,6 +91,11 @@ func OpenExisting(ctx context.Context, dbPath string) (*Store, error) {
 	return open(ctx, dbPath, false)
 }
 
+// InspectSchema checks the schema of an existing polling database.
+func InspectSchema(ctx context.Context, path string) error {
+	return sqlite.InspectSchema(ctx, path, pollingSchemaVersion)
+}
+
 func open(ctx context.Context, dbPath string, initialize bool) (*Store, error) {
 	const options = "_busy_timeout=5000&_txlock=immediate"
 

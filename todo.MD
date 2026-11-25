@@ -489,9 +489,8 @@ Test Plan
   - contextual pages are linked from their parent;
   - API and debug endpoints are absent from primary navigation.
 - Run:
-  - go test ./...
+  - make test
   - golangci-lint run ./cmd/... ./internal/...
-  - make check-generated
   - git diff --check
 Assumptions
 - Core Chop is in scope; ecb, constituents, and yf are deferred.

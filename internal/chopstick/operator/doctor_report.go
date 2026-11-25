@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"wingman.com/chopstick/internal/chopstick"
 	"wingman.com/chopstick/internal/ingest/sec"
@@ -43,6 +45,10 @@ func runDoctor(ctx context.Context, cfg DoctorConfig) error {
 
 	report := doctorReport{}
 
+	if cfg.Verbose {
+		fmt.Println("Infrastructure")
+	}
+
 	infrastructureErr := chopstick.CheckInfrastructure(ctx, cfg.Config)
 	if infrastructureErr == nil {
 		report.check("OK", "infrastructure", "SQLite, NATS, and JetStream are ready")
@@ -50,14 +56,17 @@ func runDoctor(ctx context.Context, cfg DoctorConfig) error {
 		report.check("FAIL", "infrastructure", "see errors and hints below")
 	}
 
-	if cfg.SetName == "" {
-		report.check("WARN", "constituent set", "not configured; historical backfill requires EDGAR_SET")
-	} else {
-		report.check("OK", "constituent set", cfg.SetName)
+	if !cfg.Verbose {
+		checkConstituentSet(&report, cfg.SetName)
 	}
 
 	if _, err := os.Stat(cfg.MasterPath); err == nil {
-		report.check("OK", "master index", cfg.MasterPath)
+		detail := cfg.MasterPath
+		if cfg.Verbose {
+			detail = "available"
+		}
+
+		report.check("OK", "master index", detail)
 	} else if errors.Is(err, os.ErrNotExist) {
 		report.check("WARN", "master index", "missing; run './bin/chop index'")
 	} else {
@@ -73,8 +82,13 @@ func runDoctor(ctx context.Context, cfg DoctorConfig) error {
 	checkUpstreams(ctx, &report, cfg.Upstreams, cfg.UserAgent)
 
 	if cfg.Verbose {
-		printResolvedConfiguration(cfg)
-		printStorageUsage(appdata.Root())
+		printInfrastructureSettings(cfg)
+		printStorageUsage(os.Stdout, cfg)
+
+		fmt.Println()
+		fmt.Println("Functional settings")
+		checkConstituentSet(&report, cfg.SetName)
+		printFunctionalSettings(cfg)
 	}
 
 	fmt.Println()
@@ -94,79 +108,84 @@ func runDoctor(ctx context.Context, cfg DoctorConfig) error {
 	return ctx.Err()
 }
 
-func printResolvedConfiguration(cfg DoctorConfig) {
+func checkConstituentSet(report *doctorReport, name string) {
+	if name == "" {
+		report.check("WARN", "constituent set", "not configured; historical backfill requires EDGAR_SET")
+
+		return
+	}
+
+	report.check("OK", "constituent set", name)
+}
+
+func printInfrastructureSettings(cfg DoctorConfig) {
+	fmt.Println()
+	fmt.Printf("  NATS              %s\n", chopstick.NATSAddress(cfg.NATSURL))
+	fmt.Printf("  web URL           %s (served by chopd)\n", httpURL(cfg.HTTPAddress))
+	fmt.Printf("  log level         %s\n", environmentValue("LOGLEVEL", "info"))
+}
+
+func printFunctionalSettings(cfg DoctorConfig) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = sec.DefaultBaseURL
 	}
 
-	fmt.Println()
-	fmt.Println("Configuration")
-	fmt.Printf("  set               %s\n", environmentValue(edgarSetEnv,
-		"not configured"))
 	fmt.Printf("  from year         %d\n", cfg.FromYear)
 	fmt.Printf("  form types        %s\n", strings.Join(cfg.FormTypes, ","))
 	fmt.Printf("  parser supports   %s\n", strings.Join(sec.SupportedFormTypes(), ","))
 	fmt.Printf("  SEC archives      %s\n", baseURL)
 	fmt.Printf("  SEC user agent    %s\n", cfg.UserAgent)
-	fmt.Printf("  NATS              %s\n", chopstick.NATSAddress(cfg.NATSURL))
-	fmt.Printf("  web URL           %s (served by chopd)\n",
-		httpURL(cfg.HTTPAddress))
-	fmt.Printf("  data directory    %s\n", appdata.Root())
-	fmt.Printf("  filings cache     %s\n", cfg.FilingsDirectory)
-	fmt.Printf("  parsed filings    %s\n", cfg.ParsedDirectory)
-	fmt.Printf("  temp artifacts    %s\n", appdata.Path("tmp", "artifacts"))
-	fmt.Printf("  constituent sets  %s\n", appdata.Path("sets"))
-
-	setName := environmentValue(edgarSetEnv, "")
-	if setName != "" {
-		fmt.Printf("  selected set      %s\n", appdata.Path("sets", setName+".json"))
-	}
-
-	fmt.Printf("  polling DB        %s\n", cfg.PollingDB)
-	fmt.Printf("  news DB           %s\n", cfg.NewsDB)
-	fmt.Printf("  analysis DB       %s\n", cfg.AnalysisDB)
-	fmt.Printf("  ownership DB      %s\n", cfg.OwnershipDB)
-	fmt.Printf("  master index      %s\n", cfg.MasterPath)
-	fmt.Printf("  event log         %s\n", appdata.Path("logs", "sec.log"))
-	fmt.Printf("  log level         %s\n", environmentValue("LOGLEVEL", "info"))
 }
 
-func printStorageUsage(root string) {
-	fmt.Println()
-	fmt.Println("Storage used")
+func printStorageUsage(output io.Writer, cfg DoctorConfig) {
+	type storagePath struct{ label, path string }
 
-	for _, entry := range []struct {
-		label string
-		path  string
-	}{
-		{label: "total", path: root},
-		{label: "filings cache", path: appdata.Path("cache", "filings")},
-		{label: "index cache", path: appdata.Path("cache", "indexes")},
-		{label: "parsed filings", path: appdata.Path("parsed")},
-		{label: "temp artifacts", path: appdata.Path("tmp", "artifacts")},
-		{label: "constituent sets", path: appdata.Path("sets")},
-		{label: "polling DB", path: appdata.Path("polling.db")},
-		{label: "news DB", path: appdata.Path("feed.db")},
-		{label: "analysis DB", path: appdata.Path("analysis.db")},
-		{label: "NATS", path: appdata.Path("nats")},
-		{label: "logs", path: appdata.Path("logs")},
-	} {
-		bytes, err := pathSize(entry.path)
-		if errors.Is(err, os.ErrNotExist) {
-			fmt.Printf("  %-17s not created\n", entry.label)
+	entries := []storagePath{
+		{"data directory", appdata.Root()},
+		{"filings cache", cfg.FilingsDirectory},
+		{"index cache", appdata.Path("cache", "indexes")},
+		{"master index", cfg.MasterPath},
+		{"parsed filings", cfg.ParsedDirectory},
+		{"temp artifacts", appdata.Path("tmp", "artifacts")},
+		{"constituent sets", appdata.Path("sets")},
+		{"polling DB", cfg.PollingDB},
+		{"news DB", cfg.NewsDB},
+		{"analysis DB", cfg.AnalysisDB},
+		{"ownership DB", cfg.OwnershipDB},
+		{"NATS storage", appdata.Path("nats")},
+		{"logs", appdata.Path("logs")},
+		{"event log", appdata.Path("logs", "sec.log")},
+	}
 
-			continue
-		}
+	if cfg.SetName != "" {
+		entries = append(entries, storagePath{"selected manifest", appdata.Path("sets", cfg.SetName+".json")})
+	}
 
-		if err != nil {
-			fmt.Printf("  %-17s unavailable: %v\n", entry.label, err)
+	pathWidth := len("Path")
+	for _, entry := range entries {
+		pathWidth = max(pathWidth, utf8.RuneCountInString(entry.path))
+	}
 
-			continue
-		}
+	const row = "  %-17s  %-*s  %11s\n"
 
-		fmt.Printf("  %-17s %s (%d bytes)\n", entry.label,
-			formatBytes(bytes), bytes)
+	fmt.Fprintln(output)
+	fmt.Fprintf(output, row, "Storage", pathWidth, "Path", "Size")
+
+	for _, entry := range entries {
+		fmt.Fprintf(output, row, entry.label, pathWidth, entry.path, storageSize(entry.path))
+	}
+}
+
+func storageSize(path string) string {
+	bytes, err := pathSize(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return "not created"
+	case err != nil:
+		return "unavailable"
+	default:
+		return formatBytes(bytes)
 	}
 }
 

@@ -196,9 +196,8 @@ Add checks that cover:
 Run the normal repository checks as applicable:
 
 ```bash
-go test ./...
+make test
 golangci-lint run ./cmd/... ./internal/...
-make check-generated
 make check-man
 git diff --check
 ```

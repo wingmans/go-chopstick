@@ -11,4 +11,9 @@ damage a table, URL, code block, command, or another fixed-format example.
 When adding or updating prose, wrap it to 80 columns before finishing the
 change.
 
+## Shell and Make Recipes
+
+Use the simplest shell syntax in Bash scripts and Make recipes. Do not use
+`if ... fi` blocks. Use `&&` or `||` for conditional execution.
+
 do not add //nolint to suppress linting warnigs unless given permission

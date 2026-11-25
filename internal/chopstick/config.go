@@ -52,18 +52,26 @@ type Config struct {
 // ConfigFromEnvironment returns service configuration without involving CLI
 // parsing. Command-line adapters may override the returned typed values.
 func ConfigFromEnvironment() (Config, error) {
-	fromYear, err := environmentInt("EDGAR_FROM_YEAR",
-		sec.EarliestPipelineYear)
-	if err != nil {
-		return Config{}, err
-	}
+	return ConfigForSet(nil)
+}
 
-	forms, err := sec.ValidateSupportedFormTypes(strings.Split(
+// ConfigForSet resolves environment settings with an optional set override.
+// It returns the resolved values even when a setting fails validation.
+func ConfigForSet(override *string) (Config, error) {
+	fromYear, yearErr := environmentInt("EDGAR_FROM_YEAR",
+		sec.EarliestPipelineYear)
+
+	forms, formErr := sec.ValidateSupportedFormTypes(strings.Split(
 		environmentValue("EDGAR_FORM_TYPES",
 			"10-K,10-K/A,10-Q,10-Q/A,8-K,8-K/A"), ",",
 	))
-	if err != nil {
-		return Config{}, err
+	if formErr != nil {
+		formErr = fmt.Errorf("EDGAR_FORM_TYPES: %w", formErr)
+	}
+
+	setName := environmentValue("EDGAR_SET", "")
+	if override != nil {
+		setName = strings.TrimSpace(*override)
 	}
 
 	config := Config{
@@ -82,15 +90,20 @@ func ConfigFromEnvironment() (Config, error) {
 		BaseURL:           environmentValue("EDGAR_BASE_URL", ""),
 		HTTPAddress:       webAddressFromEnvironment(),
 		Interval:          time.Minute,
-		SetName:           environmentValue("EDGAR_SET", ""),
+		SetName:           setName,
 		CIKs:              nil,
 		FormTypes:         forms,
 		FromYear:          fromYear,
 		MaxAttempts:       5,
 	}
 
-	if err := config.SetConstituentSet(config.SetName); err != nil {
-		return Config{}, err
+	setErr := config.SetConstituentSet(setName)
+	if setErr != nil {
+		setErr = fmt.Errorf("constituent set %q: %w", setName, setErr)
+	}
+
+	if err := errors.Join(yearErr, formErr, setErr); err != nil {
+		return config, err
 	}
 
 	return config, config.Validate()

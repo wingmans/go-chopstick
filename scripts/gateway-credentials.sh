@@ -6,18 +6,14 @@ usage() {
   exit 2
 }
 
-if [ "$#" -ne 2 ]; then
-  usage
-fi
+[[ "$#" -eq 2 ]] || usage
 
 action="$1"
 credentials_file="$2"
 
 case "$action" in
   ensure)
-    if [ -f "$credentials_file" ]; then
-      exit 0
-    fi
+    [[ ! -f "$credentials_file" ]] || exit 0
     ;;
   rotate)
     ;;

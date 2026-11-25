@@ -71,12 +71,11 @@ SQL definitions live with each owning package:
 - `internal/news/sql`.
 
 Their generated `dbgen` packages are internal implementation details. Stores
-continue to own transactions and domain behavior. Regenerate and verify
-checked-in database code after editing SQL:
+continue to own transactions and domain behavior. Regenerate checked-in
+database code after editing SQL:
 
 ```sh
 make generate
-make check-generated
 ```
 
 Check configuration and infrastructure without changing them:

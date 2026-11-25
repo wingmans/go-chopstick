@@ -157,7 +157,17 @@ func TestKongParsesCommandHierarchy(t *testing.T) {
 		{
 			name:    "doctor",
 			args:    []string{"doctor"},
-			command: "doctor",
+			command: "doctor check",
+		},
+		{
+			name:    "doctor with existing flags",
+			args:    []string{"doctor", "--verbose", "--upstream", "https://www.sec.gov/"},
+			command: "doctor check",
+		},
+		{
+			name:    "doctor repair dry run",
+			args:    []string{"doctor", "repair", "--dry-run", "--set", "sp500"},
+			command: "doctor repair",
 		},
 		{
 			name:    "status",

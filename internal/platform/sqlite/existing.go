@@ -14,6 +14,26 @@ import (
 // ExistingDSN opens a database in read/write mode without creating the file
 // or changing its journal mode.
 func ExistingDSN(path, options string) (string, error) {
+	return existingDSN(path, "mode=rw&"+strings.TrimPrefix(options, "?"))
+}
+
+// InspectSchema reads the schema version without opening a writer connection.
+func InspectSchema(ctx context.Context, path string, want int) error {
+	dsn, err := existingDSN(path, "mode=ro&_busy_timeout=5000")
+	if err != nil {
+		return err
+	}
+
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	return CheckSchema(ctx, db, want)
+}
+
+func existingDSN(path, query string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", err
@@ -30,7 +50,7 @@ func ExistingDSN(path, options string) (string, error) {
 
 	dsn := url.URL{
 		Scheme: "file", Path: filepath.ToSlash(absolute),
-		RawQuery: "mode=rw&" + strings.TrimPrefix(options, "?"),
+		RawQuery: query,
 	}
 
 	return dsn.String(), nil

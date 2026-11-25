@@ -48,6 +48,19 @@ NATS, run `./bin/chop setup` against the configured server.
 warning, and the viewers can still start. `./bin/chop doctor` reports local
 infrastructure and gateway health separately.
 
+For an existing installation, preview the repair before applying it.
+
+```bash
+./bin/chop doctor repair --dry-run
+./bin/chop doctor repair
+```
+
+Both forms show infrastructure actions separately from settings. An optional
+`--set` overrides the constituent set for the invocation. Repair creates
+missing databases, directories, and JetStream resources. It reports
+incompatible resources for manual action and preserves existing events and
+consumer progress.
+
 The default instance runs the complete local monolith:
 
 - Atom ingestion and durable publication.

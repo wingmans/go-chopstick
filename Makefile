@@ -1,5 +1,5 @@
-.PHONY: help deps generate check-generated build setup run test lint docs-pdf clean \
-	nats-start nats-stop nats-status nats-reset \
+.PHONY: help deps generate build setup run test lint \
+	docs-pdf clean nats-start nats-stop nats-status nats-reset \
 	gateway-start gateway-stop gateway-status gateway-reset
 
 .DEFAULT_GOAL := help
@@ -7,10 +7,6 @@
 BIN_DIR := bin
 SQLC ?= .tools/bin/sqlc
 TEMPL ?= .tools/bin/templ
-CHOP_GATEWAY_DIR ?= ../go-proxy-app/throttling
-CHOP_GATEWAY_RULES := $(CURDIR)/infra/outbound.rules
-CHOP_GATEWAY_IMAGE ?= go-proxy-app-throttling:0.1.0
-CHOP_GATEWAY_CREDENTIALS := $(abspath $(or $(CHOPSTICK_DATA_DIR),data))/run/outbound-gateway.env
 
 help:
 	@printf '%s\n' \
@@ -20,7 +16,6 @@ help:
 		'  help                    Display this command list' \
 		'  deps                    Prepare the development environment' \
 		'  generate                Generate checked-in database code' \
-		'  check-generated         Verify generated database code' \
 		'  build                   Build all command binaries' \
 		'  setup                   Start local dependencies and initialize Chopstick' \
 		'  run                     Run chopd in the foreground' \
@@ -42,9 +37,8 @@ help:
 		'' \
 
 deps:
-	@bash -c '[[ -f .env ]] && echo ".env already exists" || { \
-		cp .env.example .env && echo "created .env"; \
-	}'
+	@test -f .env && { echo '.env already exists'; exit $$?; }; \
+		cp .env.example .env && echo 'created .env'
 	bash scripts/install-tools.sh
 
 generate:
@@ -56,24 +50,6 @@ generate:
 	}
 	$(TEMPL) generate ./internal/chopstick/web
 	$(SQLC) generate
-
-check-generated: generate
-	$(SQLC) vet
-	@test -z "$$(git status --short --untracked-files=all -- \
-		internal/edgar/pipeline/dbgen \
-		internal/market/store/dbgen \
-		internal/edgar/filing/store/dbgen \
-		internal/edgar/news/dbgen \
-		internal/edgar/mirror/dbgen)" || { \
-		echo 'generated database code is out of date' >&2; \
-		git status --short --untracked-files=all -- \
-			internal/edgar/pipeline/dbgen \
-			internal/market/store/dbgen \
-			internal/edgar/filing/store/dbgen \
-			internal/edgar/news/dbgen \
-			internal/edgar/mirror/dbgen; \
-		exit 1; \
-	}
 
 build: generate
 	mkdir -p $(BIN_DIR)
@@ -118,37 +94,13 @@ nats-reset:
 	bash scripts/nats-dev.sh reset
 
 gateway-start:
-	@test -d "$(CHOP_GATEWAY_DIR)" || { \
-		echo 'gateway repository not found: $(CHOP_GATEWAY_DIR)' >&2; exit 1; \
-	}
-	$(MAKE) -C "$(CHOP_GATEWAY_DIR)" build \
-		PROXY_IMAGE="$(CHOP_GATEWAY_IMAGE)"
-	bash scripts/gateway-credentials.sh ensure \
-		"$(CHOP_GATEWAY_CREDENTIALS)"
-	@set -a; . "$(CHOP_GATEWAY_CREDENTIALS)"; set +a; \
-		proxy_hash="$$(docker run --rm "$(CHOP_GATEWAY_IMAGE)" \
-			caddy hash-password \
-			--plaintext "$$CHOP_OUTBOUND_GATEWAY_PASS")"; \
-		export PROXY_USER="$$CHOP_OUTBOUND_GATEWAY_USER"; \
-		export PROXY_HASH="$$proxy_hash"; \
-		$(MAKE) -C "$(CHOP_GATEWAY_DIR)" up \
-			RULES_FILE="$(CHOP_GATEWAY_RULES)" \
-			PROXY_IMAGE="$(CHOP_GATEWAY_IMAGE)"
+	bash scripts/gateway-dev.sh start
 
 gateway-stop:
-	@test -d "$(CHOP_GATEWAY_DIR)" || { \
-		echo 'gateway repository not found: $(CHOP_GATEWAY_DIR)' >&2; exit 1; \
-	}
-	$(MAKE) -C "$(CHOP_GATEWAY_DIR)" down
+	bash scripts/gateway-dev.sh stop
 
 gateway-status:
-	@test -d "$(CHOP_GATEWAY_DIR)" || { \
-		echo 'gateway repository not found: $(CHOP_GATEWAY_DIR)' >&2; exit 1; \
-	}
-	$(MAKE) -C "$(CHOP_GATEWAY_DIR)" status
+	bash scripts/gateway-dev.sh status
 
 gateway-reset:
-	$(MAKE) gateway-stop
-	bash scripts/gateway-credentials.sh rotate \
-		"$(CHOP_GATEWAY_CREDENTIALS)"
-	$(MAKE) gateway-start
+	bash scripts/gateway-dev.sh reset

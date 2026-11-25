@@ -60,6 +60,11 @@ func OpenExisting(ctx context.Context, path string) (*Store, error) {
 	return store, err
 }
 
+// InspectSchema checks the schema of an existing news database.
+func InspectSchema(ctx context.Context, path string) error {
+	return sqlite.InspectSchema(ctx, path, newsSchemaVersion)
+}
+
 func open(ctx context.Context, path string, initialize bool) (*Store, bool, error) {
 	const options = "_busy_timeout=5000&_txlock=immediate"
 

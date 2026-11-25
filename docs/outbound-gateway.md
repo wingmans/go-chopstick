@@ -50,6 +50,10 @@ make gateway-reset
 `make gateway-reset` replaces the local credentials and rebuilds the proxy.
 No gateway username or password needs to be configured manually.
 
+`make gateway-stop` leaves the container in place. `make gateway-start`
+reuses it when the policy and image tag match. A new container can use an
+existing local image.
+
 `make setup` tries to start the gateway. `chopd` checks gateway health and
 credentials in the background and can serve viewers during a gateway outage.
 Price download commands require a working gateway. These gateway checks use
