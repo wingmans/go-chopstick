@@ -14,9 +14,10 @@ import (
 
 const maxSQLiteInteger = uint64(1<<63 - 1)
 
-// Item is one filing in JetStream discovery order.
+// Item is one filing in discovery order. Archived rows use negative
+// sequences so they can coexist with events from a recreated stream.
 type Item struct {
-	Sequence        uint64
+	Sequence        int64
 	AccessionNumber string
 	CIK             string
 	CompanyName     string
@@ -173,12 +174,7 @@ func (s *Store) List(ctx context.Context, filter Filter) ([]Item, error) {
 
 	items := make([]Item, 0, len(rows))
 	for _, row := range rows {
-		item, err := itemFromListRow(row)
-		if err != nil {
-			return nil, err
-		}
-
-		items = append(items, item)
+		items = append(items, itemFromListRow(row))
 	}
 
 	return items, nil
@@ -191,17 +187,12 @@ func (s *Store) Get(ctx context.Context, accession string) (Item, error) {
 		return Item{}, fmt.Errorf("read news item: %w", err)
 	}
 
-	return itemFromRow(row)
+	return itemFromRow(row), nil
 }
 
-func itemFromListRow(row dbgen.ListNewsItemsRow) (Item, error) {
-	sequence, err := newsSequence(row.StreamSequence)
-	if err != nil {
-		return Item{}, err
-	}
-
+func itemFromListRow(row dbgen.ListNewsItemsRow) Item {
 	return Item{
-		Sequence:        sequence,
+		Sequence:        row.StreamSequence,
 		AccessionNumber: row.AccessionNumber,
 		CIK:             row.CIK,
 		CompanyName:     row.CompanyName,
@@ -214,17 +205,12 @@ func itemFromListRow(row dbgen.ListNewsItemsRow) (Item, error) {
 		SelectionReason: row.SelectionReason,
 		SelectionMode:   row.SelectionMode,
 		SelectionSet:    row.SelectionSet,
-	}, nil
+	}
 }
 
-func itemFromRow(row dbgen.NewsItemRow) (Item, error) {
-	sequence, err := newsSequence(row.StreamSequence)
-	if err != nil {
-		return Item{}, err
-	}
-
+func itemFromRow(row dbgen.NewsItemRow) Item {
 	return Item{
-		Sequence:        sequence,
+		Sequence:        row.StreamSequence,
 		AccessionNumber: row.AccessionNumber,
 		CIK:             row.CIK,
 		CompanyName:     row.CompanyName,
@@ -237,15 +223,7 @@ func itemFromRow(row dbgen.NewsItemRow) (Item, error) {
 		SelectionReason: row.SelectionReason,
 		SelectionMode:   row.SelectionMode,
 		SelectionSet:    row.SelectionSet,
-	}, nil
-}
-
-func newsSequence(sequence int64) (uint64, error) {
-	if sequence < 0 {
-		return 0, fmt.Errorf("read news item: invalid sequence %d", sequence)
 	}
-
-	return uint64(sequence), nil
 }
 
 func selectionValue(selection string) int64 {

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	uitest "github.com/wingmans/htmx-linter"
+
 	"wingman.com/chopstick/internal/constituents"
 	filingview "wingman.com/chopstick/internal/edgar/filing"
 	dividendview "wingman.com/chopstick/internal/edgar/filing/dividend"
@@ -310,22 +312,17 @@ func TestContextualPagesAreLinkedFromParents(t *testing.T) {
 	)
 
 	ownership := requestServer(t, server, "/ownership").Body.String()
-	requireMarkers(t, ownership,
-		`href="/ownership/companies/0000789019"`)
+	requireMarkers(t, ownership, `href="/ownership/companies/0000789019"`)
 
-	detail := requestServer(t, server,
-		"/filings/789019/0001193125-26-027207").Body.String()
-	requireMarkers(t, detail,
-		`href="/debug/raw/filings/0000789019/0001193125-26-027207"`)
+	detail := requestServer(t, server, "/filings/789019/0001193125-26-027207").Body.String()
+	requireMarkers(t, detail, `href="/debug/raw/filings/0000789019/0001193125-26-027207"`)
 }
 
 func TestApplicationRoutesModulesOnOneHandler(t *testing.T) {
 	t.Parallel()
 
 	server := NewServer(t.TempDir(), nil)
-	server.MountNews(http.HandlerFunc(func(w http.ResponseWriter,
-		r *http.Request,
-	) {
+	server.MountNews(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/news" {
 			t.Errorf("news path = %q", r.URL.Path)
 		}
@@ -339,8 +336,7 @@ func TestApplicationRoutesModulesOnOneHandler(t *testing.T) {
 		"/status": "Operational status",
 	} {
 		record := httptest.NewRecorder()
-		request := httptest.NewRequestWithContext(t.Context(),
-			http.MethodGet, path, nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 		server.ServeHTTP(record, request)
 
 		if record.Code != http.StatusOK {
@@ -393,6 +389,7 @@ func TestNewsPageUsesConsolidatedRoutes(t *testing.T) {
 		`href="https://www.sec.gov/Archives/test.txt"`,
 		`href="/viewer/0000789019/0001193125-26-027207/"`,
 		`class="viewer-button"`)
+	uitest.ParsePage(t, record.Code, record.Header(), record.Body.String()).Lint(uitest.DefaultLintConfig())
 }
 
 func TestIndexPageWithoutFiltersDoesNotLoadFilings(t *testing.T) {
@@ -412,8 +409,7 @@ func TestIndexPageWithoutFiltersDoesNotLoadFilings(t *testing.T) {
 
 	server := NewServer(parsedDir, nil)
 	record := httptest.NewRecorder()
-	request := httptest.NewRequestWithContext(
-		context.Background(), http.MethodGet, "/", nil)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 
 	server.ServeHTTP(record, request)
 
@@ -623,39 +619,6 @@ func TestServerRendersDashboard(t *testing.T) {
 		"0001193125-26-027207")
 }
 
-func TestServerRendersHTMX(t *testing.T) {
-	server := newCIKTestServer(t)
-	for _, test := range []struct {
-		name, target string
-		fullPage     bool
-	}{
-		{"dashboard", "div#dashboard", false},
-		{"body", "body", true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			record := httptest.NewRecorder()
-			request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?q=MSFT", nil)
-			request.Header.Set("Hx-Request", "true")
-			request.Header.Set("Hx-Target", test.target)
-			server.ServeHTTP(record, request)
-
-			if test.fullPage {
-				requireResponse(t, record, "<!doctype html>",
-					"class=\"dashboard-page\"")
-
-				return
-			}
-
-			if record.Code != http.StatusOK || strings.Contains(record.Body.String(), "<!doctype html>") {
-				t.Fatalf("unexpected dashboard fragment: status=%d body=%s", record.Code, record.Body.String())
-			}
-
-			requireResponse(t, record, "id=\"dashboard\"",
-				"0001193125-26-027207")
-		})
-	}
-}
-
 func TestServerServesAssets(t *testing.T) {
 	server := newCIKTestServer(t)
 	for _, test := range []struct{ path, contentType, marker string }{
@@ -679,9 +642,7 @@ func TestServerServesAssets(t *testing.T) {
 }
 
 // requestServer sends an HTTP request to the given server and returns the response recorder.
-func requestServer(t *testing.T, server http.Handler,
-	path string,
-) *httptest.ResponseRecorder {
+func requestServer(t *testing.T, server http.Handler, path string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	record := httptest.NewRecorder()

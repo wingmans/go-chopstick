@@ -2,6 +2,41 @@ package news
 
 import "testing"
 
+func TestArchivedNewsAppearsAfterReplayedEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	store, _, err := Open(ctx, t.TempDir()+"/feed.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.Apply(ctx, 1, "old-event", Item{AccessionNumber: "archived"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.db.ExecContext(ctx, "UPDATE feed_items SET stream_sequence = -1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Apply(ctx, 1, "new-event", Item{AccessionNumber: "current"}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := store.List(ctx, Filter{})
+	if err != nil || len(items) != 2 || items[0].Sequence != 1 || items[1].Sequence != -1 {
+		t.Fatalf("list news: items=%+v, err=%v", items, err)
+	}
+
+	item, err := store.Get(ctx, "archived")
+	if err != nil || item.Sequence != -1 {
+		t.Fatalf("read archived item: item=%+v, err=%v", item, err)
+	}
+}
+
 func TestStoreOrdersByStreamSequenceAndFilters(t *testing.T) {
 	t.Parallel()
 

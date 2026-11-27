@@ -1,0 +1,1172 @@
+
+
+
+It looks like the markup and event/HTMX wiring didn't come through in your message—paste the HTML/templ and any HTMX or event wiring for both controls and I will inspect them.
+
+While you grab that snippet, here are the most common reasons two controls behave differently on keystrokes in Firefox compared to Chromium/Edge:
+
+input vs. change vs. keyup firing during IME composition or autocomplete: Firefox handles composition events (compositionstart / compositionend), autofill/autocomplete selection, and Escape/clear actions differently than Chromium, which can cause input changed delay:... or a secondary control's listener to fire or skip when expected.
+
+Event bubbling, hx-sync, or cross-control triggers (from:...): If one control triggers an HTMX request or dispatches a custom/DOM event that bubbles through a shared ancestor or hits hx-sync queue/abort rules, subtle timing differences in event dispatch order between Gecko and Blink show up quickly.
+
+DOM replacement or focus/value resets during keystrokes: If an earlier swap updates an ancestor, resets a form/input value, or re-binds listeners in a way that races with a debounce delay, Firefox's focus and input handling can make the interaction look out of sync.
+
+Paste the two controls' markup and wiring whenever you're ready, and note what happens in Firefox vs. Chrome/Edge (for example: which keystroke or control lags, drops characters, or double-fires).
+
+I do not have the code pinpointed in such a way I have a repro and can paste code.
+
+
+
+
+
+show nr1
+
+Here is a goquery check you can add to uitest to flag hx-trigger attributes that reach outside their own element—such as listening on body, window, document, a from:... selector, or non-local events that bubble across controls.
+
+Go
+package uitest
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+// AssertScopedTriggers flags hx-trigger attributes that reference external
+// sources (from:...) or global/bubbling scopes, which often cause cross-control
+// or cross-browser timing races.
+func (p *Page) AssertScopedTriggers(allowExternal bool) *Page {
+	p.t.Helper()
+
+	if allowExternal {
+		return p
+	}
+
+	var issues []string
+
+	p.Doc.Find("[hx-trigger]").Each(func(_ int, s *goquery.Selection) {
+		raw := strings.TrimSpace(s.AttrOr("hx-trigger", ""))
+		if raw == "" {
+			return
+		}
+
+		lower := strings.ToLower(raw)
+		id := s.AttrOr("id", "(no id)")
+		tag := goquery.NodeName(s)
+
+		// Flag explicit external event sources like "keyup from:body" or "change from:#other".
+		if strings.Contains(lower, " from:") {
+			issues = append(issues, fmt.Sprintf("<%s id=%q> uses external trigger source in hx-trigger=%q", tag, id, raw))
+		}
+
+		// Flag global targets that catch events from unrelated controls.
+		for _, globalScope := range []string{" from:body", " from:window", " from:document"} {
+			if strings.Contains(lower, globalScope) {
+				issues = append(issues, fmt.Sprintf("<%s id=%q> listens on global scope in hx-trigger=%q", tag, id, raw))
+			}
+		}
+	})
+
+	if len(issues) > 0 {
+		p.t.Fatalf("cross-control hx-trigger check failed:\n  - %s", strings.Join(issues, "\n  - "))
+	}
+
+	return p
+}
+How to Use It in Your Project Linter
+Call it inside Page.Lint(cfg) with a StrictScopedTriggers bool field on LintConfig so you can opt into it per page or fragment.
+
+Keep intentional cross-control triggers explicit: If a control genuinely needs from:#other-control or from:body, pass allowExternal: true (or StrictScopedTriggers: false) for that specific test rather than weakening the rule everywhere.
+
+explain 3, then show 2
+
+1. Integrating StrictScopedTriggers into LintConfig and Page.Lint
+To keep Page.Lint(cfg) as your single entry point, add StrictScopedTriggers bool to LintConfig and a small AllowedTriggerIDs exception map so global or cross-control triggers only pass when explicitly allowlisted.
+
+Go
+type LintConfig struct {
+	KnownTargets         map[string]bool
+	BanInlineStyles      bool
+	BannedStyleProps     map[string]bool
+	StrictScopedTriggers bool
+	AllowedTriggerIDs    map[string]bool // Element IDs explicitly allowed to use from:...
+}
+Inside Page.Lint(cfg), delegate to the scoped-trigger check right alongside your ID, OOB, button, and style passes:
+
+Go
+if cfg.StrictScopedTriggers {
+	p.Doc.Find("[hx-trigger]").Each(func(_ int, s *goquery.Selection) {
+		raw := strings.TrimSpace(s.AttrOr("hx-trigger", ""))
+		id := strings.TrimSpace(s.AttrOr("id", ""))
+		if id != "" && cfg.AllowedTriggerIDs[id] {
+			return
+		}
+		if strings.Contains(strings.ToLower(raw), " from:") {
+			issues = append(issues, fmt.Sprintf(
+				"<%s id=%q> uses cross-control/global trigger hx-trigger=%q (add id to AllowedTriggerIDs if intentional)",
+				goquery.NodeName(s), id, raw,
+			))
+		}
+	})
+}
+When you write a new component, StrictScopedTriggers: true flags accidental from:... or from:body listeners immediately; if a specific control genuinely needs to listen to another element, adding its id to AllowedTriggerIDs documents that coupling in one place.
+
+2. Minimal Standalone HTML Repro for Isolating Firefox Keystroke Timing
+When you do not yet know which piece of go-topaz-ui causes the Firefox divergence, strip away Go, templ, and CSS into a single static HTML file served over http://localhost (or python3 -m http.server).
+
+This template logs exact browser event order (keydown, input, change, compositionend) and HTMX 4 request/swap lifecycle events (htmx:before:request, htmx:after:swap) with millisecond timestamps so you can compare Firefox and Chrome side-by-side in DevTools:
+
+HTML
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>HTMX 4 Firefox Keystroke Repro</title>
+  <!-- Point to your local htmx 4 script -->
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <section>
+    <label for="control-a">Control A (Primary Filter)</label>
+    <input
+      id="control-a"
+      name="q"
+      type="search"
+      hx-get="/mock-search"
+      hx-trigger="input changed delay:200ms"
+      hx-target="#results"
+      hx-sync="this:replace"
+    >
+
+    <label for="control-b">Control B (Secondary / Linked Control)</label>
+    <select
+      id="control-b"
+      name="type"
+      hx-get="/mock-search"
+      hx-trigger="change, input from:#control-a delay:200ms"
+      hx-target="#secondary-panel"
+      hx-include="#control-a"
+    >
+      <option value="all">All</option>
+      <option value="user">User</option>
+    </select>
+  </section>
+
+  <div id="results">Initial results</div>
+  <div id="secondary-panel">Initial secondary</div>
+  <pre id="event-log"></pre>
+
+  <script>
+    const logEl = document.getElementById("event-log");
+    const t0 = performance.now();
+
+    function log(msg) {
+      const ms = (performance.now() - t0).toFixed(1).padStart(7, " ");
+      logEl.textContent += `[${ms}ms] ${msg}\n`;
+    }
+
+    // 1. Track native DOM events on both controls
+    for (const id of ["control-a", "control-b"]) {
+      const el = document.getElementById(id);
+      for (const evt of ["keydown", "input", "change", "focus", "blur"]) {
+        el.addEventListener(evt, (e) => {
+          log(`DOM ${id} :: ${evt} (value=${JSON.stringify(e.target.value)})`);
+        });
+      }
+    }
+
+    // 2. Track HTMX 4 lifecycle events (uses htmx:phase:action naming)
+    for (const evt of ["htmx:before:request", "htmx:after:request", "htmx:before:swap", "htmx:after:swap"]) {
+      document.addEventListener(evt, (e) => {
+        const src = e.target?.id || e.target?.tagName || "unknown";
+        log(`HTMX ${evt} on #${src}`);
+      });
+    }
+  </script>
+</body>
+</html>
+How to Use This Repro to Pinpoint the Bug
+Swap in your actual attributes: Copy only the attributes from your two go-topaz-ui controls (hx-trigger, hx-sync, hx-include, hx-vals, hx-swap, or hx-on:*) onto #control-a and #control-b.
+
+Type the exact failing key sequence in Chrome, then in Firefox: Compare the timestamped #event-log lines—differences immediately reveal whether Firefox fires change on blur vs. keystroke, orders input vs. hx-include reads differently, or aborts an in-flight hx-sync request out of order.
+
+Promote the failing sequence to a contract rule: Once you see which attribute combination diverges in Firefox, encode a ban or convention for that pattern inside Page.Lint(cfg) so it cannot recur.
+
+1, 2 and 3
+
+Here is how HTMX 4 handles request cancellation and hx-sync during rapid typing, the key Firefox vs. Chrome DOM event quirks on <input> and <select> controls, and a tiny Go server to run the standalone repro locally.
+
+1. HTMX 4 Request Cancellation & hx-sync During Rapid Typing
+By default, overlapping requests do NOT cancel each other: Without hx-sync, every timer tick from hx-trigger="input changed delay:200ms" spawns an independent fetch() request. If an older request finishes after a newer one, the older response overwrites the newer DOM.
+
+How hx-sync="this:replace" prevents races: In HTMX 4, hx-sync="SELECTOR:STRATEGY" coordinates competing requests on a shared queue. With this:replace, when a new keystroke debounce fires while the previous request is still in flight, HTMX aborts the running fetch() via AbortController and starts the latest request.
+
+Shared queues across two controls (hx-sync="#control-a:replace"): If Control A and Control B both update #results, pointing both at the same sync target (hx-sync="#shared-form:replace" or hx-sync="#control-a:replace") ensures whichever control triggered last cancels the other's in-flight request.
+
+Manual cancellation (htmx:abort): Dispatching htmx:abort on an element programmatically cancels its active request (htmx.trigger('#control-a', 'htmx:abort')).   
+htmx
+
+2. Firefox vs. Chrome DOM Event Quirks on <input>, <select>, and type="search"
+When two controls behave differently in Firefox versus Chromium during keyboard interaction, one of these four browser differences is usually responsible:
+
+<input type="search"> clear (Escape / clear icon): Chromium fires input and search reliably when clearing via the built-in × button or Escape, whereas Firefox does not show Chromium's built-in × clear button and handles Escape differently depending on whether an autocomplete popup is open.
+
+<select> keyboard navigation (ArrowUp / ArrowDown):
+
+Firefox fires change (and input) on every arrow-key step while browsing options in an unexpanded <select>, whereas Chromium defers change until Enter or blur in several modes.
+
+If you listen to change on a <select> without delay:... or hx-sync, arrowing through 5 options in Firefox fires 5 rapid requests.
+
+IME / composition keyup ordering: Firefox fires the trailing keyup for Enter or space even when that keystroke just committed an IME composition (compositionend), whereas Chromium suppresses that incidental keyup. Using input instead of keyup avoids false triggers.
+
+Focus transfer between keydown and keyup: If a handler on Control A moves .focus() to a <select> during keydown, Firefox can still apply the subsequent key/character handling to the newly focused <select>, changing its selected value unexpectedly.
+
+3. Tiny Go Server for the Standalone Firefox Repro
+Drop this single-file Go server next to your repro HTML (or serve the HTML inline) with simulated latency (?delay=150ms) so you can watch hx-sync cancellations and event timestamps in Firefox and Chrome DevTools:
+
+Go
+package main
+
+import (
+	"fmt"
+	"html"
+	"log"
+	"net/http"
+	"time"
+)
+
+func main() {
+	mux := http.NewServeMux()
+
+	// Serve the standalone repro HTML page.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "repro.html")
+	})
+
+	// Mock HTMX endpoint with configurable artificial delay to expose race conditions.
+	mux.HandleFunc("/mock-search", func(w http.ResponseWriter, r *http.Request) {
+		if d, err := time.ParseDuration(r.URL.Query().Get("delay")); err == nil && d > 0 {
+			select {
+			case <-time.After(d):
+			case <-r.Context().Done():
+				// Client (htmx hx-sync="...:replace") aborted this request.
+				log.Printf("aborted request: q=%q type=%q source=%q",
+					r.URL.Query().Get("q"),
+					r.URL.Query().Get("type"),
+					r.Header.Get("HX-Source"),
+				)
+				return
+			}
+		}
+
+		q := html.EscapeString(r.URL.Query().Get("q"))
+		typ := html.EscapeString(r.URL.Query().Get("type"))
+		src := html.EscapeString(r.Header.Get("HX-Source"))
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `<p>Response at %s — q=%q, type=%q, HX-Source=%q</p>`,
+			time.Now().Format("15:04:05.000"), q, typ, src)
+	})
+
+	log.Println("Listening on http://127.0.0.1:8099")
+	log.Fatal(http.ListenAndServe("127.0.0.1:8099", mux))
+}
+When you run go run repro_server.go, watching the server log (aborted request: ...) alongside #event-log in Firefox and Chrome immediately shows whether Firefox is firing extra change/keyup events or failing to synchronize requests between the two controls.
+
+arrow-key storms in Firefox with HTMX 4" query="Show the cleanest HTMX 4 hx-trigger and hx-sync pattern for  elements so Firefox arrow-key navigation does not flood requests."/>
+
+what is OOB
+
+OOB stands for Out-of-Band (hx-swap-oob in HTMX).
+
+Normally, an HTMX request updates one primary target on the page—either the element that triggered the request or the element specified in hx-target="#tuple-list".
+
+An Out-of-Band swap lets a single server response update additional, unrelated parts of the page at the same time, without nesting everything inside one giant container.
+
+Concrete Example from go-topaz-ui
+Suppose the user types into #object-search (hx-target="#tuple-list"):
+
+Primary swap: The server returns the new list items, which HTMX puts inside #tuple-list.
+
+OOB swaps: In the same HTTP response, the server includes two top-level elements marked with hx-swap-oob:
+
+HTML
+<!-- 1. Main content: goes into hx-target="#tuple-list" -->
+<ul>
+  <li>document:doc-1 — viewer — user:alice</li>
+</ul>
+
+<!-- 2. OOB swap: HTMX finds id="tuple-count" elsewhere on the page and replaces its innerHTML -->
+<span id="tuple-count" hx-swap-oob="innerHTML">1 tuple</span>
+
+<!-- 3. OOB swap: clears any old validation message in id="form-errors" -->
+<div id="form-errors" hx-swap-oob="innerHTML"></div>
+HTMX 4 processes the primary #tuple-list swap first, then pulls out any top-level nodes with hx-swap-oob and swaps each one into the matching #id elsewhere on the page.
+
+Why Use It
+One round-trip: You update the main list, a counter badge, and a status/error banner in a single HTTP response.
+
+No layout coupling: #tuple-count and #form-errors can live anywhere in your layout (header, sidebar, footer) without forcing you to re-render the whole page.
+
+Explain the difference between hx-swap-oob=
+
+It looks like your message cut off right after hx-swap-oob=—assuming you want to compare the different hx-swap-oob modes in HTMX 4 (true, innerHTML, explicit selectors, and morph swaps), here is how they differ.
+
+Core hx-swap-oob Modes
+Attribute Value	What Gets Swapped	Best For
+hx-swap-oob="true"	Replaces the entire matching element (outerHTML by default), including its own attributes and tag.	Standalone badges or status widgets where you want to replace the whole element node.
+hx-swap-oob="innerHTML"	Keeps the existing element in the DOM and replaces only its inner content.	Counters (#tuple-count), banners (#form-errors), or containers where keeping the wrapper element and its id is cleaner.
+hx-swap-oob="innerHTML:#target" or hx-swap-oob="#target"	Targets an explicit CSS selector instead of matching strictly by the OOB element's own id.	Updating a target whose ID differs from the fragment element, or targeting a specific sub-element cleanly.
+hx-swap-oob="innerMorph" / outerMorph	Patches/morphs existing DOM nodes in place rather than tearing down and recreating them.	Preserving focus, input state, or active CSS transitions on elements that update frequently.
+hx-swap-oob="beforeend" / afterbegin / delete	Appends, prepends, or removes a target element without replacing its whole body.	Appending log entries, inserting notifications at the top of a list, or removing a dismissed alert.
+Concrete Example: true vs. innerHTML
+Suppose your page already has:
+
+HTML
+<span id="tuple-count" class="badge">3 tuples</span>
+With hx-swap-oob="innerHTML": The server sends <span id="tuple-count" hx-swap-oob="innerHTML">4 tuples</span>. HTMX keeps the existing <span id="tuple-count" class="badge"> in place and swaps only 4 tuples inside it.
+
+With hx-swap-oob="true": The server sends <span id="tuple-count" hx-swap-oob="true">4 tuples</span>. HTMX replaces the entire existing <span> node with the new <span> node—which loses any client-side attributes or classes that existed only in the live DOM unless the server reproduces them every time.
+
+Rule of Thumb for go-topaz-ui
+Prefer hx-swap-oob="innerHTML" on stable containers (#tuple-count, #form-errors, #graph-banner) so the container itself stays put.
+
+Use innerMorph / outerMorph when an OOB-updated region might hold focus or ongoing UI state.
+
+Reserve hx-swap-oob="true" for self-contained elements where full node replacement is intentional.
+
+name the files I need to make for the stand alone linter
+
+To run the linter in Go without leaking test code into your production binary, keep the implementation in internal/uitest and call it from a test file under internal/handlers (or your UI package).
+
+Core Files to Create
+File	Purpose
+internal/uitest/lint.go	Defines LintConfig, DefaultTopazLintConfig(), and (p *Page) Lint(cfg) (goquery checks for duplicate/empty IDs, hx-target and hx-swap-oob IDs, <button> inside <form>, inline styles, and scoped triggers).
+internal/uitest/oob.go	Defines (p *Page) ExtractOOBTargetIDs() and (p *Page) AssertOOBTargetsExistOnFullPage(fullPage) to verify partial OOB targets against a full page.
+internal/uitest/source_lint.go	Defines AssertSourceStyleRules(t, rootDir) to scan .templ and .css files on disk for inline styles and hardcoded pixel dimensions.
+internal/handlers/ui_contracts_test.go	Runs AssertSourceStyleRules, full-page Lint(cfg), partial fragment Lint(cfg), and AssertOOBTargetsExistOnFullPage under go test.
+Optional / Existing Companion Files
+internal/uitest/page.go (if not already present): Defines uitest.Page holding *testing.T and *goquery.Document so Lint and OOB helpers attach cleanly.
+
+Makefile: Add test-ui (go test -v -count=1 -run 'TestTopazUI|TestGraph' ./internal/handlers/...) and check-deps to verify ./cmd/go-topaz-ui does not import internal/uitest.
+
+1, then 3
+
+Here is the minimal internal/uitest/page.go harness that backs Page.Lint and AssertOOBTargetsExistOnFullPage, followed by the check in internal/uitest/lint.go for bare <tr>, <td>, or <th> elements using hx-swap-oob without a <table> wrapper.
+
+1. Minimal internal/uitest/page.go Harness
+Page wraps *testing.T, the HTTP status/headers, and a parsed *goquery.Document, while Harness runs requests in-memory via httptest.NewRecorder() (no open TCP ports needed).
+
+Go
+package uitest
+
+import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+// Page represents a rendered full HTML page or HTMX partial fragment.
+type Page struct {
+	t      *testing.T
+	Status int
+	Header http.Header
+	Body   string
+	Doc    *goquery.Document
+}
+
+// ParsePage parses raw HTML into a Page so Lint and OOB assertions can run directly.
+func ParsePage(t *testing.T, status int, header http.Header, body string) *Page {
+	t.Helper()
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("failed parsing HTML response: %v", err)
+	}
+	if header == nil {
+		header = make(http.Header)
+	}
+
+	return &Page{
+		t:      t,
+		Status: status,
+		Header: header,
+		Body:   body,
+		Doc:    doc,
+	}
+}
+
+func (p *Page) AssertStatus(want int) *Page {
+	p.t.Helper()
+	if p.Status != want {
+		p.t.Fatalf("unexpected status: got %d, want %d\nbody:\n%s", p.Status, want, p.Body)
+	}
+	return p
+}
+
+func (p *Page) AssertHeader(key, want string) *Page {
+	p.t.Helper()
+	if got := p.Header.Get(key); got != want {
+		p.t.Fatalf("unexpected header %s: got %q, want %q", key, got, want)
+	}
+	return p
+}
+
+// Harness executes HTTP and HTMX requests against an http.Handler in memory.
+type Harness struct {
+	t       *testing.T
+	handler http.Handler
+}
+
+func NewHarness(t *testing.T, handler http.Handler) *Harness {
+	t.Helper()
+	return &Harness{t: t, handler: handler}
+}
+
+func (h *Harness) GetPage(path string) *Page {
+	h.t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	return h.do(req)
+}
+
+func (h *Harness) HTMXGet(path, sourceID string) *Page {
+	h.t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("HX-Request", "true")
+	if sourceID != "" {
+		req.Header.Set("HX-Source", sourceID)
+	}
+	return h.do(req)
+}
+
+func (h *Harness) HTMXPostForm(path, sourceID string, form url.Values) *Page {
+	h.t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	if sourceID != "" {
+		req.Header.Set("HX-Source", sourceID)
+	}
+	return h.do(req)
+}
+
+func (h *Harness) do(req *http.Request) *Page {
+	h.t.Helper()
+	rec := httptest.NewRecorder()
+	h.handler.ServeHTTP(rec, req)
+	return ParsePage(h.t, rec.Code, rec.Header().Clone(), rec.Body.String())
+}
+2. Checking Bare <tr> / <td> / <th> OOB Elements in internal/uitest/lint.go
+When a server returns a bare <tr id="row-1" hx-swap-oob="outerHTML"> in a partial fragment without a <table> or <tbody> wrapper, standard HTML5 fragment parsing strips the <tr> tag and leaves orphaned text or <td> nodes behind—so HTMX never finds [hx-swap-oob].
+
+Add this check to Page.Lint(cfg) inside internal/uitest/lint.go:
+
+Go
+// 6. Flag bare table-row/cell elements in partial fragments without a <table> wrapper.
+// Standard HTML5 parsing strips top-level <tr>/<td>/<th> outside <table>, silently dropping OOB swaps.
+if !isFullPage {
+	trimmed := strings.TrimSpace(p.Body)
+	lowerTrimmed := strings.ToLower(trimmed)
+	for _, bareTag := range []string{"<tr", "<td", "<th", "<tbody", "<thead", "<tfoot"} {
+		if strings.HasPrefix(lowerTrimmed, bareTag) &&
+			(len(lowerTrimmed) == len(bareTag) || lowerTrimmed[len(bareTag)] == ' ' || lowerTrimmed[len(bareTag)] == '>' || lowerTrimmed[len(bareTag)] == '/') {
+			issues = append(issues, fmt.Sprintf(
+				"partial fragment starts with bare %s> outside <table>; browser HTML5 parser strips bare table nodes and breaks OOB swaps",
+				bareTag,
+			))
+		}
+	}
+
+	p.Doc.Find("tr[hx-swap-oob], td[hx-swap-oob], th[hx-swap-oob], tbody[hx-swap-oob]").Each(func(_ int, s *goquery.Selection) {
+		if s.Closest("table").Length() == 0 {
+			issues = append(issues, fmt.Sprintf(
+				"<%s id=%q> uses hx-swap-oob without an enclosing <table> wrapper",
+				goquery.NodeName(s), s.AttrOr("id", "(no id)"),
+			))
+		}
+	})
+}
+Why Both Checks Are Needed
+Raw string prefix check (strings.HasPrefix): Because goquery uses Go's HTML5 parser (golang.org/x/net/html), a bare <tr id="row-1" hx-swap-oob="true"> at the start of p.Body gets stripped before p.Doc.Find(...) ever sees it—matching what happens in Firefox and Chrome. Inspecting p.Body directly catches stripped top-level table rows immediately.
+
+DOM ancestor check (s.Closest("table")): Catches cases where a table node survived inside a non-table wrapper (like <div><tr hx-swap-oob="true">...</tr></div>) without a proper <table> context.
+
+1
+
+Here are unit tests in internal/uitest/lint_test.go that verify Page.Lint catches duplicate IDs, hardcoded inline widths, bare OOB table rows, and cross-control triggers—without hitting real HTTP handlers.
+
+Go
+package uitest
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
+
+// capturingT is a lightweight testing.T stand-in or helper pattern; in Go standard
+// tests, testing contract failure paths is cleanest using a subtest helper that
+// inspects failure messages via a dedicated test runner or assertion wrapper.
+func runExpectingFailure(t *testing.T, name string, fn func(subT *testing.T)) string {
+	t.Helper()
+
+	var failed bool
+	var msg string
+
+	// Run inside a child t.Run so t.Fatalf only aborts the isolated check.
+	ok := t.Run(name, func(subT *testing.T) {
+		// Standard *testing.T doesn't expose Fatal output directly after Fatalf,
+		// so assert via a small helper or custom error-collecting Page constructor.
+		_ = subT
+	})
+	_ = ok
+	_ = failed
+	return msg
+}
+Because *testing.T terminates a goroutine immediately on Fatalf, the cleanest way to test Page.Lint failure cases in lint_test.go is to separate rule evaluation ((p *Page) CollectLintIssues(cfg LintConfig) []string) from t.Fatalf ((p *Page) Lint(cfg) calls CollectLintIssues and fails if non-empty).
+
+Recommended Split in internal/uitest/lint.go
+Go
+// Lint fails the test if CollectLintIssues returns any violations.
+func (p *Page) Lint(cfg LintConfig) *Page {
+	p.t.Helper()
+
+	if issues := p.CollectLintIssues(cfg); len(issues) > 0 {
+		p.t.Fatalf("HTML lint failed:\n  - %s", strings.Join(issues, "\n  - "))
+	}
+	return p
+}
+Unit Tests in internal/uitest/lint_test.go
+With CollectLintIssues returning []string, lint_test.go can assert exact violations deterministically:
+
+Go
+package uitest
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func assertHasIssueSubstring(t *testing.T, issues []string, wantSubstr string) {
+	t.Helper()
+	joined := strings.Join(issues, "\n")
+	if !strings.Contains(joined, wantSubstr) {
+		t.Fatalf("expected issue containing %q, got:\n%s", wantSubstr, joined)
+	}
+}
+
+func TestCollectLintIssues_CatchesDuplicateIDsAndHardcodedWidths(t *testing.T) {
+	html := `<!doctype html>
+<html>
+<body>
+  <div id="tuple-list" style="width: 320px"></div>
+  <div id="tuple-list" style="height: var(--row-height)"></div>
+</body>
+</html>`
+
+	p := ParsePage(t, http.StatusOK, nil, html)
+	cfg := DefaultTopazLintConfig()
+
+	issues := p.CollectLintIssues(cfg)
+	assertHasIssueSubstring(t, issues, `duplicate id="tuple-list"`)
+	assertHasIssueSubstring(t, issues, `has hardcoded width: 320px`)
+
+	// "height: var(--row-height)" uses a CSS custom variable and should not be flagged.
+	if strings.Contains(strings.Join(issues, "\n"), "row-height") {
+		t.Fatalf("unexpected false positive for CSS variable: %v", issues)
+	}
+}
+
+func TestCollectLintIssues_CatchesBareOOBTableRow(t *testing.T) {
+	fragment := `<tr id="row-1" hx-swap-oob="outerHTML"><td>doc-1</td></tr>`
+
+	p := ParsePage(t, http.StatusOK, nil, fragment)
+	cfg := DefaultTopazLintConfig()
+
+	issues := p.CollectLintIssues(cfg)
+	assertHasIssueSubstring(t, issues, "bare <tr")
+}
+
+func TestCollectLintIssues_StrictScopedTriggersAndAllowlist(t *testing.T) {
+	html := `<!doctype html>
+<html>
+<body>
+  <div id="tuple-list"></div>
+  <select id="type-filter" hx-get="/tuples" hx-target="#tuple-list" hx-trigger="change, input from:#object-search"></select>
+  <select id="global-filter" hx-get="/tuples" hx-target="#tuple-list" hx-trigger="change from:body"></select>
+</body>
+</html>`
+
+	p := ParsePage(t, http.StatusOK, nil, html)
+	cfg := DefaultTopazLintConfig()
+	cfg.StrictScopedTriggers = true
+	cfg.AllowedTriggerIDs = map[string]bool{
+		"type-filter": true,
+	}
+
+	issues := p.CollectLintIssues(cfg)
+	assertHasIssueSubstring(t, issues, `id="global-filter"`)
+
+	joined := strings.Join(issues, "\n")
+	if strings.Contains(joined, `id="type-filter"`) {
+		t.Fatalf("allowlisted control should not fail: %v", issues)
+	}
+}
+i like tou to state the files and its contents. use proper filenames
+
+Here is the complete, self-contained set of files for the standalone go-topaz-ui HTML, OOB, and source-style linter using proper filenames.
+
+internal/uitest/page.go
+Go
+package uitest
+
+import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+// Page wraps a parsed HTML page or HTMX partial fragment with test helpers.
+type Page struct {
+	t      *testing.T
+	Status int
+	Header http.Header
+	Body   string
+	Doc    *goquery.Document
+}
+
+// ParsePage parses raw HTML into a Page so Lint and OOB helpers can inspect it.
+func ParsePage(t *testing.T, status int, header http.Header, body string) *Page {
+	t.Helper()
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("failed parsing HTML response: %v", err)
+	}
+	if header == nil {
+		header = make(http.Header)
+	}
+
+	return &Page{
+		t:      t,
+		Status: status,
+		Header: header,
+		Body:   body,
+		Doc:    doc,
+	}
+}
+
+func (p *Page) AssertStatus(want int) *Page {
+	p.t.Helper()
+	if p.Status != want {
+		p.t.Fatalf("unexpected status: got %d, want %d\nbody:\n%s", p.Status, want, p.Body)
+	}
+	return p
+}
+
+func (p *Page) AssertHeader(key, want string) *Page {
+	p.t.Helper()
+	if got := p.Header.Get(key); got != want {
+		p.t.Fatalf("unexpected header %s: got %q, want %q", key, got, want)
+	}
+	return p
+}
+
+// Harness executes requests against an http.Handler in memory without network sockets.
+type Harness struct {
+	t       *testing.T
+	handler http.Handler
+}
+
+func NewHarness(t *testing.T, handler http.Handler) *Harness {
+	t.Helper()
+	return &Harness{t: t, handler: handler}
+}
+
+func (h *Harness) GetPage(path string) *Page {
+	h.t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	return h.do(req)
+}
+
+func (h *Harness) HTMXGet(path, sourceID string) *Page {
+	h.t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("HX-Request", "true")
+	if sourceID != "" {
+		req.Header.Set("HX-Source", sourceID)
+	}
+	return h.do(req)
+}
+
+func (h *Harness) HTMXPostForm(path, sourceID string, form url.Values) *Page {
+	h.t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	if sourceID != "" {
+		req.Header.Set("HX-Source", sourceID)
+	}
+	return h.do(req)
+}
+
+func (h *Harness) do(req *http.Request) *Page {
+	h.t.Helper()
+	rec := httptest.NewRecorder()
+	h.handler.ServeHTTP(rec, req)
+	return ParsePage(h.t, rec.Code, rec.Header().Clone(), rec.Body.String())
+}
+internal/uitest/lint.go
+Go
+package uitest
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+// LintConfig defines project-specific structural, trigger, and style rules.
+type LintConfig struct {
+	KnownTargets         map[string]bool
+	BanInlineStyles      bool
+	BannedStyleProps     map[string]bool
+	StrictScopedTriggers bool
+	AllowedTriggerIDs    map[string]bool
+}
+
+// DefaultTopazLintConfig returns baseline contracts for go-topaz-ui.
+func DefaultTopazLintConfig() LintConfig {
+	return LintConfig{
+		KnownTargets: map[string]bool{
+			"graph-banner": true,
+			"form-errors":  true,
+			"tuple-list":   true,
+			"tuple-count":  true,
+		},
+		BanInlineStyles: false,
+		BannedStyleProps: map[string]bool{
+			"width":     true,
+			"height":    true,
+			"min-width": true,
+			"max-width": true,
+		},
+		StrictScopedTriggers: true,
+		AllowedTriggerIDs:    map[string]bool{},
+	}
+}
+
+// CollectLintIssues evaluates all HTML lint rules and returns human-readable issues.
+func (p *Page) CollectLintIssues(cfg LintConfig) []string {
+	var issues []string
+	seenIDs := make(map[string]int)
+
+	// 1. Enforce unique, non-empty element IDs.
+	p.Doc.Find("[id]").Each(func(_ int, s *goquery.Selection) {
+		id := strings.TrimSpace(s.AttrOr("id", ""))
+		if id == "" {
+			issues = append(issues, fmt.Sprintf("empty id on <%s>", goquery.NodeName(s)))
+			return
+		}
+		seenIDs[id]++
+		if seenIDs[id] == 2 {
+			issues = append(issues, fmt.Sprintf("duplicate id=%q", id))
+		}
+	})
+
+	// 2. Check static #id hx-target attributes against KnownTargets and full-page DOM.
+	isFullPage := p.Doc.Find("html").Length() > 0
+	p.Doc.Find("[hx-target]").Each(func(_ int, s *goquery.Selection) {
+		target := strings.TrimSpace(s.AttrOr("hx-target", ""))
+		if !strings.HasPrefix(target, "#") || strings.ContainsAny(target, " >+~.[]:,") {
+			return
+		}
+		targetID := strings.TrimPrefix(target, "#")
+
+		if len(cfg.KnownTargets) > 0 && !cfg.KnownTargets[targetID] {
+			issues = append(issues, fmt.Sprintf("<%s> targets unknown id %q (not in KnownTargets)", goquery.NodeName(s), target))
+		}
+		if isFullPage && seenIDs[targetID] == 0 {
+			issues = append(issues, fmt.Sprintf("<%s> targets %q, which is missing from full page", goquery.NodeName(s), target))
+		}
+	})
+
+	// 3. Check hx-swap-oob targets, nesting in partial fragments, and bare table nodes.
+	if !isFullPage {
+		trimmed := strings.TrimSpace(p.Body)
+		lowerTrimmed := strings.ToLower(trimmed)
+		for _, bareTag := range []string{"<tr", "<td", "<th", "<tbody", "<thead", "<tfoot"} {
+			if strings.HasPrefix(lowerTrimmed, bareTag) &&
+				(len(lowerTrimmed) == len(bareTag) || lowerTrimmed[len(bareTag)] == ' ' || lowerTrimmed[len(bareTag)] == '>' || lowerTrimmed[len(bareTag)] == '/') {
+				issues = append(issues, fmt.Sprintf(
+					"partial fragment starts with bare %s> outside <table>; browser HTML5 parser strips bare table nodes and breaks OOB swaps",
+					bareTag,
+				))
+			}
+		}
+	}
+
+	p.Doc.Find("[hx-swap-oob]").Each(func(_ int, s *goquery.Selection) {
+		oob := strings.TrimSpace(s.AttrOr("hx-swap-oob", ""))
+		targetID := strings.TrimSpace(s.AttrOr("id", ""))
+
+		if idx := strings.Index(oob, "#"); idx != -1 {
+			targetID = strings.TrimSpace(oob[idx+1:])
+		}
+		if targetID == "" {
+			issues = append(issues, fmt.Sprintf("<%s> has hx-swap-oob=%q without a resolvable target id", goquery.NodeName(s), oob))
+		} else if len(cfg.KnownTargets) > 0 && !cfg.KnownTargets[targetID] {
+			issues = append(issues, fmt.Sprintf("<%s> OOB-targets unknown id #%s", goquery.NodeName(s), targetID))
+		}
+
+		if !isFullPage && !s.Parent().Is("body") {
+			issues = append(issues, fmt.Sprintf("OOB element #%s must be top-level in partial fragment, not nested inside <%s>", targetID, goquery.NodeName(s.Parent())))
+		}
+	})
+
+	p.Doc.Find("tr[hx-swap-oob], td[hx-swap-oob], th[hx-swap-oob], tbody[hx-swap-oob]").Each(func(_ int, s *goquery.Selection) {
+		if s.Closest("table").Length() == 0 {
+			issues = append(issues, fmt.Sprintf("<%s id=%q> uses hx-swap-oob without an enclosing <table> wrapper", goquery.NodeName(s), s.AttrOr("id", "(no id)")))
+		}
+	})
+
+	// 4. Require explicit type="button" on <button hx-*> inside <form>.
+	p.Doc.Find("form button[hx-get], form button[hx-post], form button[hx-put], form button[hx-patch], form button[hx-delete]").Each(func(_ int, s *goquery.Selection) {
+		if strings.ToLower(strings.TrimSpace(s.AttrOr("type", ""))) != "button" {
+			issues = append(issues, fmt.Sprintf("<button id=%q> inside <form> uses hx-* without type=\"button\"", s.AttrOr("id", "(no id)")))
+		}
+	})
+
+	// 5. Enforce project CSS / inline-style rules.
+	p.Doc.Find("[style]").Each(func(_ int, s *goquery.Selection) {
+		raw := strings.TrimSpace(s.AttrOr("style", ""))
+		if raw == "" {
+			return
+		}
+		if cfg.BanInlineStyles {
+			issues = append(issues, fmt.Sprintf("<%s id=%q> uses forbidden inline style=%q", goquery.NodeName(s), s.AttrOr("id", "(no id)"), raw))
+			return
+		}
+		for _, decl := range strings.Split(strings.ToLower(raw), ";") {
+			parts := strings.SplitN(strings.TrimSpace(decl), ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			prop := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			if cfg.BannedStyleProps[prop] && !strings.Contains(val, "var(--") {
+				issues = append(issues, fmt.Sprintf("<%s id=%q> has hardcoded %s: %s (use CSS class or var(--...))", goquery.NodeName(s), s.AttrOr("id", "(no id)"), prop, val))
+			}
+		}
+	})
+
+	// 6. Enforce scoped triggers unless explicitly allowlisted by element ID.
+	if cfg.StrictScopedTriggers {
+		p.Doc.Find("[hx-trigger]").Each(func(_ int, s *goquery.Selection) {
+			raw := strings.TrimSpace(s.AttrOr("hx-trigger", ""))
+			id := strings.TrimSpace(s.AttrOr("id", ""))
+			if id != "" && cfg.AllowedTriggerIDs[id] {
+				return
+			}
+			if strings.Contains(strings.ToLower(raw), " from:") {
+				issues = append(issues, fmt.Sprintf(
+					"<%s id=%q> uses cross-control/global trigger hx-trigger=%q (add id to AllowedTriggerIDs if intentional)",
+					goquery.NodeName(s), id, raw,
+				))
+			}
+		})
+	}
+
+	return issues
+}
+
+// Lint fails the test if CollectLintIssues reports any contract violations.
+func (p *Page) Lint(cfg LintConfig) *Page {
+	p.t.Helper()
+
+	if issues := p.CollectLintIssues(cfg); len(issues) > 0 {
+		p.t.Fatalf("HTML lint failed:\n  - %s", strings.Join(issues, "\n  - "))
+	}
+	return p
+}
+internal/uitest/oob.go
+Go
+package uitest
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+// ExtractOOBTargetIDs returns the target IDs referenced by [hx-swap-oob] nodes.
+func (p *Page) ExtractOOBTargetIDs() []string {
+	p.t.Helper()
+
+	var ids []string
+	p.Doc.Find("[hx-swap-oob]").Each(func(_ int, s *goquery.Selection) {
+		oob := strings.TrimSpace(s.AttrOr("hx-swap-oob", ""))
+		targetID := strings.TrimSpace(s.AttrOr("id", ""))
+
+		if idx := strings.Index(oob, "#"); idx != -1 {
+			targetID = strings.TrimSpace(oob[idx+1:])
+		}
+		if targetID != "" {
+			ids = append(ids, targetID)
+		}
+	})
+	return ids
+}
+
+// AssertOOBTargetsExistOnFullPage verifies that every OOB target on a partial
+// fragment is present on the reference full page.
+func (p *Page) AssertOOBTargetsExistOnFullPage(fullPage *Page) *Page {
+	p.t.Helper()
+
+	var missing []string
+	for _, id := range p.ExtractOOBTargetIDs() {
+		if fullPage.Doc.Find("#" + id).Length() == 0 {
+			missing = append(missing, fmt.Sprintf("partial OOB target #%s does not exist on full page", id))
+		}
+	}
+
+	if len(missing) > 0 {
+		p.t.Fatalf("OOB target contract failed:\n  - %s", strings.Join(missing, "\n  - "))
+	}
+	return p
+}
+internal/uitest/source_lint.go
+Go
+package uitest
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+var (
+	inlineStyleAttrRe = regexp.MustCompile(`(?i)\bstyle\s*=\s*(?:"[^"]*"|\{[^}]*\})`)
+	cssFixedDimRe     = regexp.MustCompile(`(?im)\b(?:min-|max-)?(?:width|height)\s*:\s*[0-9]+(?:\.[0-9]+)?px\b`)
+)
+
+// AssertSourceStyleRules scans .templ and .css files under rootDir for inline
+// styles without CSS variables and hardcoded pixel width/height rules.
+func AssertSourceStyleRules(t *testing.T, rootDir string) {
+	t.Helper()
+
+	var findings []string
+
+	err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		ext := filepath.Ext(path)
+		if ext != ".templ" && ext != ".css" {
+			return nil
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		lines := strings.Split(string(data), "\n")
+		for idx, line := range lines {
+			lineNum := idx + 1
+			switch ext {
+			case ".templ":
+				for _, m := range inlineStyleAttrRe.FindAllString(line, -1) {
+					if !strings.Contains(strings.ToLower(m), "var(--") {
+						findings = append(findings, fmt.Sprintf("%s:%d: inline style %s (prefer CSS class or var(--...))", path, lineNum, m))
+					}
+				}
+			case ".css":
+				for _, m := range cssFixedDimRe.FindAllString(line, -1) {
+					findings = append(findings, fmt.Sprintf("%s:%d: hardcoded pixel dimension %q (prefer var(--...), rem, or %%)", path, lineNum, strings.TrimSpace(m)))
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed walking %q: %v", rootDir, err)
+	}
+
+	if len(findings) > 0 {
+		t.Fatalf("source style violations:\n  - %s", strings.Join(findings, "\n  - "))
+	}
+}
+internal/uitest/lint_test.go
+Go
+package uitest
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func assertHasIssueSubstring(t *testing.T, issues []string, wantSubstr string) {
+	t.Helper()
+	joined := strings.Join(issues, "\n")
+	if !strings.Contains(joined, wantSubstr) {
+		t.Fatalf("expected issue containing %q, got:\n%s", wantSubstr, joined)
+	}
+}
+
+func TestCollectLintIssues_CatchesDuplicateIDsAndHardcodedWidths(t *testing.T) {
+	html := `<!doctype html>
+<html>
+<body>
+  <div id="tuple-list" style="width: 320px"></div>
+  <div id="tuple-list" style="height: var(--row-height)"></div>
+</body>
+</html>`
+
+	p := ParsePage(t, http.StatusOK, nil, html)
+	cfg := DefaultTopazLintConfig()
+
+	issues := p.CollectLintIssues(cfg)
+	assertHasIssueSubstring(t, issues, `duplicate id="tuple-list"`)
+	assertHasIssueSubstring(t, issues, `has hardcoded width: 320px`)
+
+	if strings.Contains(strings.Join(issues, "\n"), "row-height") {
+		t.Fatalf("unexpected false positive for CSS variable: %v", issues)
+	}
+}
+
+func TestCollectLintIssues_CatchesBareOOBTableRow(t *testing.T) {
+	fragment := `<tr id="row-1" hx-swap-oob="outerHTML"><td>doc-1</td></tr>`
+
+	p := ParsePage(t, http.StatusOK, nil, fragment)
+	cfg := DefaultTopazLintConfig()
+
+	issues := p.CollectLintIssues(cfg)
+	assertHasIssueSubstring(t, issues, "bare <tr")
+}
+
+func TestCollectLintIssues_StrictScopedTriggersAndAllowlist(t *testing.T) {
+	html := `<!doctype html>
+<html>
+<body>
+  <div id="tuple-list"></div>
+  <select id="type-filter" hx-get="/tuples" hx-target="#tuple-list" hx-trigger="change, input from:#object-search"></select>
+  <select id="global-filter" hx-get="/tuples" hx-target="#tuple-list" hx-trigger="change from:body"></select>
+</body>
+</html>`
+
+	p := ParsePage(t, http.StatusOK, nil, html)
+	cfg := DefaultTopazLintConfig()
+	cfg.StrictScopedTriggers = true
+	cfg.AllowedTriggerIDs = map[string]bool{
+		"type-filter": true,
+	}
+
+	issues := p.CollectLintIssues(cfg)
+	assertHasIssueSubstring(t, issues, `id="global-filter"`)
+
+	if strings.Contains(strings.Join(issues, "\n"), `id="type-filter"`) {
+		t.Fatalf("allowlisted control should not fail: %v", issues)
+	}
+}
+internal/handlers/ui_contracts_test.go
+Go
+package handlers_test
+
+import (
+	"net/http"
+	"net/url"
+	"testing"
+
+	"yourmodule/internal/uitest"
+)
+
+func TestTopazUI_ContractsAndLint(t *testing.T) {
+	cfg := uitest.DefaultTopazLintConfig()
+
+	t.Run("source_style_rules", func(t *testing.T) {
+		uitest.AssertSourceStyleRules(t, "../views")
+	})
+
+	graph := uitest.NewFakeGraph(
+		uitest.RelationTuple{
+			ObjectType: "document",
+			ObjectID:   "doc-1",
+			Relation:   "viewer",
+			SubjectRef: "user:alice",
+		},
+	)
+	h := uitest.NewHarness(t, newGraphUIRouter(graph))
+
+	var fullPage *uitest.Page
+	t.Run("full_page_invariants", func(t *testing.T) {
+		fullPage = h.GetPage("/ui/graph").
+			AssertStatus(http.StatusOK).
+			Lint(cfg)
+	})
+
+	t.Run("filter_partial_contracts", func(t *testing.T) {
+		h.HTMXGet("/ui/graph/tuples?q=alice", "object-search").
+			AssertStatus(http.StatusOK).
+			Lint(cfg).
+			AssertOOBTargetsExistOnFullPage(fullPage)
+	})
+
+	t.Run("create_tuple_partial_contracts", func(t *testing.T) {
+		form := url.Values{
+			"object_type": []string{"document"},
+			"object_id":   []string{"doc-2"},
+			"relation":    []string{"editor"},
+			"subject_ref": []string{"user:bob"},
+		}
+		h.HTMXPostForm("/ui/graph/tuples", "add-tuple-form", form).
+			AssertStatus(http.StatusOK).
+			AssertHeader("HX-Trigger", "graph-updated").
+			Lint(cfg).
+			AssertOOBTargetsExistOnFullPage(fullPage)
+	})
+
+	t.Run("validation_error_fragment_contracts", func(t *testing.T) {
+		h.HTMXPostForm("/ui/graph/tuples", "add-tuple-form", url.Values{"object_type": []string{""}}).
+			AssertStatus(http.StatusUnprocessableEntity).
+			AssertHeader("HX-Retarget", "#form-errors").
+			Lint(cfg)
+	})
+}
+Where would you like to go next?
+
+Return to the Firefox keystroke investigation
+
+Add a CLI runner command for the linter
+
+Add OOB table-row wrapping rules to HTMX 4 markup
+
+
+
+
+Gemini is AI and can make mistakes.
+
